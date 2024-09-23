@@ -153,6 +153,7 @@ void TrikServer::onConnectionClosed(Connection *connection)
 	mConnections.remove(thread);
 
 	thread->quit();
+	thread->wait();
 
 	if (mConnections.isEmpty()) {
 		emit disconnected();
