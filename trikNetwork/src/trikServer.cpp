@@ -38,7 +38,7 @@ TrikServer::~TrikServer()
 {
 	for (QThread *thread : mConnections.keys()) {
 		thread->quit();
-		if (!thread->wait(1000)) {
+		if (!thread->wait(2000)) {
 			QLOG_ERROR() << "Unable to stop thread" << thread;
 		}
 	}
