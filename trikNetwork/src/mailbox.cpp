@@ -40,9 +40,9 @@ Mailbox::Mailbox(const trikKernel::Configurer &configurer)
 
 Mailbox::~Mailbox()
 {
-	if (mWorkerThread.isRunning()) {
-		mWorkerThread.quit();
-		mWorkerThread.wait();
+	if (mWorkerThread->isRunning()) {
+		mWorkerThread->quit();
+		mWorkerThread->wait();
 	}
 }
 
