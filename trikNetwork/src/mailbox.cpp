@@ -175,7 +175,7 @@ void Mailbox::init(int port)
 	mWorker->moveToThread(mWorkerThread);
 	QObject::connect(mWorkerThread, &QThread::started, mWorker, &MailboxServer::start);
 	QObject::connect(mWorkerThread, &QThread::finished, mWorker, &MailboxServer::deleteLater);
-	QObject::connect(mWorkerThread, &QThread::finished, mWorkerThread, &MailboxServer::deleteLater);
+	QObject::connect(mWorkerThread, &QThread::finished, mWorkerThread, &QThread::deleteLater);
 	QObject::connect(mWorker, &MailboxServer::newMessage, this, &Mailbox::newMessage);
 	QObject::connect(mWorker, &MailboxServer::newMessage, this, &Mailbox::stopWaitingSignal);
 	QObject::connect(mWorker, &MailboxServer::connected, this, &Mailbox::updateConnectionStatus);
