@@ -35,9 +35,6 @@ protected:
 	trikNetwork::MailboxInterface *prepareHost(int port, int hullNumber, int portToConnect);
 	void cleanUp();
 private:
-	/// Does nothing, but ensures event processing at the time of destruction of test suite, to avoid
-	/// deleteLater()-related memleaks.
-	trikKernel::DeinitializationHelper mHelper;
 	QList<QThread *> mWorkers;
 	QScopedPointer<trikControl::BrickInterface> mBrick;
 	QScopedPointer<trikNetwork::MailboxInterface> mMailboxInterface;
