@@ -92,10 +92,10 @@ private:
 	void init(int port);
 
 	/// Server that works in separate thread.
-	QScopedPointer<MailboxServer> mWorker;
+	MailboxServer *mWorker = nullptr;
 
 	/// Worker thread.
-	QThread mWorkerThread;
+	QThread *mWorkerThread = nullptr;
 };
 
 }
