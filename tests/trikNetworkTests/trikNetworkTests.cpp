@@ -127,6 +127,7 @@ TEST_F(TrikNetworkTests, baseTwoHostCommunicationTest)
 	send(sndHost, 2, "message to host 1");
 
 	EXPECT_EQ("message to host 1", answer);
+	Wait::wait(500);
 }
 
 /////
@@ -151,6 +152,7 @@ TEST_F(TrikNetworkTests, sequentialSendingMessagesTest)
 
 	EXPECT_EQ("message to host 2", sndAnswer);
 	EXPECT_EQ("message to host 3", thdAnswer);
+	Wait::wait(500);
 }
 
 ///
@@ -175,6 +177,7 @@ TEST_F(TrikNetworkTests, baseMulticastTest)
 
 	EXPECT_EQ("message to all hosts", sndAnswer);
 	EXPECT_EQ("message to all hosts", thdAnswer);
+	Wait::wait(500);
 }
 
 ///
@@ -204,6 +207,7 @@ TEST_F(TrikNetworkTests, twoHostCycleTest)
 	EXPECT_EQ("1 message to 2 host", fstAnswerSndHost);
 	EXPECT_EQ("2 message to 1 host", sndAnswerFstHost);
 	EXPECT_EQ("2 message to 2 host", sndAnswerSndHost);
+	Wait::wait(500);
 }
 
 ///
@@ -225,6 +229,7 @@ TEST_F(TrikNetworkTests, sendToIdenticalHullNumberTest)
 
 	EXPECT_EQ("message to 1 host", fstAnswer);
 	EXPECT_EQ("message to 2 host", sndAnswer);
+	Wait::wait(500);
 }
 
 TEST_F(TrikNetworkTests, realMulticastWithIdenticalHullNumber)
@@ -285,6 +290,7 @@ TEST_F(TrikNetworkTests, realMulticastWithIdenticalHullNumber)
 	EXPECT_EQ(thirdIterationMessage, sndAnswer);
 	EXPECT_EQ(thirdIterationMessage, fourthAnswer);
 	EXPECT_EQ(thirdIterationMessage, fifthAnswer);
+	Wait::wait(500);
 }
 
 TEST_F(TrikNetworkTests, threeHostCycleTest)
@@ -310,6 +316,7 @@ TEST_F(TrikNetworkTests, threeHostCycleTest)
 	EXPECT_EQ("message to 1 host", fstAnswer);
 	EXPECT_EQ("message to 2 host", sndAnswer);
 	EXPECT_EQ("message to 3 host", thdAnswer);
+	Wait::wait(500);
 }
 
 TEST_F(TrikNetworkTests, sendWithoutParamTest)
@@ -331,6 +338,7 @@ TEST_F(TrikNetworkTests, sendWithoutParamTest)
 
 	EXPECT_EQ("message to all host", sndAnswer);
 	EXPECT_EQ("message to all host", thdAnswer);
+	Wait::wait(500);
 }
 
 TEST_F(TrikNetworkTests, multicastDontSendExtraPacketsTest)
@@ -355,4 +363,5 @@ TEST_F(TrikNetworkTests, multicastDontSendExtraPacketsTest)
 
 	send(mailboxInterface(), 5, "message to 3 host");
 	EXPECT_EQ("message to 3 host", thdAnswer);
+	Wait::wait(500);
 }
