@@ -170,19 +170,21 @@ QString Mailbox::receive(bool wait)
 
 void Mailbox::init(int port)
 {
+	mWorkerThread = new QThread();
 	mWorker = new MailboxServer(port);
-	mWorker->moveToThread(&mWorkerThread);
-	QObject::connect(&mWorkerThread, &QThread::started, mWorker, &MailboxServer::start);
-	QObject::connect(&mWorkerThread, &QThread::finished, mWorker, &MailboxServer::deleteLater);
+	mWorker->moveToThread(mWorkerThread);
+	QObject::connect(mWorkerThread, &QThread::started, mWorker, &MailboxServer::start);
+	QObject::connect(mWorkerThread, &QThread::finished, mWorker, &MailboxServer::deleteLater);
+	QObject::connect(mWorkerThread, &QThread::finished, mWorkerThread, &MailboxServer::deleteLater);
 	QObject::connect(mWorker, &MailboxServer::newMessage, this, &Mailbox::newMessage);
 	QObject::connect(mWorker, &MailboxServer::newMessage, this, &Mailbox::stopWaitingSignal);
 	QObject::connect(mWorker, &MailboxServer::connected, this, &Mailbox::updateConnectionStatus);
 	QObject::connect(mWorker, &MailboxServer::disconnected, this, &Mailbox::updateConnectionStatus);
 
-	QLOG_INFO() << "Starting Mailbox worker thread" << &mWorkerThread;
+	QLOG_INFO() << "Starting Mailbox worker thread" << mWorkerThread;
 
-	mWorkerThread.setObjectName(mWorker->metaObject()->className());
-	mWorkerThread.start();
+	mWorkerThread->setObjectName(mWorker->metaObject()->className());
+	mWorkerThread->start();
 }
 
 void Mailbox::updateConnectionStatus()

@@ -95,7 +95,7 @@ private:
 	MailboxServer *mWorker = nullptr;
 
 	/// Worker thread.
-	QThread mWorkerThread;
+	QThread *mWorkerThread = nullptr;
 };
 
 }
