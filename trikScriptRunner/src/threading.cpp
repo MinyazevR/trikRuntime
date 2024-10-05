@@ -87,7 +87,6 @@ void Threading::startThread(const QString &threadId, QScriptEngine *engine, cons
 	auto thread = new ScriptThread(*this, threadId, engine, script);
 	engine->moveToThread(thread);
 
-	connect(thread, &QThread::finished, this, [this, threadId](){ threadFinished(threadId); }, Qt::QueuedConnection);
 	connect(&mScriptControl, &TrikScriptControlInterface::quitSignal, thread
 			, &ScriptThread::stopRunning, Qt::DirectConnection);
 	if (threadId == mMainThreadName) {
@@ -100,6 +99,7 @@ void Threading::startThread(const QString &threadId, QScriptEngine *engine, cons
 	thread->setObjectName(engine->metaObject()->className());
 	QEventLoop wait;
 	connect(thread, &QThread::started, &wait, &QEventLoop::quit, Qt::QueuedConnection);
+	connect(thread, &QThread::finished, this, [this, threadId](){ threadFinished(threadId); }, Qt::QueuedConnection);
 	thread->start();
 	wait.exec();
 	QLOG_INFO() << "Threading: started thread" << threadId << "with engine" << engine << ", thread object" << thread;
