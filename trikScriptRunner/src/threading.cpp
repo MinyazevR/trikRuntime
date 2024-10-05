@@ -97,7 +97,6 @@ void Threading::startThread(const QString &threadId, QScriptEngine *engine, cons
 
 	mThreads[threadId].reset(thread);
 	mFinishedThreads.remove(threadId);
-	threadsMutexLocker.unlock();
 	thread->setObjectName(engine->metaObject()->className());
 	QEventLoop wait;
 	connect(thread, &QThread::started, &wait, &QEventLoop::quit, Qt::QueuedConnection);
