@@ -99,13 +99,14 @@ void Threading::startThread(const QString &threadId, QScriptEngine *engine, cons
 	mFinishedThreads.remove(threadId);
 	thread->setObjectName(engine->metaObject()->className());
 	QEventLoop wait;
-	connect(thread, &QThread::started, &wait, &QEventLoop::quit, Qt::QueuedConnection);
+	connect(thread, &QThread::started, this, [&resetMutexLocker, &threadsMutexLocker, &wait]() {
+		resetMutexLocker.unlock();
+		threadsMutexLocker.unlock();
+		wait.exit(0);}
+	, Qt::QueuedConnection);
+	connect(thread, &QThread::finished, this, [this, threadId](){ threadFinished(threadId); }, Qt::QueuedConnection);
 	thread->start();
-	if (!thread->isRunning()) {
-		disconnect(thread,  &QThread::started, &wait, nullptr);
-	} else {
-		wait.exec();
-	}
+	wait.exec();
 	QLOG_INFO() << "Threading: started thread" << threadId << "with engine" << engine << ", thread object" << thread;
 }
 
