@@ -45,6 +45,7 @@ void TrikPyRunnerTest::SetUp()
 
 void TrikPyRunnerTest::TearDown()
 {
+	qDebug() << "In Tear down";
 	mScriptRunner.reset();
 	mBrick.reset();
 }
@@ -104,17 +105,20 @@ trikScriptRunner::TrikScriptRunner &TrikPyRunnerTest::scriptRunner()
 
 TEST_F(TrikPyRunnerTest, abortBeforeRun)
 {
+	qDebug() << "Start Test" << __PRETTY_FUNCTION__ << __LINE__;
 	scriptRunner().abortAll();
 }
 
 TEST_F(TrikPyRunnerTest, syntaxErrorReport)
 {
+	qDebug() << "Start Test" << __PRETTY_FUNCTION__ << __LINE__;
 	auto err = run("]");
 	ASSERT_EQ(err, EXIT_SCRIPT_ERROR);
 }
 
 TEST_F(TrikPyRunnerTest, sanityCheck)
 {
+	qDebug() << "Start Test" << __PRETTY_FUNCTION__ << __LINE__;
 	auto err = run("1 + 1");
 	ASSERT_EQ(err, EXIT_SCRIPT_SUCCESS);
 	const auto &knownMethodNames = scriptRunner().knownMethodNames();
@@ -124,18 +128,22 @@ TEST_F(TrikPyRunnerTest, sanityCheck)
 	ASSERT_EQ(err, EXIT_SCRIPT_SUCCESS);
 	err = run("brick.motor('M2').setPower(10)");
 	ASSERT_EQ(err, EXIT_SCRIPT_SUCCESS);
+	qDebug() << "End Test" << __PRETTY_FUNCTION__ << __LINE__;
 }
 
 TEST_F(TrikPyRunnerTest, print)
 {
+	qDebug() << "Start Test" << __PRETTY_FUNCTION__ << __LINE__;
 	auto text = "Hello";
 	auto err = runDirectCommandAndWaitForQuit(QString("print('") + text + "', end='')");
 	ASSERT_EQ(err, EXIT_SCRIPT_SUCCESS);
 	ASSERT_EQ(text, mStdOut.toStdString());
+	qDebug() << "End Test" << __PRETTY_FUNCTION__ << __LINE__;
 }
 
 TEST_F(TrikPyRunnerTest, abortWhileTrue)
 {
+		qDebug() << "Start Test" << __PRETTY_FUNCTION__ << __LINE__;
 	QTimer t;
 	t.setInterval(1000);
 	t.setSingleShot(true);
@@ -147,10 +155,12 @@ TEST_F(TrikPyRunnerTest, abortWhileTrue)
 	ASSERT_EQ(mStdOut.toStdString(), "before\n");
 	ASSERT_NE(err, EXIT_TIMEOUT);
 	t.stop();
+	qDebug() << "End Test" << __PRETTY_FUNCTION__ << __LINE__;
 }
 
 TEST_F(TrikPyRunnerTest, scriptWait)
 {
+		qDebug() << "Start Test" << __PRETTY_FUNCTION__ << __LINE__;
 	constexpr auto timeout = 500;
 	auto err = runDirectCommandAndWaitForQuit(QString("timeout=%1;").arg(timeout)
 			+ "from TRIK_PQT.Qt import QElapsedTimer as T;"
@@ -162,10 +172,12 @@ TEST_F(TrikPyRunnerTest, scriptWait)
 	ASSERT_EQ(err, EXIT_SCRIPT_SUCCESS);
 	err = runDirectCommandAndWaitForQuit("pass #assert(abs(elapsed-timeout) < 5)");
 	ASSERT_EQ(err, EXIT_SCRIPT_SUCCESS);
+	qDebug() << "End Test" << __PRETTY_FUNCTION__ << __LINE__;
 }
 
 TEST_F(TrikPyRunnerTest, directCommandContextWithTimersAndQtCore)
 {
+		qDebug() << "Start Test" << __PRETTY_FUNCTION__ << __LINE__;
 	auto err = runDirectCommandAndWaitForQuit("import TRIK_PQT; print(dir(TRIK_PQT))");
 	ASSERT_EQ(err, EXIT_SCRIPT_SUCCESS);
 	err = runDirectCommandAndWaitForQuit("print(dir(TRIK_PQT.Qt))");
@@ -180,40 +192,52 @@ TEST_F(TrikPyRunnerTest, directCommandContextWithTimersAndQtCore)
 	ASSERT_EQ(err, EXIT_SCRIPT_SUCCESS);
 	err = runDirectCommandAndWaitForQuit("t=QtCore.QTimer()");
 	ASSERT_EQ(err, EXIT_SCRIPT_SUCCESS);
+	qDebug() << "End Test" << __PRETTY_FUNCTION__ << __LINE__;
 }
 
 TEST_F(TrikPyRunnerTest, propertyAndMethodWithSimpleType)
 {
+		qDebug() << "Start Test" << __PRETTY_FUNCTION__ << __LINE__;
 	auto exitCode = run("brick.gyroscope().read()");
 	ASSERT_EQ(exitCode, EXIT_SCRIPT_SUCCESS);
+	qDebug() << "End Test" << __PRETTY_FUNCTION__ << __LINE__;
 }
 
 TEST_F(TrikPyRunnerTest, brickMethodWithNonTrivialReturnTypeConversion)
 {
+		qDebug() << "Start Test" << __PRETTY_FUNCTION__ << __LINE__;
 	auto exitCode = run("brick.getStillImage()");
 	ASSERT_EQ(exitCode, EXIT_SCRIPT_SUCCESS);
+	qDebug() << "End Test" << __PRETTY_FUNCTION__ << __LINE__;
 }
 
 TEST_F(TrikPyRunnerTest, brickPropertyAndVectorArgument)
 {
+		qDebug() << "Start Test" << __PRETTY_FUNCTION__ << __LINE__;
 	auto exitCode = run("brick.display() and brick.display().show([0], 1, 1, 'grayscale8')");
 	ASSERT_EQ(exitCode, EXIT_SCRIPT_SUCCESS);
+	qDebug() << "End Test" << __PRETTY_FUNCTION__ << __LINE__;
 }
 
 TEST_F(TrikPyRunnerTest, DISABLED_fileTestPy)
 {
+		qDebug() << "Start Test" << __PRETTY_FUNCTION__ << __LINE__;
 	auto err = runFromFile("file-test.py");
 	ASSERT_EQ(err, EXIT_SCRIPT_SUCCESS);
+	qDebug() << "End Test" << __PRETTY_FUNCTION__ << __LINE__;
 }
 
 TEST_F(TrikPyRunnerTest, scriptExecutionControl)
 {
+		qDebug() << "Start Test" << __PRETTY_FUNCTION__ << __LINE__;
 	auto exitCode = run("a = script.timer(1000)");
 	ASSERT_EQ(exitCode, EXIT_SCRIPT_SUCCESS);
+	qDebug() << "End Test" << __PRETTY_FUNCTION__ << __LINE__;
 }
 
 TEST_F(TrikPyRunnerTest, globalFunction)
 {
 	auto exitCode = run("script.getPhoto()");
 	ASSERT_EQ(exitCode, EXIT_SCRIPT_SUCCESS);
+	qDebug() << "End Test" << __PRETTY_FUNCTION__ << __LINE__;
 }
