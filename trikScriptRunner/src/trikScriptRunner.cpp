@@ -126,11 +126,13 @@ TrikScriptRunnerInterface * TrikScriptRunner::fetchRunner(ScriptType stype)
 	if (cell == nullptr) { // lazy creation
 		switch (stype) {
 			case ScriptType::JAVASCRIPT:
+				qDebug() << __PRETTY_FUNCTION__ << __LINE__;
 				QSharedPointer<TrikScriptRunnerInterface>(
 							new TrikJavaScriptRunner(&mBrick, mMailbox, mScriptControl)).swap(cell);
 				break;
 #ifndef TRIK_NOPYTHON
 			case ScriptType::PYTHON:
+				qDebug() << __PRETTY_FUNCTION__ << __LINE__;
 				QSharedPointer<TrikScriptRunnerInterface>(
 							new TrikPythonRunner(&mBrick, mMailbox, mScriptControl)).swap(cell);
 				break;
@@ -155,6 +157,7 @@ TrikScriptRunnerInterface * TrikScriptRunner::fetchRunner(ScriptType stype)
 void TrikScriptRunner::run(const QString &script, ScriptType stype, const QString &fileName)
 {
 	abortAll(); // FIXME: or fetchRunner(stype)->abort()? or abort(/*last*/)?
+	qDebug() << __PRETTY_FUNCTION__ << __LINE__;
 	qDebug() << __PRETTY_FUNCTION__ << __LINE__;
 	fetchRunner(stype)->run(script, fileName);
 }
