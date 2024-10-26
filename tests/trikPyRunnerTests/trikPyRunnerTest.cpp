@@ -113,6 +113,12 @@ TEST_F(TrikPyRunnerTest, syntaxErrorReport)
 	ASSERT_EQ(err, EXIT_SCRIPT_ERROR);
 }
 
+TEST_F(TrikPyRunnerTest, syntaxErrorReport1)
+{
+	auto err = run("]");
+	ASSERT_EQ(err, EXIT_SCRIPT_ERROR);
+}
+
 TEST_F(TrikPyRunnerTest, sanityCheck)
 {
 	auto err = run("1 + 1");
