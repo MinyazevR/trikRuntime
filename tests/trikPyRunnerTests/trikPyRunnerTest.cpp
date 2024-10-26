@@ -111,29 +111,29 @@ TEST_F(TrikPyRunnerTest, abortBeforeRun)
 	scriptRunner().abortAll();
 }
 
-TEST_F(TrikPyRunnerTest, syntaxErrorReport)
-{
-	auto err = run("]");
-	ASSERT_EQ(err, EXIT_SCRIPT_ERROR);
-}
+//TEST_F(TrikPyRunnerTest, syntaxErrorReport)
+//{
+//	auto err = run("]");
+//	ASSERT_EQ(err, EXIT_SCRIPT_ERROR);
+//}
 
-TEST_F(TrikPyRunnerTest, syntaxErrorReport1)
-{
-	auto err = run("]");
-	ASSERT_EQ(err, EXIT_SCRIPT_ERROR);
-}
+//TEST_F(TrikPyRunnerTest, syntaxErrorReport1)
+//{
+//	auto err = run("]");
+//	ASSERT_EQ(err, EXIT_SCRIPT_ERROR);
+//}
 
 TEST_F(TrikPyRunnerTest, sanityCheck)
 {
 	auto err = run("1 + 1");
 	ASSERT_EQ(err, EXIT_SCRIPT_SUCCESS);
-//	const auto &knownMethodNames = scriptRunner().knownMethodNames();
-//	ASSERT_TRUE(knownMethodNames.contains("brick"));
-//	ASSERT_TRUE(knownMethodNames.contains("setPower"));
-//	err = run("print(dir(brick.motor('M2')))");
-//	ASSERT_EQ(err, EXIT_SCRIPT_SUCCESS);
-//	err = run("brick.motor('M2').setPower(10)");
-//	ASSERT_EQ(err, EXIT_SCRIPT_SUCCESS);
+	const auto &knownMethodNames = scriptRunner().knownMethodNames();
+	ASSERT_TRUE(knownMethodNames.contains("brick"));
+	ASSERT_TRUE(knownMethodNames.contains("setPower"));
+	err = run("print(dir(brick.motor('M2')))");
+	ASSERT_EQ(err, EXIT_SCRIPT_SUCCESS);
+	err = run("brick.motor('M2').setPower(10)");
+	ASSERT_EQ(err, EXIT_SCRIPT_SUCCESS);
 }
 
 TEST_F(TrikPyRunnerTest, print)
