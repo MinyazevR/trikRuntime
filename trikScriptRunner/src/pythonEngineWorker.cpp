@@ -55,6 +55,7 @@ PythonEngineWorker::PythonEngineWorker(trikControl::BrickInterface *brick
 	, mMailbox(mailbox)
 	, mWorkingDirectory(trikKernel::Paths::userScriptsPath())
 {
+	qDebug() << __PRETTY_FUNCTION__ << __LINE__;
 	mWaitForInitSemaphore.acquire(1);
 }
 
@@ -102,6 +103,7 @@ PythonEngineWorker::~PythonEngineWorker()
 
 void PythonEngineWorker::init()
 {
+	qDebug() << __PRETTY_FUNCTION__ << __LINE__;
 	if (initCounter++ == 0) {
 
 		QLOG_INFO() << "Built with python:" << PY_VERSION << QString::number(PY_VERSION_HEX, 16);
@@ -135,12 +137,13 @@ void PythonEngineWorker::init()
 		/// NB! Py_DecodeLocale requires a pre-initialized Python engine
 #endif
 		/// TODO: Must point to local .zip file
+	qDebug() << __PRETTY_FUNCTION__ << __LINE__;
 		mPythonPath = Py_DecodeLocale(path.toStdString().data(), nullptr);
 		Py_SetPath(mPythonPath);
-
+qDebug() << __PRETTY_FUNCTION__ << __LINE__;
 		mProgramName = Py_DecodeLocale("trikPythonRuntime", nullptr);
 		Py_SetProgramName(mProgramName);
-
+qDebug() << __PRETTY_FUNCTION__ << __LINE__;
 		if (!qgetenv("TRIK_PYTHON_DEBUG").isEmpty()) {
 			Py_VerboseFlag = 3;
 			Py_InspectFlag = 1;
@@ -165,6 +168,7 @@ void PythonEngineWorker::init()
 		PyEval_InitThreads();
 #endif
 #endif
+		qDebug() << __PRETTY_FUNCTION__ << __LINE__;
 		constexpr auto extractVersionCommand = "(sys.version_info.major,sys.version_info.minor)";
 		PythonQtObjectPtr dict;
 		dict.setNewRef(PyDict_New());
@@ -184,30 +188,36 @@ void PythonEngineWorker::init()
 			QLOG_FATAL() << e;
 			throw trikKernel::InternalErrorException(e);
 		}
+		qDebug() << __PRETTY_FUNCTION__ << __LINE__;
 	}
 	if (!mPyInterpreter) {
+		qDebug() << __PRETTY_FUNCTION__ << __LINE__;
 //		mPyInterpreter = Py_NewInterpreter();
 	}
 
+	qDebug() << __PRETTY_FUNCTION__ << __LINE__;
 	if (!PythonQt::self()) {
 		PythonQt::setEnableThreadSupport(true);
 		PythonQtGILScope _;
+		qDebug() << __PRETTY_FUNCTION__ << __LINE__;
 		PythonQt::init(PythonQt::RedirectStdOut | PythonQt::PythonAlreadyInitialized, "TRIK_PQT");
 		connect(PythonQt::self(), &PythonQt::pythonStdErr, this, &PythonEngineWorker::updateErrorMessage);
 		connect(PythonQt::self(), &PythonQt::pythonStdOut, this, [this](const QString& str){
 			QTimer::singleShot(0, this, [this, str](){ Q_EMIT this->textInStdOut(str);});
 			mScriptExecutionControl->wait(0);
 		});
+		qDebug() << __PRETTY_FUNCTION__ << __LINE__;
 		PythonQtRegisterListTemplateConverter(QVector, uint8_t)
 		PythonQt_QtAll::init();
 		PythonQt_init_QtPyTrikControl(mMainContext);
 	}
 	if (!mMainContext) {
+		qDebug() << __PRETTY_FUNCTION__ << __LINE__;
 		mMainContext = PythonQt::self()->getMainModule();
 		recreateContext();
 	}
 	QLOG_INFO() << "PythonEngineWorker inited";
-
+qDebug() << __PRETTY_FUNCTION__ << __LINE__;
 	mWaitForInitSemaphore.release(1);
 }
 
