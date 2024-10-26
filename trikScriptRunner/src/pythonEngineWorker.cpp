@@ -357,6 +357,7 @@ void PythonEngineWorker::waitUntilInited()
 
 void PythonEngineWorker::run(const QString &script, const QFileInfo &scriptFile)
 {
+	qDebug() << __PRETTY_FUNCTION__ << __LINE__;
 	QMutexLocker locker(&mScriptStateMutex);
 	mState = starting;
 	QMetaObject::invokeMethod(this, [this, script, scriptFile](){this->doRun(script, scriptFile);});
@@ -364,6 +365,7 @@ void PythonEngineWorker::run(const QString &script, const QFileInfo &scriptFile)
 
 void PythonEngineWorker::doRun(const QString &script, const QFileInfo &scriptFile)
 {
+	qDebug() << __PRETTY_FUNCTION__ << __LINE__;
 	emit startedScript("", 0);
 	mErrorMessage.clear();
 	/// When starting script execution (by any means), clear button states.

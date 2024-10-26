@@ -155,7 +155,7 @@ TrikScriptRunnerInterface * TrikScriptRunner::fetchRunner(ScriptType stype)
 void TrikScriptRunner::run(const QString &script, ScriptType stype, const QString &fileName)
 {
 	abortAll(); // FIXME: or fetchRunner(stype)->abort()? or abort(/*last*/)?
-
+	qDebug() << __PRETTY_FUNCTION__ << __LINE__;
 	fetchRunner(stype)->run(script, fileName);
 }
 
