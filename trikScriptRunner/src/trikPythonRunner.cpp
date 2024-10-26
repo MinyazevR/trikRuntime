@@ -32,6 +32,7 @@ TrikPythonRunner::TrikPythonRunner(trikControl::BrickInterface *brick
 	qDebug() << __PRETTY_FUNCTION__ << __LINE__;
 	mWorkerThread = new QThread(this);
 	mScriptEngineWorker->moveToThread(mWorkerThread);
+	qDebug() << __PRETTY_FUNCTION__ << __LINE__;
 	connect(mWorkerThread, &QThread::finished, mScriptEngineWorker, &PythonEngineWorker::deleteLater);
 	connect(mWorkerThread, &QThread::started, mScriptEngineWorker, &PythonEngineWorker::init);
 	connect(mScriptEngineWorker, &PythonEngineWorker::textInStdOut, this, &TrikPythonRunner::textInStdOut);
@@ -39,10 +40,13 @@ TrikPythonRunner::TrikPythonRunner(trikControl::BrickInterface *brick
 	connect(mScriptEngineWorker, &PythonEngineWorker::startedScript, this, &TrikPythonRunner::startedScript);
 	connect(mScriptEngineWorker, &PythonEngineWorker::startedDirectScript
 			, this, &TrikPythonRunner::startedDirectScript);
-
+qDebug() << __PRETTY_FUNCTION__ << __LINE__;
 	QLOG_INFO() << "Starting TrikPythonRunner worker thread" << &mWorkerThread;
+	qDebug() << __PRETTY_FUNCTION__ << __LINE__;
 	mWorkerThread->setObjectName(mScriptEngineWorker->metaObject()->className());
+	qDebug() << __PRETTY_FUNCTION__ << __LINE__;
 	mWorkerThread->start();
+	qDebug() << __PRETTY_FUNCTION__ << __LINE__;
 	mScriptEngineWorker->waitUntilInited();
 	qDebug() << __PRETTY_FUNCTION__ << __LINE__;
 }
