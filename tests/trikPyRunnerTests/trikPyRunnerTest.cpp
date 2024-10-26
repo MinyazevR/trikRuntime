@@ -51,6 +51,7 @@ void TrikPyRunnerTest::TearDown()
 
 int TrikPyRunnerTest::run(const QString &script)
 {
+	qDebug() << __PRETTY_FUNCTION__ << __LINE__;
 	QEventLoop l;
 	QTimer::singleShot(SCRIPT_EXECUTION_TIMEOUT, &l, std::bind(&QEventLoop::exit, &l, EXIT_TIMEOUT));
 	QObject::connect(&*mScriptRunner, &trikScriptRunner::TrikScriptRunnerInterface::completed
@@ -63,10 +64,13 @@ int TrikPyRunnerTest::run(const QString &script)
 		l.exit(rc);
 	}, Qt::QueuedConnection ) ; // prevent `exit` before `exec` via QueuedConnection
 	mStdOut.clear();
+	qDebug() << __PRETTY_FUNCTION__ << __LINE__;
 	mScriptRunner->run(script, "_.py");
 	auto code = l.exec();
+	qDebug() << __PRETTY_FUNCTION__ << __LINE__;
 	QCoreApplication::processEvents(); // for stdout messages
 	std::cout << qPrintable(mStdOut) << std::endl;
+	qDebug() << __PRETTY_FUNCTION__ << __LINE__;
 	return code;
 }
 
