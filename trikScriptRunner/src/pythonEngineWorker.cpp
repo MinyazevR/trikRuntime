@@ -200,7 +200,7 @@ qDebug() << __PRETTY_FUNCTION__ << __LINE__;
 		PythonQt::setEnableThreadSupport(true);
 		PythonQtGILScope _;
 		qDebug() << __PRETTY_FUNCTION__ << __LINE__;
-		PythonQt::init(PythonQt::RedirectStdOut | PythonQt::PythonAlreadyInitialized, "TRIK_PQT");
+		PythonQt::init(PythonQt::RedirectStdOut, "TRIK_PQT");
 		connect(PythonQt::self(), &PythonQt::pythonStdErr, this, &PythonEngineWorker::updateErrorMessage);
 		connect(PythonQt::self(), &PythonQt::pythonStdOut, this, [this](const QString& str){
 			QTimer::singleShot(0, this, [this, str](){ Q_EMIT this->textInStdOut(str);});
