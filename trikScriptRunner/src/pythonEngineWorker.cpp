@@ -81,7 +81,7 @@ PythonEngineWorker::~PythonEngineWorker()
 	}
 
 	if (--initCounter == 0) {
-//		PythonQt::preCleanup();
+		PythonQt::preCleanup();
 #if PY_MAJOR_VERSION != 3
 #error "Unsupported PYTHON version"
 #endif
