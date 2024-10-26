@@ -29,6 +29,7 @@ TrikPythonRunner::TrikPythonRunner(trikControl::BrickInterface *brick
 								   )
 	:	mScriptEngineWorker(new PythonEngineWorker(brick, mailbox, scriptControl))
 {
+	qDebug() << __PRETTY_FUNCTION__ << __LINE__;
 	mWorkerThread = new QThread(this);
 	mScriptEngineWorker->moveToThread(mWorkerThread);
 	connect(mWorkerThread, &QThread::finished, mScriptEngineWorker, &PythonEngineWorker::deleteLater);
@@ -43,10 +44,12 @@ TrikPythonRunner::TrikPythonRunner(trikControl::BrickInterface *brick
 	mWorkerThread->setObjectName(mScriptEngineWorker->metaObject()->className());
 	mWorkerThread->start();
 	mScriptEngineWorker->waitUntilInited();
+	qDebug() << __PRETTY_FUNCTION__ << __LINE__;
 }
 
 TrikPythonRunner::~TrikPythonRunner()
 {
+	qDebug() << __PRETTY_FUNCTION__ << __LINE__;
 	QEventLoop wait;
 	connect(mWorkerThread, &QThread::finished, &wait, &QEventLoop::quit);
 	mScriptEngineWorker->stopScript();
