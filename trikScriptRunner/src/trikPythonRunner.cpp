@@ -31,6 +31,7 @@ TrikPythonRunner::TrikPythonRunner(trikControl::BrickInterface *brick
 {
 	qDebug() << __PRETTY_FUNCTION__ << __LINE__;
 	mWorkerThread = new QThread(this);
+	qDebug() << "mWorkerThread " << mWorkerThread;
 	mScriptEngineWorker->moveToThread(mWorkerThread);
 	qDebug() << __PRETTY_FUNCTION__ << __LINE__;
 	connect(mWorkerThread, &QThread::finished, mScriptEngineWorker, &PythonEngineWorker::deleteLater);

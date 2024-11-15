@@ -27,6 +27,13 @@
 #include <PythonQtConversion.h>
 #include <PythonQt_QtAll.h>
 
+#ifdef __linux__
+#include <dlfcn.h>
+#include <link.h>
+#include <stdio.h>
+#include <string.h>
+#endif
+
 void PythonQt_init_QtPyTrikControl(PyObject* module);
 
 using namespace trikScriptRunner;
@@ -46,6 +53,34 @@ static void abortPythonInterpreter() {
 	Py_AddPendingCall(&quitFromPython, nullptr);
 }
 
+#ifdef __linux__
+int find_library_callback(struct dl_phdr_info *info, size_t size, void *data) {
+	qDebug() << "I AM IN FIND LIBRARY";
+	Q_UNUSED(size);
+	auto *library_name = (const char *)data;
+
+
+	qDebug() << info->dlpi_addr;
+	qDebug() << info->dlpi_adds;
+	qDebug() << info->dlpi_name;
+	qDebug() << info->dlpi_phdr;
+	qDebug() << info->dlpi_phnum;
+	qDebug() << library_name;
+	qDebug() << strstr(info->dlpi_name, library_name);
+	if (info->dlpi_name && strstr(info->dlpi_name, library_name)) {
+		if (dlopen(info->dlpi_name, RTLD_NOLOAD | RTLD_GLOBAL) == NULL) {
+			QLOG_FATAL() << "Library: " << info->dlpi_name << "not load";
+			qDebug() << "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA";
+		}
+		qDebug() << "OPEN" << info->dlpi_name;
+		return 1;
+	}
+	qDebug() << "FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF" << info->dlpi_name;
+	QLOG_FATAL() << "Library: " << library_name << "not foud";
+	return 0;
+}
+#endif
+
 PythonEngineWorker::PythonEngineWorker(trikControl::BrickInterface *brick
 		, trikNetwork::MailboxInterface * const mailbox
 		, TrikScriptControlInterface *scriptControl
@@ -55,7 +90,6 @@ PythonEngineWorker::PythonEngineWorker(trikControl::BrickInterface *brick
 	, mMailbox(mailbox)
 	, mWorkingDirectory(trikKernel::Paths::userScriptsPath())
 {
-	qDebug() << __PRETTY_FUNCTION__ << __LINE__;
 	mWaitForInitSemaphore.acquire(1);
 }
 
@@ -219,6 +253,13 @@ qDebug() << __PRETTY_FUNCTION__ << __LINE__;
 	QLOG_INFO() << "PythonEngineWorker inited";
 qDebug() << __PRETTY_FUNCTION__ << __LINE__;
 	mWaitForInitSemaphore.release(1);
+
+#if PY_MAJOR_VERSION == 3 && PY_MINOR_VERSION >= 8 && defined(__linux__)
+	const char *library_name = "libpython";
+	if (!dl_iterate_phdr(find_library_callback, (void *)library_name)) {
+		QLOG_FATAL() << "";
+	}
+#endif
 }
 
 bool PythonEngineWorker::recreateContext()
@@ -371,11 +412,14 @@ void PythonEngineWorker::run(const QString &script, const QFileInfo &scriptFile)
 	QMutexLocker locker(&mScriptStateMutex);
 	mState = starting;
 	QMetaObject::invokeMethod(this, [this, script, scriptFile](){this->doRun(script, scriptFile);});
+	qDebug() << "HHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHH";
 }
 
 void PythonEngineWorker::doRun(const QString &script, const QFileInfo &scriptFile)
 {
 	qDebug() << __PRETTY_FUNCTION__ << __LINE__;
+	qDebug() << script;
+	qDebug() << QThread::currentThread();
 	emit startedScript("", 0);
 	mErrorMessage.clear();
 	/// When starting script execution (by any means), clear button states.
@@ -414,6 +458,7 @@ void PythonEngineWorker::runDirect(const QString &command)
 {
 	QMutexLocker locker(&mScriptStateMutex);
 	QMetaObject::invokeMethod(this, [this, &command](){doRunDirect(command);});
+	qDebug() << "KKKKKKKKKKKKKKKKKKKKKKKKKKKKK";
 }
 
 void PythonEngineWorker::doRunDirect(const QString &command)
