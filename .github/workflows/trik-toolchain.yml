@@ -166,7 +166,7 @@ jobs:
             #Inside qemu-user python resolves paths to host's root,
             # but .so libs are being searched by QEMU relative to target's sysroot (QEMU_LD_PREFIX)
             TARGET_PYTHONPATH=.:/usr/lib/lib-dynload:${QEMU_LD_PREFIX}/usr/lib/python3.${TARGET_PYTHON_VERSION_MINOR}:${QEMU_LD_PREFIX}/usr/lib/python3${TARGET_PYTHON_VERSION_MINOR}.zip
-            export QEMU_SET_ENV=LD_LIBRARY_PATH=${PWD}/bin,PYTHONDEVMODE=1,PYTHONVERBOSE=2,PYTHONDEBUG=2,PYTHONMALLOC=malloc_debug,PYTHONFAULTHANDLER=1,PYTHONPATH=${TARGET_PYTHONPATH},TRIK_PYTHONPATH=${TARGET_PYTHONPATH}
+            export QEMU_SET_ENV=LD_LIBRARY_PATH=${PWD}/bin,PYTHONDEVMODE=1,PYTHONVERBOSE=2,PYTHONDEBUG=2,PYTHONMALLOC=malloc_debug,PYTHONPATH=${TARGET_PYTHONPATH},TRIK_PYTHONPATH=${TARGET_PYTHONPATH}
             
             env | sort
             make -k check
