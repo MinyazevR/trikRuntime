@@ -38,10 +38,10 @@ public:
 
 public Q_SLOTS:
 	/// Sends byte data to current device, if it is connected.
-	int send(int reg, int value, char mode = 'b') override;
+	int send(int reg, int value, const QString &mode = "b") override;
 
 	/// Reads data by given I2C command number and returns the result.
-	int read(int reg, char mode = 'b') override;
+	int read(int reg, const QString &mode = "b") override;
 
 	/// Sends byte data to current device, if it is connected.
 	int sendX(int reg, const QVector<uint8_t> &data) override;

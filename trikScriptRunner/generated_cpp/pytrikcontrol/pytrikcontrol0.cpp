@@ -327,12 +327,12 @@ QVector<int >  PythonQtWrapper_trikControl__GyroSensorInterface::readRawData(tri
 
 
 
-int  PythonQtWrapper_trikControl__I2cDeviceInterface::read(trikControl::I2cDeviceInterface* theWrappedObject, int  reg, char  mode)
+int  PythonQtWrapper_trikControl__I2cDeviceInterface::read(trikControl::I2cDeviceInterface* theWrappedObject, int  reg, const QString&  mode)
 {
   return ( theWrappedObject->read(reg, mode));
 }
 
-int  PythonQtWrapper_trikControl__I2cDeviceInterface::send(trikControl::I2cDeviceInterface* theWrappedObject, int  reg, int  value, char  mode)
+int  PythonQtWrapper_trikControl__I2cDeviceInterface::send(trikControl::I2cDeviceInterface* theWrappedObject, int  reg, int  value, const QString&  mode)
 {
   return ( theWrappedObject->send(reg, value, mode));
 }

@@ -482,8 +482,8 @@ void delete_trikControl__GyroSensorInterface(trikControl::GyroSensorInterface* o
 
 class PythonQtPublicPromoter_trikControl__I2cDeviceInterface : public trikControl::I2cDeviceInterface
 { public:
-inline int  py_q_read(int  reg, char  mode = 'b') { return this->read(reg, mode); }
-inline int  py_q_send(int  reg, int  value, char  mode = 'b') { return this->send(reg, value, mode); }
+inline int  py_q_read(int  reg, const QString&  mode = "b") { return this->read(reg, mode); }
+inline int  py_q_send(int  reg, int  value, const QString&  mode = "b") { return this->send(reg, value, mode); }
 };
 
 class PythonQtWrapper_trikControl__I2cDeviceInterface : public QObject
@@ -491,10 +491,10 @@ class PythonQtWrapper_trikControl__I2cDeviceInterface : public QObject
 public:
 public slots:
 void delete_trikControl__I2cDeviceInterface(trikControl::I2cDeviceInterface* obj) { delete obj; }
-   int  read(trikControl::I2cDeviceInterface* theWrappedObject, int  reg, char  mode = 'b');
-   int  py_q_read(trikControl::I2cDeviceInterface* theWrappedObject, int  reg, char  mode = 'b'){  return (((PythonQtPublicPromoter_trikControl__I2cDeviceInterface*)theWrappedObject)->py_q_read(reg, mode));}
-   int  send(trikControl::I2cDeviceInterface* theWrappedObject, int  reg, int  value, char  mode = 'b');
-   int  py_q_send(trikControl::I2cDeviceInterface* theWrappedObject, int  reg, int  value, char  mode = 'b'){  return (((PythonQtPublicPromoter_trikControl__I2cDeviceInterface*)theWrappedObject)->py_q_send(reg, value, mode));}
+   int  read(trikControl::I2cDeviceInterface* theWrappedObject, int  reg, const QString&  mode = "b");
+   int  py_q_read(trikControl::I2cDeviceInterface* theWrappedObject, int  reg, const QString&  mode = "b"){  return (((PythonQtPublicPromoter_trikControl__I2cDeviceInterface*)theWrappedObject)->py_q_read(reg, mode));}
+   int  send(trikControl::I2cDeviceInterface* theWrappedObject, int  reg, int  value, const QString&  mode = "b");
+   int  py_q_send(trikControl::I2cDeviceInterface* theWrappedObject, int  reg, int  value, const QString&  mode = "b"){  return (((PythonQtPublicPromoter_trikControl__I2cDeviceInterface*)theWrappedObject)->py_q_send(reg, value, mode));}
 };
 
 
