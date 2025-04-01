@@ -163,6 +163,7 @@ QVector::reallocData QArrayData::AllocationOptions
 trikControl::BrickFactory::create trikHal::HardwareAbstractionInterface&
 trikControl::DisplayInterface::show QVector<int32_t> const&
 trikControl::FifoInterface::newData QVector<uint8_t> const&
+trikControl::I2cDeviceInterface::sendX QVector<uint8_t> const&
 trikKernel::TimeVal::fromPackedUInt32 uint32_t
 ************************************************************************
 
@@ -225,6 +226,7 @@ trikControl::CameraDeviceInterface::getPhoto QVector<uint8_t>
 trikControl::CameraDeviceInterface::qImageToQVector QVector<uint8_t>
 trikControl::CameraDeviceInterface::status Status
 trikControl::FifoInterface::readRaw QVector<uint8_t>
+trikControl::I2cDeviceInterface::readX QVector<uint8_t>
 trikControl::IrCameraInterface::getImage QVector<int32_t>
 trikControl::IrCameraInterface::status Status
 trikKernel::TimeVal::packedUInt32 uint32_t

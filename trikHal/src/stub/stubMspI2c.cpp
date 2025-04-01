@@ -18,12 +18,13 @@
 
 using namespace trikHal::stub;
 
-void StubMspI2C::send(const QByteArray &data)
+int StubMspI2C::send(const QByteArray &data)
 {
 	QLOG_INFO() << "Sending thru MSP I2C stub" << data;
+	return 0;
 }
 
-int StubMspI2C::read(const QByteArray &data)
+QVariant StubMspI2C::read(const QByteArray &data)
 {
 	QLOG_INFO() << "Reading from MSP I2C stub" << data;
 	return 0;
