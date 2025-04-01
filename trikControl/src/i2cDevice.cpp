@@ -1,6 +1,6 @@
 #include <trikHal/mspI2cInterface.h>
 #include "i2cDevice.h"
-
+#include <QVector>
 using namespace trikControl;
 
 I2cDevice::I2cDevice(const trikKernel::Configurer &configurer, trikHal::MspI2cInterface *i2c, int bus, int address)
