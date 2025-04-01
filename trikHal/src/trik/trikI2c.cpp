@@ -160,10 +160,11 @@ QVariant TrikI2c::read(const QByteArray &data)
 		return i2c_smbus_read_word_data(mDeviceFileDescriptor, data[0]);
 	}
 
-	QLOG_INFO() << "TrikI2c read n with data[0]" << data[0];
+	QLOG_INFO() << "TrikI2c read n with data[0]" << data[0] << smbusSize;
 	// max size of smbus message --- 32 bytes
 	QVector<uint8_t> buffer(std::min(32, smbusSize), '\0');
-	i2c_smbus_read_i2c_block_data(mDeviceFileDescriptor, data[1], smbusSize, buffer.data());
+	i2c_smbus_read_i2c_block_data(mDeviceFileDescriptor, data[0], smbusSize, buffer.data());
+	QLOG_INFO() << buffer;
 	return QVariant::fromValue(buffer);
 }
 
