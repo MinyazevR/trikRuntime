@@ -28,6 +28,7 @@ namespace {
 QVariant CommonI2c::read(const QByteArray &data)
 {
     if (data.size() < 4) {
+	    QLOG_INFO() << "CommonI2c read with dataSize" << data.size();
 	    return {};
     }
 
@@ -38,6 +39,8 @@ QVariant CommonI2c::read(const QByteArray &data)
 
     i2c_messages[0] = generateWriteMessage(mDeviceAddress, 2, (__u8*)cmd);
     auto sizeForRead = (data[3] << 8) | data[2];
+
+    QLOG_INFO() << "Try read dataSize" << sizeForRead;
 
     QVector<uint8_t> vector(sizeForRead, 0);
 
@@ -50,6 +53,7 @@ QVariant CommonI2c::read(const QByteArray &data)
     i2c_messageset[0].nmsgs = 2;
 
     if (ioctl(mDeviceFileDescriptor, I2C_RDWR, &i2c_messageset) < 0) {
+	QLOG_INFO() << "Failed read dataSize" << sizeForRead;
 	return -1;
     }
 

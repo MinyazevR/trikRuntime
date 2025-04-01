@@ -1,7 +1,6 @@
 #include <trikHal/mspI2cInterface.h>
 #include "i2cDevice.h"
-
-
+#include <QsLog.h>
 using namespace trikControl;
 
 I2cDevice::I2cDevice(const trikKernel::Configurer &configurer, trikHal::MspI2cInterface *i2c, int bus, int address)
@@ -57,25 +56,24 @@ int I2cDevice::sendX(int reg, const QVector<uint8_t> &data) {
 }
 
 int I2cDevice::read(int reg, char mode) {
-
-	if (status() != DeviceInterface::Status::ready) {
-		return -1;
-	}
-
+	QLOG_INFO() << "TRY To send byte\n";
 	QByteArray command;
 
 	command.append(static_cast<char>(reg & 0xFF));
 	command.append(static_cast<char>((reg >> 8) & 0xFF));
 
 	if (mode == 'b') {
+		QLOG_INFO() << "MODE B";
 		command.append(static_cast<char>(0x01));
 		command.append(static_cast<char>(0x00));
 		return mCommunicator->read(command).toInt();
 	} else if (mode == 'w') {
+		QLOG_INFO() << "MODE W";
 		command.append(static_cast<char>(0x02));
 		command.append(static_cast<char>(0x00));
 		return mCommunicator->read(command).toInt();
 	}
+	QLOG_INFO() << "NON EXISTING MODE";
 	return -1;
 }
 
