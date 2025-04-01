@@ -88,8 +88,20 @@ QVector<uint8_t> I2cDevice::readX(int reg, int size) {
 	command.append(static_cast<char>((reg >> 8) & 0xFF));
 	command.append(static_cast<char>(size & 0xFF));
 	command.append(static_cast<char>((size >> 8) & 0xFF));
-
 	auto result = mCommunicator->read(command);
+
+	if (size == 1) {
+		QVector<uint8_t> answer;
+		answer.append(result.toInt() & 0xFF);
+		return answer;
+	}
+
+	if (size == 2) {
+	    QVector<uint8_t> answer;
+	    answer.append(result.toInt() & 0xFF);
+	    answer.append((result.toInt() >> 8) & 0xFF);
+	    return answer;
+	}
 	return result.value<QVector<uint8_t>>();
 }
 
