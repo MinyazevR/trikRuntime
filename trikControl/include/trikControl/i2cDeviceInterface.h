@@ -15,7 +15,7 @@
 #pragma once
 
 #include <QtCore/QObject>
-
+#include <QVector>
 #include "deviceInterface.h"
 
 #include <trikControl/trikControlDeclSpec.h>
