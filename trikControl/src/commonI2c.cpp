@@ -57,10 +57,6 @@ QVariant CommonI2c::read(const QByteArray &data)
 	return -1;
     }
 
-    if (sizeForRead <= 2) {
-	return vector[0] | (vector[1] << 8);
-    }
-
     return QVariant::fromValue(vector);
 }
 
