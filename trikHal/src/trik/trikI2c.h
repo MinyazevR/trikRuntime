@@ -27,8 +27,8 @@ public:
 	TrikI2c() = default;
 	~TrikI2c() override;
 
-	void send(const QByteArray &data) override;
-	int read(const QByteArray &data) override;
+	int send(const QByteArray &data) override;
+	QVariant read(const QByteArray &data) override;
 	bool connect(const QString &devicePath, int deviceId) override;
 	void disconnect() override;
 

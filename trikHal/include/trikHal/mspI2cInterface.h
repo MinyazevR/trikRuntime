@@ -16,6 +16,7 @@
 
 #include <QtCore/QByteArray>
 #include <trikHal/trikHalDeclSpec.h>
+#include <QVariant>
 
 namespace trikHal {
 
@@ -29,10 +30,10 @@ public:
 	virtual ~MspI2cInterface() = default;
 
 	/// Send data to a device.
-	virtual void send(const QByteArray &data) = 0;
+	virtual int send(const QByteArray &data) = 0;
 
 	/// Reads data by given I2C command number and returns the result.
-	virtual int read(const QByteArray &data) = 0;
+	virtual QVariant read(const QByteArray &data) = 0;
 
 	/// Establish connection with MSP over I2C bus.
 	virtual bool connect(const QString &devicePath, int deviceId) = 0;

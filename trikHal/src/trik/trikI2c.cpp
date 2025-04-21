@@ -93,31 +93,79 @@ static inline __s32 i2c_smbus_write_byte_data(int file, __u8 command, __u8 value
 	return i2c_smbus_access(file, I2C_SMBUS_WRITE, command, I2C_SMBUS_BYTE_DATA, &data);
 }
 
+static inline __s32 i2c_smbus_write_block_data(int file, __u8 command, __u8 length,
+				 const __u8 *values)
+{
+	union i2c_smbus_data data {};
+	if (length > I2C_SMBUS_BLOCK_MAX)
+		length = I2C_SMBUS_BLOCK_MAX;
+
+	for (int i = 1; i <= length; i++)
+		data.block[i] = values[i-1];
+	data.block[0] = length;
+
+	return i2c_smbus_access(file, I2C_SMBUS_WRITE, command,
+				I2C_SMBUS_BLOCK_DATA, &data);
+}
+
 TrikI2c::~TrikI2c()
 {
 	disconnect();
 }
 
-void TrikI2c::send(const QByteArray &data)
-{
-	if (data.size() == 3) {
-		i2c_smbus_write_byte_data(mDeviceFileDescriptor, data[0], data[2]);
-	} else {
-		i2c_smbus_write_word_data(mDeviceFileDescriptor, data[0], data[2] | (data[3] << 8));
+// data[0], data[1] --- LSByte and MsByte
+// data[2], data[N - 1] --- Data for send
+int TrikI2c::send(const QByteArray &data)
+{	
+	auto dataSize = data.size();
+	QLOG_INFO() << "TrikI2c send with dataSize" << dataSize;
+	if (dataSize < 3) {
+		return -1;
 	}
+
+	if (dataSize == 3) {
+		QLOG_INFO() << "TrikI2c send 1 with data[0]" << data[0];
+		return i2c_smbus_write_byte_data(mDeviceFileDescriptor, data[0], data[2]);
+	} else if (dataSize == 4) {
+		QLOG_INFO() << "TrikI2c send 2 with data[0]" << data[0];
+		return i2c_smbus_write_word_data(mDeviceFileDescriptor, data[0], data[2] | (data[3] << 8));
+	}
+
+	QLOG_INFO() << "TrikI2c send n with data[0]" << data[0];
+	auto *sendData = (const __u8 *)(data.data());
+	const auto regSize = 2;
+	sendData += regSize;
+	return i2c_smbus_write_block_data(mDeviceFileDescriptor, data[0], dataSize - regSize, sendData);
 }
 
-int TrikI2c::read(const QByteArray &data)
+// data[0], data[1] --- LSByte and MSByte
+// data[2], data[3] number of bytes for smbus read
+QVariant TrikI2c::read(const QByteArray &data)
 {
-	if (data.size() == 1) {
+	auto dataSize = data.size();
+	QLOG_INFO() << "TrikI2c read with dataSize" << dataSize;
+	if (dataSize < 3) {
+		return -1;
+	}
+
+	auto smbusSize = data[2] | (data[3] << 8);
+	QLOG_INFO() << "TrikI2c read with smbusSize" << smbusSize;
+
+	if (smbusSize == 1) {
+		QLOG_INFO() << "TrikI2c read 1 with data[0]" << data[0];
 		return i2c_smbus_read_byte_data(mDeviceFileDescriptor, data[0]);
 	}
-	if (data.size() == 2) {
+	if (smbusSize == 2) {
+		QLOG_INFO() << "TrikI2c read 2 with data[0]" << data[0];
 		return i2c_smbus_read_word_data(mDeviceFileDescriptor, data[0]);
 	}
-	std::array<uint8_t, 4> buffer {};
-	i2c_smbus_read_i2c_block_data(mDeviceFileDescriptor, data[0], 4, buffer.data());
-	return buffer[3] << 24 | buffer[2] <<  16 | buffer[1] << 8 | buffer[0];
+
+	QLOG_INFO() << "TrikI2c read n with data[0]" << data[0] << smbusSize;
+	// max size of smbus message --- 32 bytes
+	QVector<uint8_t> buffer(std::min(32, smbusSize), '\0');
+	i2c_smbus_read_i2c_block_data(mDeviceFileDescriptor, data[0], smbusSize, buffer.data());
+	QLOG_INFO() << buffer;
+	return QVariant::fromValue(buffer);
 }
 
 bool TrikI2c::connect(const QString &devicePath, int deviceId)

@@ -31,7 +31,7 @@ public:
 	MspI2cInterface &mspI2c() override;
 	MspUsbInterface &mspUsb() override;
 	SystemConsoleInterface &systemConsole() override;
-
+	MspI2cInterface *createMspI2c() override;
 	EventFileInterface *createEventFile(const QString &fileName) const override;
 	FifoInterface *createFifo(const QString &fileName) const override;
 	IIOFileInterface *createIIOFile(const QString &fileName, const QString &scanType) const override;

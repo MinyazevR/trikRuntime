@@ -767,8 +767,8 @@ uint32_t read_Sensor(QByteArray const &i2c_data)
 	uint8_t regaddr;			    // Returned register address
 	uint32_t regval=UINT32_MAX;		    // Returned register value
 	uint16_t tmout = 0;			    // Reading timeout
-	const uint16_t dev_address = (uint16_t)i2c_data[0] +
-		((uint16_t)i2c_data[1] << 8);	    // Device address
+	const uint16_t dev_address = ((uint16_t)i2c_data[0] << 8) +
+		(uint16_t)i2c_data[1];	    // Device address
 
 	// Analog sensors
 	if ((dev_address == i2cSENS1)
@@ -1146,9 +1146,9 @@ uint32_t read_USBMSP(QByteArray const &i2c_data)
 {
 	switch (i2c_data.size())
 	{
-		case 2:
+		case 4:
 			return read_Sensor(i2c_data);
-		case 3:
+		case 5:
 			return read_Encoder(i2c_data);
 		default:
 			return NO_ERROR;
