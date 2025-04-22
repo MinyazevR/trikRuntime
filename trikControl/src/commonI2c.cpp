@@ -46,16 +46,16 @@ QVector<uint8_t> CommonI2c::readX(const QByteArray &data)
 	struct i2c_rdwr_ioctl_data i2c_messageset[1];
 
 	QLOG_INFO() << "mRegSize:" << mRegSize;
+	char cmd[2] = {0, 0};
+
 	if  (mRegSize == 2) {
-		QLOG_INFO() << __LINE__ << __FILE__;
-		char cmd[2] = {data[1], data[0]};
-		i2c_messages[0] = {mDeviceAddress, 0, mRegSize, (__u8*)cmd};
+		cmd[0] = data[1];
+		cmd[1] = data[0];
 	} else {
-		QLOG_INFO() << __LINE__ << __FILE__;
-		char cmd[1] = {data[0]};
-		i2c_messages[0] = {mDeviceAddress, 0, mRegSize, (__u8*)cmd};
+		cmd[0] = data[0];
 	}
 
+	i2c_messages[0] = {mDeviceAddress, 0, mRegSize, (__u8*)cmd};
 	const auto  sizeForRead = static_cast<ushort>((data[3] << 8) | data[2]);
 	QLOG_INFO() << "sizeForRead:" << sizeForRead;
 	QVector<uint8_t> vector(sizeForRead, 0);
