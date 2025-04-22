@@ -9,7 +9,7 @@
 
 using namespace trikControl;
 
-CommonI2c::CommonI2c(ushort regSize) : mRegSize(regSize / 8) {};
+CommonI2c::CommonI2c(ushort regSize) : mRegSize(regSize / 8) {}
 
 void CommonI2c::disconnect()
 {
