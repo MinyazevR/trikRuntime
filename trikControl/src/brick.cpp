@@ -422,7 +422,7 @@ ObjectSensorInterface *Brick::objectSensor(const QString &port)
 	return mObjectSensors.contains(port) ? mObjectSensors[port] : nullptr;
 }
 
-I2cDeviceInterface* Brick::createI2cDevice(int bus, int address, std::function<trikHal::MspI2cInterface *(void)> factory) {
+I2cDeviceInterface* Brick::createI2cDevice(int bus, int address, std::function<trikHal::MspI2cInterface *()> factory) {
 	uint8_t _bus = bus & 0xFF;
 	uint8_t _address = address & 0xFF;
 	uint16_t mhash = (_bus << 8) | _address;
