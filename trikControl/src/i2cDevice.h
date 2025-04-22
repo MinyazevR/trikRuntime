@@ -14,7 +14,6 @@
 
 #pragma once
 
-#include "i2cDeviceInterface.h"
 #include "mspI2cCommunicator.h"
 
 namespace trikHal {
@@ -38,7 +37,8 @@ public:
 	/// @param bus - bus for i2c communication
 	/// @param address - address for device on bus
 	/// Takes ownership of i2c
-	I2cDevice(const trikKernel::Configurer &configurer, trikHal::MspI2cInterface *i2c, int bus, int address);
+	I2cDevice(const trikKernel::Configurer &configurer, trikHal::MspI2cInterface *i2c,
+		  int bus, int address);
 
 	/// For implicit forward declaration
 	~I2cDevice();
@@ -54,10 +54,14 @@ public Q_SLOTS:
 
 	/// Reads data by given I2C command number and returns the result.
 	QVector<uint8_t> readX(int reg, int size) override;
+
+	/// Reads data by given I2C command number and returns the result as QVector.
+	int transfer(const QVector<Message> &vector) override;
+
 private:
 	DeviceState mState;
 	QScopedPointer<trikHal::MspI2cInterface> mInterface;
-	QScopedPointer<MspCommunicatorInterface> mCommunicator;
+	QScopedPointer<I2cCommunicatorInterface> mCommunicator;
 };
 
 }

@@ -115,7 +115,9 @@ HEADERS += \
 	$$PWD/src/lidarWorker.h \
 	$$PWD/src/irCamera.h \
 	$$PWD/src/irCameraWorker.h \
-	$$PWD/src/commonI2c.h
+	$$PWD/src/commonI2c.h \
+	$$PWD/src/commonI2cDeviceInterface.h \
+	$$PWD/src/i2cCommunicatorInterface.h
 
 SOURCES += \
 	$$PWD/src/abstractVirtualSensorWorker.cpp \
@@ -181,7 +183,7 @@ SOURCES += \
 	$$PWD/src/lidarWorker.cpp \
 	$$PWD/src/irCamera.cpp \
 	$$PWD/src/irCameraWorker.cpp \
-	$$PWD/src/commonI2c.cpp
+	$$PWD/src/commonI2c.cpp \
 
 CONFIGS += \
 	$$PWD/configs

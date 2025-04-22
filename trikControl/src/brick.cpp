@@ -422,20 +422,15 @@ ObjectSensorInterface *Brick::objectSensor(const QString &port)
 	return mObjectSensors.contains(port) ? mObjectSensors[port] : nullptr;
 }
 
-I2cDeviceInterface *Brick::i2c(int bus, int address, int regSize)
-{
+I2cDeviceInterface* Brick::createI2cDevice(int bus, int address, std::function<trikHal::MspI2cInterface *(void)> factory) {
 	uint8_t _bus = bus & 0xFF;
 	uint8_t _address = address & 0xFF;
 	uint16_t mhash = (_bus << 8) | _address;
 	if (mI2cDevices.contains(mhash)) {
 		return mI2cDevices[mhash];
 	} else {
-		auto i2cDeviceUnique = regSize == 8 ?
-				std::make_unique<I2cDevice>(mConfigurer,
-					mHardwareAbstraction->createMspI2c(), _bus, _address)
-				: std::make_unique<I2cDevice>(mConfigurer,
-					 new CommonI2c(), _bus, _address);
-
+		auto i2cDeviceUnique = std::make_unique<I2cDevice>(mConfigurer,
+					factory(), _bus, _address);
 		if (i2cDeviceUnique->status() ==  DeviceInterface::Status::permanentFailure) {
 			QLOG_ERROR() << "Could not open device on bus" << bus << "and address " << address;
 			return nullptr;
@@ -446,6 +441,19 @@ I2cDeviceInterface *Brick::i2c(int bus, int address, int regSize)
 		return i2cDevice;
 	}
 }
+
+I2cDeviceInterface *Brick::smBusI2c(int bus, int address)
+{
+	return createI2cDevice(bus, address,
+			       [this](){ return mHardwareAbstraction->createMspI2c();});
+}
+
+I2cDeviceInterface *Brick::i2c(int bus, int address, int regSize)
+{
+	return createI2cDevice(bus, address,
+			       [regSize](){ return new CommonI2c(regSize);});
+}
+
 
 QVector<uint8_t> Brick::getStillImage()
 {

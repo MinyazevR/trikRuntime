@@ -129,6 +129,7 @@ inline void py_q_reset() { this->reset(); }
 inline void py_q_say(const QString&  text) { this->say(text); }
 inline trikControl::SensorInterface*  py_q_sensor(const QString&  port) { return this->sensor(port); }
 inline QStringList  py_q_sensorPorts(trikControl::SensorInterface::Type  type) const { return this->sensorPorts(type); }
+inline trikControl::I2cDeviceInterface*  py_q_smBusI2c(int  bus, int  address) { return this->smBusI2c(bus, address); }
 inline trikControl::SoundSensorInterface*  py_q_soundSensor(const QString&  port) { return this->soundSensor(port); }
 inline void py_q_stop() { this->stop(); }
 inline void py_q_stopEventDevice(const QString&  deviceFile) { this->stopEventDevice(deviceFile); }
@@ -196,6 +197,8 @@ void delete_trikControl__BrickInterface(trikControl::BrickInterface* obj) { dele
    trikControl::SensorInterface*  py_q_sensor(trikControl::BrickInterface* theWrappedObject, const QString&  port){  return (((PythonQtPublicPromoter_trikControl__BrickInterface*)theWrappedObject)->py_q_sensor(port));}
    QStringList  sensorPorts(trikControl::BrickInterface* theWrappedObject, trikControl::SensorInterface::Type  type) const;
    QStringList  py_q_sensorPorts(trikControl::BrickInterface* theWrappedObject, trikControl::SensorInterface::Type  type) const{  return (((PythonQtPublicPromoter_trikControl__BrickInterface*)theWrappedObject)->py_q_sensorPorts(type));}
+   trikControl::I2cDeviceInterface*  smBusI2c(trikControl::BrickInterface* theWrappedObject, int  bus, int  address);
+   trikControl::I2cDeviceInterface*  py_q_smBusI2c(trikControl::BrickInterface* theWrappedObject, int  bus, int  address){  return (((PythonQtPublicPromoter_trikControl__BrickInterface*)theWrappedObject)->py_q_smBusI2c(bus, address));}
    trikControl::SoundSensorInterface*  soundSensor(trikControl::BrickInterface* theWrappedObject, const QString&  port);
    trikControl::SoundSensorInterface*  py_q_soundSensor(trikControl::BrickInterface* theWrappedObject, const QString&  port){  return (((PythonQtPublicPromoter_trikControl__BrickInterface*)theWrappedObject)->py_q_soundSensor(port));}
    void py_q_stop(trikControl::BrickInterface* theWrappedObject){  (((PythonQtPublicPromoter_trikControl__BrickInterface*)theWrappedObject)->py_q_stop());}

@@ -28,6 +28,17 @@ class TRIKCONTROL_EXPORT I2cDeviceInterface : public QObject, public DeviceInter
 	Q_OBJECT
 
 public :
+	enum class MessageType {
+		read
+		, write
+	};
+
+	struct Message {
+		MessageType type;
+		QVector<uint8_t> data;
+
+	};
+
 	/// Sends byte/word data to current device, if it is connected.
 	virtual int send(int reg, int value, const QString &mode = "b") = 0;
 
@@ -36,6 +47,9 @@ public :
 
 	/// Reads data by given I2C command number and returns the result as QVector.
 	virtual QVector<uint8_t> readX(int reg, int size) = 0;
+
+	/// Reads data by given I2C command number and returns the result as QVector.
+	virtual int transfer(const QVector<Message> &vector) = 0;
 };
 
 }
