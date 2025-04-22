@@ -37,6 +37,7 @@ bool CommonI2c::connect(const QString &devicePath, int deviceId)
 
 QVector<uint8_t> CommonI2c::readX(const QByteArray &data)
 {
+	QLOG_INFO() << "CommonI2c::readX\n";
 	if (data.size() < 4) {
 		return {};
 	}
@@ -44,15 +45,19 @@ QVector<uint8_t> CommonI2c::readX(const QByteArray &data)
 	struct i2c_msg i2c_messages[2];
 	struct i2c_rdwr_ioctl_data i2c_messageset[1];
 
+	QLOG_INFO() << "mRegSize:" << mRegSize;
 	if  (mRegSize == 2) {
+		QLOG_INFO() << __LINE__ << __FILE__;
 		char cmd[2] = {data[1], data[0]};
 		i2c_messages[0] = {mDeviceAddress, 0, mRegSize, (__u8*)cmd};
 	} else {
+		QLOG_INFO() << __LINE__ << __FILE__;
 		char cmd[1] = {data[0]};
 		i2c_messages[0] = {mDeviceAddress, 0, mRegSize, (__u8*)cmd};
 	}
 
 	const auto  sizeForRead = static_cast<ushort>((data[3] << 8) | data[2]);
+	QLOG_INFO() << "sizeForRead:" << sizeForRead;
 	QVector<uint8_t> vector(sizeForRead, 0);
 
 	i2c_messages[1] = {mDeviceAddress, I2C_M_RD, sizeForRead, (__u8*)vector.data()};
@@ -65,6 +70,9 @@ QVector<uint8_t> CommonI2c::readX(const QByteArray &data)
 	      return {};
 	}
 
+	QLOG_INFO() << "read success: " << sizeForRead;
+	QLOG_INFO() << vector;
+	QLOG_INFO() << "vectorsize: " << vector.size();
 	return vector;
 }
 
@@ -73,8 +81,10 @@ int CommonI2c::read(const QByteArray &data)
 	if (data.size() < 4) {
 		return {};
 	}
-	auto vector = readX(data);
+
 	const auto sizeForRead = (ushort)((data[3] << 8) | data[2]);
+	QLOG_INFO() << "WANT TO READ DATA WITH SIZE:" << sizeForRead;
+	auto vector = readX(data);
 
 	if (vector.length() < sizeForRead) {
 		return 0;
