@@ -29,7 +29,6 @@
 #include <trikHal/hardwareAbstractionFactory.h>
 #include <trikKernel/exceptions/malformedConfigException.h>
 #include <trikKernel/timeVal.h>
-#include <functional>
 #include "analogSensor.h"
 #include "battery.h"
 #include "colorSensor.h"

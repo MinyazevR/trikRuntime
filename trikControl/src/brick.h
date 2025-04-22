@@ -16,10 +16,9 @@
 
 #include <QtCore/QHash>
 #include <QtCore/QScopedPointer>
-
 #include <trikKernel/configurer.h>
 #include <trikKernel/differentOwnerPointer.h>
-
+#include <functional>
 #include "brickInterface.h"
 namespace trikHal {
 class HardwareAbstractionInterface;
