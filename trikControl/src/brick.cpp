@@ -54,6 +54,7 @@
 #include "cameraDeviceInterface.h"
 #include "cameraDevice.h"
 #include "i2cDevice.h"
+#include "commonI2c.h"
 #include "mspI2cCommunicator.h"
 #include "lidar.h"
 #include "irCamera.h"
@@ -429,12 +430,11 @@ I2cDeviceInterface *Brick::i2c(int bus, int address, int regSize)
 	if (mI2cDevices.contains(mhash)) {
 		return mI2cDevices[mhash];
 	} else {
-		if (regSize != 8) {
-			return nullptr;
-		}
-
-		auto i2cDeviceUnique = std::make_unique<I2cDevice>(mConfigurer,
-						mHardwareAbstraction->createMspI2c(), _bus, _address);
+		auto i2cDeviceUnique = regSize == 8 ?
+				std::make_unique<I2cDevice>(mConfigurer,
+					mHardwareAbstraction->createMspI2c(), _bus, _address)
+				: std::make_unique<I2cDevice>(mConfigurer,
+					 new CommonI2c(), _bus, _address);
 
 		if (i2cDeviceUnique->status() ==  DeviceInterface::Status::permanentFailure) {
 			QLOG_ERROR() << "Could not open device on bus" << bus << "and address " << address;
