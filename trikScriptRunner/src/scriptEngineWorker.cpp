@@ -24,7 +24,7 @@
 #include "trikScriptRunnerInterface.h"
 #include "scriptable.h"
 #include "utils.h"
-
+#include <trikControl/i2cDeviceInterface.h>
 #include <QCoreApplication>
 #include <QFileInfo>
 #include <QsLog.h>
@@ -345,6 +345,20 @@ static void timeValFromScriptValue(const QScriptValue &object, trikKernel::TimeV
 	out = trikKernel::TimeVal(0, object.property("mcsec").toInt32());
 }
 
+static QScriptValue i2cMessageToScriptValue(QScriptEngine *engine, const trikControl::I2cDeviceInterface::Message &in)
+{
+	QScriptValue obj = engine->newObject();
+	obj.setProperty("data", engine->toScriptValue(in.data));
+	obj.setProperty("type", in.type);
+	return obj;
+}
+
+static void i2cMessageFromScriptValue(const QScriptValue &object, trikControl::I2cDeviceInterface::Message &out)
+{
+	out.type = object.property("type").toString();
+	out.data = qscriptvalue_cast<QVector<uint8_t>>(object.property("data"));
+}
+
 QScriptEngine * ScriptEngineWorker::createScriptEngine(bool supportThreads)
 {
 	QScriptEngine *engine = new QScriptEngine();
@@ -355,6 +369,7 @@ QScriptEngine * ScriptEngineWorker::createScriptEngine(bool supportThreads)
 
 	Scriptable<QTimer>::registerMetatype(engine);
 	qScriptRegisterMetaType(engine, &timeValToScriptValue, &timeValFromScriptValue);
+	qScriptRegisterMetaType(engine, &i2cMessageToScriptValue, &i2cMessageFromScriptValue);
 	qScriptRegisterSequenceMetaType<QVector<int32_t>>(engine);
 	qScriptRegisterSequenceMetaType<QStringList>(engine);
 	qScriptRegisterSequenceMetaType<QVector<uint8_t>>(engine);

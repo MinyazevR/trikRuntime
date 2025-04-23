@@ -9,7 +9,7 @@
 
 using namespace trikControl;
 
-CommonI2c::CommonI2c(ushort regSize) : mRegSize(regSize / 8) {}
+CommonI2c::CommonI2c(ushort regSize) : mRegSize(regSize) {}
 
 void CommonI2c::disconnect()
 {
@@ -79,7 +79,7 @@ QVector<uint8_t> CommonI2c::readX(const QByteArray &data)
 int CommonI2c::read(const QByteArray &data)
 {
 	if (data.size() < 4) {
-		return {};
+		return -1;
 	}
 
 	const auto sizeForRead = (ushort)((data[3] << 8) | data[2]);
@@ -87,7 +87,7 @@ int CommonI2c::read(const QByteArray &data)
 	auto vector = readX(data);
 
 	if (vector.length() < sizeForRead) {
-		return 0;
+		return -1;
 	}
 
 	if (sizeForRead == 1) {
@@ -138,7 +138,7 @@ int CommonI2c::write(__u8* writeData, __u16 length)
 int CommonI2c::transfer(const QVector<I2cDeviceInterface::Message> &vector) {
 
 	if (vector.size() > I2C_RDRW_IOCTL_MAX_MSGS) {
-		return {};
+		return -1;
 	}
 
 	struct i2c_msg msgs[I2C_RDRW_IOCTL_MAX_MSGS];
@@ -147,7 +147,7 @@ int CommonI2c::transfer(const QVector<I2cDeviceInterface::Message> &vector) {
 	int counter = 0;
 	for (auto &&message: vector) {
 		__u16 flags = 0;
-		if (message.type == I2cDeviceInterface::MessageType::read) {
+		if (message.type == "read") {
 			flags |= I2C_M_RD;
 		}
 		auto data = message.data;

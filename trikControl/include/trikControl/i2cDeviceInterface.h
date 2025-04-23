@@ -28,13 +28,8 @@ class TRIKCONTROL_EXPORT I2cDeviceInterface : public QObject, public DeviceInter
 	Q_OBJECT
 
 public :
-	enum class MessageType {
-		read
-		, write
-	};
-
 	struct Message {
-		MessageType type;
+		QString type;
 		QVector<uint8_t> data;
 
 	};
@@ -55,3 +50,4 @@ public :
 }
 
 Q_DECLARE_METATYPE(trikControl::I2cDeviceInterface *)
+Q_DECLARE_METATYPE(trikControl::I2cDeviceInterface::Message)

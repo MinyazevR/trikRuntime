@@ -449,6 +449,10 @@ I2cDeviceInterface *Brick::smBusI2c(int bus, int address)
 
 I2cDeviceInterface *Brick::i2c(int bus, int address, int regSize)
 {
+	if (regSize != 1 && regSize != 2) {
+		return nullptr;
+	}
+
 	return createI2cDevice(bus, address,
 			       [regSize](){ return new CommonI2c(regSize);});
 }
