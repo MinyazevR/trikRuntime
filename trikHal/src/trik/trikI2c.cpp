@@ -50,6 +50,7 @@ static inline __s32 i2c_smbus_read_byte_data(int file, __u8 command)
 static inline __s32 i2c_smbus_read_word_data(int file, __u8 command)
 {
 	union i2c_smbus_data data {};
+	QLOG_DEBUG() << "i2c_smbus_read_word_data";
 	if (i2c_smbus_access(file, I2C_SMBUS_READ, command, I2C_SMBUS_WORD_DATA, &data)) {
 		return -1;
 	}
@@ -112,7 +113,7 @@ int TrikI2c::send(const QByteArray &data)
 int TrikI2c::read(const QByteArray &data)
 {
 	auto dataSize = data.size();
-
+	QLOG_DEBUG() << "dataSize: " << dataSize;
 	// We expect at least two bytes of the register and two bytes indicating the size
 	if (dataSize < 4) {
 		return -1;
