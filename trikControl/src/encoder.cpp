@@ -64,7 +64,7 @@ int Encoder::read()
 int Encoder::readRawData()
 {
 	if (status() == DeviceInterface::Status::ready) {
-		QByteArray command(3, '\0');
+		QByteArray command(5, '\0');
 		command[0] = static_cast<char>(mI2cCommandNumber & 0xFF);
 		command[1] = static_cast<char>((mI2cCommandNumber >> 8) & 0xFF);
 
