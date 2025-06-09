@@ -69,7 +69,7 @@ int Encoder::readRawData()
 		command[0] = static_cast<char>(mI2cCommandNumber & 0xFF);
 		command[1] = static_cast<char>((mI2cCommandNumber >> 8) & 0xFF);
 
-		command[2] = static_cast<char>(0x02);
+		command[2] = static_cast<char>(0x04);
 		command[3] = static_cast<char>(0x00);
 
 		// The MSP usb module uses a matching of the required action by the length of the QByteArray.
