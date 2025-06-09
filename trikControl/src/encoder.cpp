@@ -42,7 +42,7 @@ Encoder::Encoder(const QString &port, const trikKernel::Configurer &configurer, 
 void Encoder::reset()
 {
 	if (status() == DeviceInterface::Status::ready) {
-		QByteArray command(5, '\0');
+		QByteArray command(3, '\0');
 		command[0] = static_cast<char>(mI2cCommandNumber & 0xFF);
 		command[1] = static_cast<char>((mI2cCommandNumber >> 8) & 0xFF);
 		command[2] = static_cast<char>(0x00);
@@ -63,6 +63,7 @@ int Encoder::read()
 
 int Encoder::readRawData()
 {
+	QLOG_DEBUG() << "I WANT TO READRAWDATA";
 	if (status() == DeviceInterface::Status::ready) {
 		QByteArray command(5, '\0');
 		command[0] = static_cast<char>(mI2cCommandNumber & 0xFF);
