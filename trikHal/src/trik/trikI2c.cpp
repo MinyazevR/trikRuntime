@@ -52,8 +52,10 @@ static inline __s32 i2c_smbus_read_word_data(int file, __u8 command)
 	union i2c_smbus_data data {};
 	QLOG_DEBUG() << "i2c_smbus_read_word_data";
 	if (i2c_smbus_access(file, I2C_SMBUS_READ, command, I2C_SMBUS_WORD_DATA, &data)) {
+		QLOG_DEBUG() << "i2c_smbus_read_word_data -1";
 		return -1;
 	}
+	QLOG_DEBUG() << "i2c_smbus_read_word_data SUCESS " << data.word;
 	return 0x0FFFF & data.word;
 }
 
@@ -126,6 +128,7 @@ int TrikI2c::read(const QByteArray &data)
 	}
 
 	// smbusReadSize == 2;
+	QLOG_DEBUG() << "mDeviceFileDescriptor: " << mDeviceFileDescriptor;
 	return i2c_smbus_read_word_data(mDeviceFileDescriptor, data[0]);
 }
 
