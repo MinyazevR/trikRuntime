@@ -165,7 +165,9 @@ void TrikScriptRunner::runDirectCommand(const QString &command)
 
 void TrikScriptRunner::abort()
 {
+	QLOG_INFO() << __FILE__ << __LINE__;
 	fetchRunner(mLastRunner)->abort();
+	QLOG_INFO() << __FILE__ << __LINE__;
 }
 
 void TrikScriptRunner::brickBeep()

@@ -68,7 +68,9 @@ void ProgrammingWidget::keyPressEvent(QKeyEvent *event)
 
 	switch (event->key()) {
 	case Qt::Key_PowerOff: {
+		QLOG_INFO() << __FILE__ << __LINE__;
 		mController.abortExecution();
+		QLOG_INFO() << __FILE__ << __LINE__;
 		break;
 	}
 	case Qt::Key_Escape: {

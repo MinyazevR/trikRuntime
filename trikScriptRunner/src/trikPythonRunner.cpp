@@ -119,10 +119,12 @@ void TrikPythonRunner::runDirectCommand(const QString &command)
 
 void TrikPythonRunner::abort()
 {
+	QLOG_INFO() << __FILE__ << __LINE__;
 	if (mScriptEngineWorker) {
 		mScriptEngineWorker->stopScript();
 		mScriptEngineWorker->resetBrick();
 	}
+	QLOG_INFO() << __FILE__ << __LINE__;
 }
 
 QStringList TrikPythonRunner::knownMethodNames() const

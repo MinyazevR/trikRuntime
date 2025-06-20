@@ -39,11 +39,15 @@ static int quitFromPython(void*) {
 }
 
 static void abortPythonInterpreter() {
+	QLOG_INFO() << __FILE__ << __LINE__;
 	if(!Py_IsInitialized()) {
 		return;
 	}
+	QLOG_INFO() << __FILE__ << __LINE__;
 	PythonQtGILScope _;
+	QLOG_INFO() << __FILE__ << __LINE__;
 	Py_AddPendingCall(&quitFromPython, nullptr);
+	QLOG_INFO() << __FILE__ << __LINE__;
 }
 
 PythonEngineWorker::PythonEngineWorker(trikControl::BrickInterface *brick
@@ -288,6 +292,7 @@ void PythonEngineWorker::resetBrick()
 	}
 
 	mBrick->reset();
+	QLOG_INFO() << __FILE__ << __LINE__;
 }
 
 void PythonEngineWorker::brickBeep()
@@ -297,6 +302,7 @@ void PythonEngineWorker::brickBeep()
 
 void PythonEngineWorker::stopScript()
 {
+	QLOG_INFO() << __FILE__ << __LINE__;
 	QMutexLocker locker(&mScriptStateMutex);
 
 	if (mState == stopping) {
@@ -323,6 +329,7 @@ void PythonEngineWorker::stopScript()
 		mMailbox->stopWaiting();
 	}
 
+	QLOG_INFO() << __FILE__ << __LINE__;
 	mScriptExecutionControl->reset();
 
 	mState = ready;

@@ -13,7 +13,7 @@
  * limitations under the License. */
 
 #include "runningWidget.h"
-
+#include <QsLog.h>
 #include <QtGui/QKeyEvent>
 
 using namespace trikGui;
@@ -59,7 +59,9 @@ void RunningWidget::keyPressEvent(QKeyEvent *event)
 {
 	switch (event->key()) {
 		case Qt::Key_PowerOff: {
+			QLOG_INFO() << __FILE__ << __LINE__;
 			mController.abortExecution();
+			QLOG_INFO() << __FILE__ << __LINE__;
 			break;
 		}
 		default: {

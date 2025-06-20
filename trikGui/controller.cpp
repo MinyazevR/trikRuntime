@@ -131,7 +131,9 @@ void Controller::runScript(const QString &script)
 void Controller::abortExecution()
 {
 	Q_EMIT hideScriptWidgets();
+	QLOG_INFO() << __FILE__ << __LINE__;
 	mScriptRunner->abort();
+	QLOG_INFO() << __FILE__ << __LINE__;
 
 	// Now script engine will stop (after some time maybe) and send "completed" signal, which will be caught and
 	// processed as if a script finished by itself.
