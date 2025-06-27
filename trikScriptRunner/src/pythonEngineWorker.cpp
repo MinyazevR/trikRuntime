@@ -34,7 +34,9 @@ using namespace trikScriptRunner;
 QAtomicInt PythonEngineWorker::initCounter = 0;
 
 static int quitFromPython(void*) {
+  QLOG_INFO() << "quitFromPython";
   PyErr_SetInterrupt();
+   QLOG_INFO() << "quitFromPython";
 	return 0;
 }
 
@@ -407,10 +409,7 @@ void PythonEngineWorker::doRun(const QString &script, const QFileInfo &scriptFil
 		addSearchModuleDirectory(scriptFile.canonicalPath());
 	}
  QLOG_INFO() << __FILE__ << __LINE__;
- {
-   PythonQtGILScope _;
 	mMainContext.evalScript(script);
-}
 	QLOG_INFO() << "PythonEngineWorker: evaluation ended";
 
 	auto wasError = mState != ready && PythonQt::self()->hadError();
