@@ -280,12 +280,9 @@ void PythonEngineWorker::addSearchModuleDirectory(const QDir &path)
 
 bool PythonEngineWorker::initTrik()
 {
-  static const QString brickKey = "_trik_brick_cpp";
-  static const QString scriptKey = "_trik_script_cpp";
-  static const QString mailboxKey = "_trik_mailbox_cpp";
-  mMainContext.addObject(brickKey, mBrick);
-  mMainContext.addObject(scriptKey, mScriptExecutionControl);
-  mMainContext.addObject(mailboxKey, mMailbox);
+  mMainContext.addObject("_trik_brick_cpp", mBrick);
+  mMainContext.addObject("_trik_script_cpp", mScriptExecutionControl);
+  mMainContext.addObject("_trik_mailbox_cpp", mMailbox);
 	mMainContext.evalScript("import builtins;"
 				"builtins._trik_brick_cpp = _trik_brick_cpp;"
 				"builtins._trik_script_cpp = _trik_script_cpp;"

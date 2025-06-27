@@ -1,6 +1,6 @@
 [submodule "PythonQt/PythonQt"]
 	path = PythonQt/PythonQt
-	url = https://github.com/trikset/trik-pythonqt.git
+	url = https://github.com/MinyazevR/pythonqt.git
 [submodule "tests/thirdparty/googletest"]
 	path = tests/thirdparty/googletest
 	url = https://github.com/google/googletest
