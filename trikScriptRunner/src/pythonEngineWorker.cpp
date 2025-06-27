@@ -34,7 +34,7 @@ using namespace trikScriptRunner;
 QAtomicInt PythonEngineWorker::initCounter = 0;
 
 static int quitFromPython(void*) {
-	PyErr_SetInterrupt();
+  PyErr_SetInterrupt();
 	return 0;
 }
 
@@ -281,10 +281,14 @@ void PythonEngineWorker::addSearchModuleDirectory(const QDir &path)
 bool PythonEngineWorker::initTrik()
 {
   QLOG_INFO() << __FILE__ << __LINE__;
+  QLOG_INFO() << __FILE__ << __LINE__ << mBrick;
+  QLOG_INFO() << "QStringToPythonCharPointer(_trik_brick_cpp)" << QStringToPythonCharPointer(QString("_trik_brick_cpp"));
 	mMainContext.addObject("_trik_brick_cpp", mBrick);
-  QLOG_INFO() << __FILE__ << __LINE__;
+  QLOG_INFO() << __FILE__ << __LINE__ << mScriptExecutionControl;
+   QLOG_INFO() << "QStringToPythonCharPointer(_trik_script_cpp)" << QStringToPythonCharPointer(QString("_trik_script_cpp"));
 	mMainContext.addObject("_trik_script_cpp", mScriptExecutionControl);
-  QLOG_INFO() << __FILE__ << __LINE__;
+  QLOG_INFO() << __FILE__ << __LINE__ << mMailbox;
+  QLOG_INFO() << "QStringToPythonCharPointer(_trik_mailbox_cpp)" << QStringToPythonCharPointer(QString("_trik_mailbox_cpp"));
 	mMainContext.addObject("_trik_mailbox_cpp", mMailbox);
   QLOG_INFO() << __FILE__ << __LINE__;
 	mMainContext.evalScript("import builtins;"
