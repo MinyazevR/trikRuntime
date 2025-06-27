@@ -150,11 +150,15 @@ TrikScriptRunnerInterface * TrikScriptRunner::fetchRunner(ScriptType stype)
 void TrikScriptRunner::run(const QString &script, ScriptType stype, const QString &fileName)
 {
 	abort();
+    QLOG_INFO() << __FILE__ << __LINE__;
 	auto prevRunner = mLastRunner;
 	auto runner = fetchRunner(stype);
+    QLOG_INFO() << __FILE__ << __LINE__;
 	if (prevRunner != stype) {
+      QLOG_INFO() << __FILE__ << __LINE__;
 		runner->abort();
 	}
+    QLOG_INFO() << __FILE__ << __LINE__;
 	runner->run(script, fileName);
 }
 

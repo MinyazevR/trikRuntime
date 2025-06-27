@@ -68,7 +68,9 @@ PythonEngineWorker::~PythonEngineWorker()
 		QLOG_FATAL() << "~PythonEngineWorker threading issue";
 	}
 
+  QLOG_INFO() << __FILE__ << __LINE__ << this;
 	stopScript();
+  QLOG_INFO() << __FILE__ << __LINE__ << this;
 	{
 		// In python at least before 3.7 (3.5,3.6)
 		// we need to make all pending calls before the context
@@ -83,6 +85,7 @@ PythonEngineWorker::~PythonEngineWorker()
 		}
 	}
 
+    QLOG_INFO() << __FILE__ << __LINE__ << this;
 	if (--initCounter == 0) {
 		PythonQt::preCleanup();
 #if PY_MAJOR_VERSION != 3
@@ -102,6 +105,7 @@ PythonEngineWorker::~PythonEngineWorker()
 		PyMem_RawFree(mProgramName);
 		PyMem_RawFree(mPythonPath);
 	}
+    QLOG_INFO() << __FILE__ << __LINE__ << this;
 }
 
 void PythonEngineWorker::init()
@@ -302,16 +306,18 @@ void PythonEngineWorker::brickBeep()
 
 void PythonEngineWorker::stopScript()
 {
-	QLOG_INFO() << __FILE__ << __LINE__;
+  QLOG_INFO() << __FILE__ << __LINE__ << this;
 	QMutexLocker locker(&mScriptStateMutex);
 
 	if (mState == stopping) {
 		// Already stopping, so we can do nothing.
+      QLOG_INFO() << __FILE__ << __LINE__;
 		return;
 	}
 
 	if (mState == ready) {
 		// Engine is ready for execution.
+          QLOG_INFO() << __FILE__ << __LINE__;
 		return;
 	}
 
