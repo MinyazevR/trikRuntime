@@ -280,17 +280,12 @@ void PythonEngineWorker::addSearchModuleDirectory(const QDir &path)
 
 bool PythonEngineWorker::initTrik()
 {
-  QLOG_INFO() << __FILE__ << __LINE__;
-  QLOG_INFO() << __FILE__ << __LINE__ << mBrick;
-  QLOG_INFO() << "QStringToPythonCharPointer(_trik_brick_cpp)" << QStringToPythonCharPointer(QString("_trik_brick_cpp"));
-	mMainContext.addObject("_trik_brick_cpp", mBrick);
-  QLOG_INFO() << __FILE__ << __LINE__ << mScriptExecutionControl;
-   QLOG_INFO() << "QStringToPythonCharPointer(_trik_script_cpp)" << QStringToPythonCharPointer(QString("_trik_script_cpp"));
-	mMainContext.addObject("_trik_script_cpp", mScriptExecutionControl);
-  QLOG_INFO() << __FILE__ << __LINE__ << mMailbox;
-  QLOG_INFO() << "QStringToPythonCharPointer(_trik_mailbox_cpp)" << QStringToPythonCharPointer(QString("_trik_mailbox_cpp"));
-	mMainContext.addObject("_trik_mailbox_cpp", mMailbox);
-  QLOG_INFO() << __FILE__ << __LINE__;
+  static const QString brickKey = "_trik_brick_cpp";
+  static const QString scriptKey = "_trik_script_cpp";
+  static const QString mailboxKey = "_trik_mailbox_cpp";
+  mMainContext.addObject(brickKey, mBrick);
+  mMainContext.addObject(scriptKey, mScriptExecutionControl);
+  mMainContext.addObject(mailboxKey, mMailbox);
 	mMainContext.evalScript("import builtins;"
 				"builtins._trik_brick_cpp = _trik_brick_cpp;"
 				"builtins._trik_script_cpp = _trik_script_cpp;"
