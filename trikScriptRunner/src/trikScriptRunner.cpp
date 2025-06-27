@@ -160,6 +160,7 @@ void TrikScriptRunner::run(const QString &script, ScriptType stype, const QStrin
 	}
     QLOG_INFO() << __FILE__ << __LINE__;
 	runner->run(script, fileName);
+   QLOG_INFO() << __FILE__ << __LINE__;
 }
 
 void TrikScriptRunner::runDirectCommand(const QString &command)

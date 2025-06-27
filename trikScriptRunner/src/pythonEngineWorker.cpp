@@ -222,12 +222,14 @@ void PythonEngineWorker::init()
 
 bool PythonEngineWorker::recreateContext()
 {
+   QLOG_INFO() << __FILE__ << __LINE__;
 	{
 		PythonQtGILScope _;
 		Py_MakePendingCalls();
 		PyErr_CheckSignals();
 		PyErr_Clear();
 	}
+    QLOG_INFO() << __FILE__ << __LINE__;
 	PythonQt::self()->clearError();
 	return initTrik();
 }
@@ -371,38 +373,46 @@ void PythonEngineWorker::waitUntilInited()
 
 void PythonEngineWorker::run(const QString &script, const QFileInfo &scriptFile)
 {
+   QLOG_INFO() << __FILE__ << __LINE__;
 	QMutexLocker locker(&mScriptStateMutex);
 	mState = starting;
 	QMetaObject::invokeMethod(this, [this, script, scriptFile](){this->doRun(script, scriptFile);});
+   QLOG_INFO() << __FILE__ << __LINE__;
 }
 
 void PythonEngineWorker::doRun(const QString &script, const QFileInfo &scriptFile)
 {
+   QLOG_INFO() << __FILE__ << __LINE__ << this;
 	Q_EMIT startedScript("", 0);
+    QLOG_INFO() << __FILE__ << __LINE__;
 	mErrorMessage.clear();
 	/// When starting script execution (by any means), clear button states.
 	mBrick->keys()->reset();
+   QLOG_INFO() << __FILE__ << __LINE__;
 	mState = running;
 	auto ok = recreateContext();
+   QLOG_INFO() << __FILE__ << __LINE__;
 	QCoreApplication::processEvents();
 	if (!ok) {
 		Q_EMIT completed(mErrorMessage,0);
 		return;
 	}
-
+   QLOG_INFO() << __FILE__ << __LINE__;
 	addSearchModuleDirectory(mWorkingDirectory.canonicalPath());
 	if (scriptFile.isFile()) {
 		addSearchModuleDirectory(scriptFile.canonicalPath());
 	}
-
+ QLOG_INFO() << __FILE__ << __LINE__;
 	mMainContext.evalScript(script);
 
 	QLOG_INFO() << "PythonEngineWorker: evaluation ended";
 
 	auto wasError = mState != ready && PythonQt::self()->hadError();
 	mState = ready;
+   QLOG_INFO() << __FILE__ << __LINE__;
 	QCoreApplication::processEvents(); //dispatch events before reset
 	mScriptExecutionControl->reset();
+   QLOG_INFO() << __FILE__ << __LINE__;
 	releaseContext();
 	QCoreApplication::processEvents(); //dispatch events before emitting the signal
 	if (wasError) {
