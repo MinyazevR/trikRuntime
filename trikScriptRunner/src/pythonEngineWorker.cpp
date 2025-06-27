@@ -269,6 +269,7 @@ QLOG_INFO() << __FILE__ << __LINE__;
 
 void PythonEngineWorker::addSearchModuleDirectory(const QDir &path)
 {
+  PythonQtGILScope _;
 	if (path.path().indexOf("'") != -1)
 		return;
 
@@ -406,8 +407,10 @@ void PythonEngineWorker::doRun(const QString &script, const QFileInfo &scriptFil
 		addSearchModuleDirectory(scriptFile.canonicalPath());
 	}
  QLOG_INFO() << __FILE__ << __LINE__;
+ {
+   PythonQtGILScope _;
 	mMainContext.evalScript(script);
-
+}
 	QLOG_INFO() << "PythonEngineWorker: evaluation ended";
 
 	auto wasError = mState != ready && PythonQt::self()->hadError();
