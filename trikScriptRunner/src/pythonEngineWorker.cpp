@@ -231,6 +231,7 @@ bool PythonEngineWorker::recreateContext()
 	}
     QLOG_INFO() << __FILE__ << __LINE__;
 	PythonQt::self()->clearError();
+  QLOG_INFO() << __FILE__ << __LINE__;
 	return initTrik();
 }
 
@@ -253,16 +254,18 @@ void PythonEngineWorker::releaseContext()
 
 bool PythonEngineWorker::importTrikPy()
 {
-	const QString systemPyPath = trikKernel::Paths::systemScriptsPath() + "TRIK.py";
+  QLOG_INFO() << __FILE__ << __LINE__;
+  const QString systemPyPath = trikKernel::Paths::systemScriptsPath() + "TRIK.py";
 
 	if (!QFileInfo::exists(systemPyPath)) {
 		QLOG_ERROR() << "TRIK.py not found, path:" << systemPyPath;
 		return false;
 	}
-
+QLOG_INFO() << __FILE__ << __LINE__;
 	addSearchModuleDirectory(trikKernel::Paths::systemScriptsPath());
+  QLOG_INFO() << __FILE__ << __LINE__;
 	mMainContext.evalScript("from TRIK import *");
-
+QLOG_INFO() << __FILE__ << __LINE__;
 	return true;
 }
 
@@ -277,14 +280,18 @@ void PythonEngineWorker::addSearchModuleDirectory(const QDir &path)
 
 bool PythonEngineWorker::initTrik()
 {
+  QLOG_INFO() << __FILE__ << __LINE__;
 	mMainContext.addObject("_trik_brick_cpp", mBrick);
+  QLOG_INFO() << __FILE__ << __LINE__;
 	mMainContext.addObject("_trik_script_cpp", mScriptExecutionControl);
+  QLOG_INFO() << __FILE__ << __LINE__;
 	mMainContext.addObject("_trik_mailbox_cpp", mMailbox);
+  QLOG_INFO() << __FILE__ << __LINE__;
 	mMainContext.evalScript("import builtins;"
 				"builtins._trik_brick_cpp = _trik_brick_cpp;"
 				"builtins._trik_script_cpp = _trik_script_cpp;"
 				"builtins._trik_mailbox_cpp = _trik_mailbox_cpp;");
-
+QLOG_INFO() << __FILE__ << __LINE__;
 	return importTrikPy();
 }
 
