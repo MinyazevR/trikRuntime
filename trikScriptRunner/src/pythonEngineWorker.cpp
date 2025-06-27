@@ -280,6 +280,7 @@ void PythonEngineWorker::addSearchModuleDirectory(const QDir &path)
 
 bool PythonEngineWorker::initTrik()
 {
+  PyThreadState_Get();
   mMainContext.addObject("_trik_brick_cpp", mBrick);
   mMainContext.addObject("_trik_script_cpp", mScriptExecutionControl);
   mMainContext.addObject("_trik_mailbox_cpp", mMailbox);
