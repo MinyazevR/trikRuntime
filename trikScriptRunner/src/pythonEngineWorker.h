@@ -106,6 +106,9 @@ public Q_SLOTS:
 	/// Recreates Main Context made by init, returns true when were errors
 	bool recreateContext();
 
+  /// Recreates Main Context made by init, returns true when were errors
+  void preRecreateContext();
+
 	/// Cleanup Python context
 	void releaseContext();
 
@@ -140,7 +143,6 @@ private:
 		, starting
 		, stopping
     , running
-    , aborting
 	};
 
 	/// Imports "TRIK.py" file in the current context, returns true on success
@@ -171,7 +173,6 @@ private:
 	QString mErrorMessage;
 
 	QSemaphore mWaitForInitSemaphore {1};
-  QSemaphore mWaitForReInitSemaphore {1};
 
 	wchar_t *mProgramName { nullptr };
 	wchar_t *mPythonPath { nullptr };

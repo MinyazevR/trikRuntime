@@ -33,11 +33,11 @@ using namespace trikScriptRunner;
 
 QAtomicInt PythonEngineWorker::initCounter = 0;
 
-static int quitFromPython(void* ptr) {
+static int quitFromPython(void*) {
   QLOG_INFO() << "quitFromPython";
   PyErr_SetInterrupt();
-  auto &callback = *reinterpret_cast<std::function<void()>*>(ptr);
-  callback();
+//  auto &callback = *reinterpret_cast<std::function<void()>*>(ptr);
+//  callback();
 	return 0;
 }
 
@@ -50,12 +50,12 @@ void PythonEngineWorker::abortPythonInterpreter() {
 	PythonQtGILScope _;
 	QLOG_INFO() << __FILE__ << __LINE__;
 
-  std::function<void()> callback = [this]() {
-    mWaitForReInitSemaphore.release(1);
-    mState = stopping;
-  };
+//  std::function<void()> callback = [this]() {
+//    mWaitForReInitSemaphore.release(1);
+//    mState = stopping;
+//  };
 
-  Py_AddPendingCall(&quitFromPython, reinterpret_cast<void*>(&callback));
+  Py_AddPendingCall(&quitFromPython, nullptr);
 	QLOG_INFO() << __FILE__ << __LINE__;
 }
 
@@ -229,16 +229,17 @@ void PythonEngineWorker::init()
 	mWaitForInitSemaphore.release(1);
 }
 
+void PythonEngineWorker::preRecreateContext()
+{
+  PythonQtGILScope _;
+  Py_MakePendingCalls();
+  PyErr_CheckSignals();
+  PyErr_Clear();
+  QLOG_INFO() << __FILE__ << __LINE__;
+}
+
 bool PythonEngineWorker::recreateContext()
 {
-   QLOG_INFO() << __FILE__ << __LINE__;
-  {
-    PythonQtGILScope _;
-    Py_MakePendingCalls();
-    PyErr_CheckSignals();
-    PyErr_Clear();
-    QLOG_INFO() << __FILE__ << __LINE__;
-  }
 	PythonQt::self()->clearError();
   QLOG_INFO() << __FILE__ << __LINE__;
 	return initTrik();
@@ -325,12 +326,6 @@ void PythonEngineWorker::stopScript()
   QLOG_INFO() << __FILE__ << __LINE__ << this;
 	QMutexLocker locker(&mScriptStateMutex);
 
-  if (mState == aborting) {
-    // Already stopping, so we can do nothing.
-      QLOG_INFO() << __FILE__ << __LINE__;
-    return;
-  }
-
 	if (mState == stopping) {
 		// Already stopping, so we can do nothing.
       QLOG_INFO() << __FILE__ << __LINE__;
@@ -345,7 +340,7 @@ void PythonEngineWorker::stopScript()
 
 	QLOG_INFO() << "PythonEngineWorker: stopping script";
 
-  mState = aborting;
+  mState = stopping;
 
 	if (QThread::currentThread() != thread()) {
     abortPythonInterpreter();
@@ -402,13 +397,11 @@ void PythonEngineWorker::run(const QString &script, const QFileInfo &scriptFile)
 
 void PythonEngineWorker::doRun(const QString &script, const QFileInfo &scriptFile)
 {
-  if (mState == aborting) {
-    mWaitForReInitSemaphore.acquire(1);
-  }
    QLOG_INFO() << __FILE__ << __LINE__ << this;
    QLOG_INFO() << "execute in current thread" << QThread::currentThread() << "with thread" << thread();
 	Q_EMIT startedScript("", 0);
     QLOG_INFO() << __FILE__ << __LINE__;
+  preRecreateContext();
 	mErrorMessage.clear();
 	/// When starting script execution (by any means), clear button states.
 	mBrick->keys()->reset();
