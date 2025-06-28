@@ -45,6 +45,8 @@ public:
 
 	~PythonEngineWorker();
 
+  void abortPythonInterpreter();
+
 	/// Clears execution state and stops robot.
 	/// Can be safely called from other threads.
 	void resetBrick();
@@ -132,12 +134,13 @@ private:
 	/// @value ready - worker is waiting for a new script
 	/// @value starting - worker is preparing itself to running a script
 	/// @value resetting - worker has finished execution of a script and returning to ready state
-	/// @value running - worker is executing a script
-	enum State {
+  /// @value running - worker is executing a script
+  enum State {
 		ready
 		, starting
 		, stopping
-		, running
+    , running
+    , aborting
 	};
 
 	/// Imports "TRIK.py" file in the current context, returns true on success
@@ -168,6 +171,7 @@ private:
 	QString mErrorMessage;
 
 	QSemaphore mWaitForInitSemaphore {1};
+  QSemaphore mWaitForReInitSemaphore {1};
 
 	wchar_t *mProgramName { nullptr };
 	wchar_t *mPythonPath { nullptr };
