@@ -423,10 +423,10 @@ void PythonEngineWorker::doRun(const QString &script, const QFileInfo &scriptFil
   if (!PyGILState_Check()) {
     QLOG_INFO() << __FILE__ << __LINE__ << "!PyGILState_Check";
   }
-  PyThreadState_Get();
+
   QLOG_INFO() << __FILE__ << __LINE__;
   QLOG_INFO() << "PythonEngineWorker: evaluation ended";
-
+  PyThreadState_Get();
 	auto wasError = mState != ready && PythonQt::self()->hadError();
 	mState = ready;
    QLOG_INFO() << __FILE__ << __LINE__;
