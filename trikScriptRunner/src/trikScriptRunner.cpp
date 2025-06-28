@@ -105,6 +105,7 @@ QStringList TrikScriptRunner::knownMethodNamesFor(ScriptType t)
 
 void TrikScriptRunner::run(const QString &script, const QString &fileName)
 {
+   QLOG_INFO() << __FILE__ << __LINE__;
 #ifndef TRIK_NOPYTHON
 	if (fileName.endsWith(".py")) {
 		run(script, ScriptType::PYTHON, fileName);

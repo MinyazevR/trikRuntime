@@ -47,8 +47,7 @@ void PythonEngineWorker::abortPythonInterpreter() {
 		return;
 	}
 	QLOG_INFO() << __FILE__ << __LINE__;
-	PythonQtGILScope _;
-	QLOG_INFO() << __FILE__ << __LINE__;
+  QLOG_INFO() << __FILE__ << __LINE__;
 
 //  std::function<void()> callback = [this]() {
 //    mWaitForReInitSemaphore.release(1);
@@ -142,7 +141,6 @@ void PythonEngineWorker::init()
 		PyPreConfig_InitPythonConfig(&pyPreconfig);
 
 		pyPreconfig.utf8_mode = 1; /// Force UTF-8
-
 		if (PyStatus_Exception(Py_PreInitialize(&pyPreconfig))) {
 			auto const *e = "Failed to pre-initialize the Python engine";
 			QLOG_FATAL() << e;
@@ -240,6 +238,7 @@ void PythonEngineWorker::preRecreateContext()
 
 bool PythonEngineWorker::recreateContext()
 {
+
 	PythonQt::self()->clearError();
   QLOG_INFO() << __FILE__ << __LINE__;
 	return initTrik();
@@ -419,9 +418,14 @@ void PythonEngineWorker::doRun(const QString &script, const QFileInfo &scriptFil
 	if (scriptFile.isFile()) {
 		addSearchModuleDirectory(scriptFile.canonicalPath());
 	}
- QLOG_INFO() << __FILE__ << __LINE__;
-	mMainContext.evalScript(script);
-	QLOG_INFO() << "PythonEngineWorker: evaluation ended";
+  mMainContext.evalScript(script);
+
+  if (!PyGILState_Check()) {
+    QLOG_INFO() << __FILE__ << __LINE__ << "!PyGILState_Check";
+  }
+  PyThreadState_Get();
+  QLOG_INFO() << __FILE__ << __LINE__;
+  QLOG_INFO() << "PythonEngineWorker: evaluation ended";
 
 	auto wasError = mState != ready && PythonQt::self()->hadError();
 	mState = ready;
