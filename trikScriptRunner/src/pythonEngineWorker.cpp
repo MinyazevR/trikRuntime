@@ -291,6 +291,15 @@ void PythonEngineWorker::addSearchModuleDirectory(const QDir &path)
 bool PythonEngineWorker::initTrik()
 {
    //PyThreadState_Get();
+   QLOG_INFO() << __FILE__ << __LINE__;
+  if (!Py_IsInitialized()) {
+      QLOG_INFO() << "Python interpreter not initialized!";
+  }
+  if (!PyGILState_Check()) {
+    QLOG_INFO() << __FILE__ << __LINE__ << "!PyGILState_Check";
+  }
+
+  PyThreadState_Get();
   mMainContext.addObject("_trik_brick_cpp", mBrick);
   mMainContext.addObject("_trik_script_cpp", mScriptExecutionControl);
   mMainContext.addObject("_trik_mailbox_cpp", mMailbox);
