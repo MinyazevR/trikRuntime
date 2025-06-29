@@ -38,6 +38,13 @@ static int quitFromPython(void*) {
   PyErr_SetInterrupt();
 //  auto &callback = *reinterpret_cast<std::function<void()>*>(ptr);
 //  callback();
+  if (!Py_IsInitialized()) {
+      QLOG_INFO() << "Python interpreter not initialized! in quitFromPython";
+  }
+  if (!PyGILState_Check()) {
+    QLOG_INFO() << __FILE__ << __LINE__ << "!PyGILState_Check in quitFromPython";
+  }
+
 	return 0;
 }
 
@@ -229,6 +236,13 @@ void PythonEngineWorker::init()
 
 void PythonEngineWorker::preRecreateContext()
 {
+  if (!Py_IsInitialized()) {
+      QLOG_INFO() << "Python interpreter not initialized! in preRecreateContext";
+  }
+  if (!PyGILState_Check()) {
+    QLOG_INFO() << __FILE__ << __LINE__ << "!PyGILState_Check in preRecreateContext";
+  }
+
   PythonQtGILScope _;
   Py_MakePendingCalls();
   PyErr_CheckSignals();
