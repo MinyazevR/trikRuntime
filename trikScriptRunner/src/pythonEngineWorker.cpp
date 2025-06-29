@@ -442,8 +442,8 @@ void PythonEngineWorker::doRun(const QString &script, const QFileInfo &scriptFil
 		addSearchModuleDirectory(scriptFile.canonicalPath());
 	}
   auto result = mMainContext.evalScript(script);
-  QLOG_INFO() << __FILE__ << __LINE__;
-  QLOG_INFO() << result.isValid();
+  std::cerr << __FILE__ << __LINE__;
+  std::cerr << result.isValid();
   if (!PyGILState_Check()) {
     QLOG_INFO() << __FILE__ << __LINE__ << "!PyGILState_Check";
   }
