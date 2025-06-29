@@ -431,7 +431,7 @@ void PythonEngineWorker::doRun(const QString &script, const QFileInfo &scriptFil
 	mState = running;
 	auto ok = recreateContext();
    QLOG_INFO() << __FILE__ << __LINE__;
-	QCoreApplication::processEvents();
+//	QCoreApplication::processEvents();
 	if (!ok) {
 		Q_EMIT completed(mErrorMessage,0);
 		return;
@@ -481,7 +481,7 @@ void PythonEngineWorker::doRunDirect(const QString &command)
 		recreateContext();
 	}
 	mMainContext.evalScript(command);
-	QCoreApplication::processEvents();
+//	QCoreApplication::processEvents();
 	auto wasError = PythonQt::self()->hadError();
 	if (wasError) {
 		Q_EMIT completed(mErrorMessage, 0);
