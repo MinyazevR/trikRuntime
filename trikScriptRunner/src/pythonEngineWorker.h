@@ -163,6 +163,7 @@ private:
 	/// Ensures that there is only one instance of StopScript running at any given time, to prevent unpredicted
 	/// behavior when programs are started and stopped actively.
 	QMutex mScriptStateMutex;
+  QMutex testMutex;
 
 	PythonQtObjectPtr mMainContext;
 

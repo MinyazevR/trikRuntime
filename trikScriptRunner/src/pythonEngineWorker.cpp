@@ -429,9 +429,10 @@ void PythonEngineWorker::doRun(const QString &script, const QFileInfo &scriptFil
 	mBrick->keys()->reset();
    QLOG_INFO() << __FILE__ << __LINE__;
 	mState = running;
+  QMutexLocker locker(&testMutex);
 	auto ok = recreateContext();
    QLOG_INFO() << __FILE__ << __LINE__;
-//	QCoreApplication::processEvents();
+  QCoreApplication::processEvents();
 	if (!ok) {
 		Q_EMIT completed(mErrorMessage,0);
 		return;
@@ -454,11 +455,11 @@ void PythonEngineWorker::doRun(const QString &script, const QFileInfo &scriptFil
 	auto wasError = mState != ready && PythonQt::self()->hadError();
 	mState = ready;
    QLOG_INFO() << __FILE__ << __LINE__;
-  // QCoreApplication::processEvents(); //dispatch events before reset
+   QCoreApplication::processEvents(); //dispatch events before reset
   mScriptExecutionControl->reset();
    QLOG_INFO() << __FILE__ << __LINE__;
 	releaseContext();
-  // QCoreApplication::processEvents(); //dispatch events before emitting the signal
+   QCoreApplication::processEvents(); //dispatch events before emitting the signal
 	if (wasError) {
 		Q_EMIT completed(mErrorMessage, 0);
 	} else {
@@ -481,7 +482,7 @@ void PythonEngineWorker::doRunDirect(const QString &command)
 		recreateContext();
 	}
 	mMainContext.evalScript(command);
-//	QCoreApplication::processEvents();
+  QCoreApplication::processEvents();
 	auto wasError = PythonQt::self()->hadError();
 	if (wasError) {
 		Q_EMIT completed(mErrorMessage, 0);
