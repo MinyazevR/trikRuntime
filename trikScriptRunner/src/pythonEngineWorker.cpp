@@ -254,6 +254,7 @@ void PythonEngineWorker::preRecreateContext()
 bool PythonEngineWorker::recreateContext()
 {
 
+  PythonQtGILScope _;
 	PythonQt::self()->clearError();
   QLOG_INFO() << __FILE__ << __LINE__;
 	return initTrik();
@@ -261,6 +262,7 @@ bool PythonEngineWorker::recreateContext()
 
 void PythonEngineWorker::releaseContext()
 {
+  PythonQtGILScope _;
 	if (!mMainContext)
 		return;
 
@@ -439,13 +441,15 @@ void PythonEngineWorker::doRun(const QString &script, const QFileInfo &scriptFil
 		return;
 	}
    QLOG_INFO() << __FILE__ << __LINE__;
-	addSearchModuleDirectory(mWorkingDirectory.canonicalPath());
-	if (scriptFile.isFile()) {
-		addSearchModuleDirectory(scriptFile.canonicalPath());
-	}
-  auto result = mMainContext.evalScript(script);
-  std::cerr << __FILE__ << __LINE__;
-  std::cerr << result.isValid();
+  addSearchModuleDirectory(mWorkingDirectory.canonicalPath());
+  if (scriptFile.isFile()) {
+    addSearchModuleDirectory(scriptFile.canonicalPath());
+  }
+
+  {
+    PythonQtGILScope _;
+    mMainContext.evalScript(script);
+  }
   if (!PyGILState_Check()) {
     QLOG_INFO() << __FILE__ << __LINE__ << "!PyGILState_Check";
   }
@@ -459,7 +463,10 @@ void PythonEngineWorker::doRun(const QString &script, const QFileInfo &scriptFil
    QCoreApplication::processEvents(); //dispatch events before reset
   mScriptExecutionControl->reset();
    QLOG_INFO() << __FILE__ << __LINE__;
-	releaseContext();
+   {
+     PythonQtGILScope _;
+    releaseContext();
+   }
    QCoreApplication::processEvents(); //dispatch events before emitting the signal
 	if (wasError) {
 		Q_EMIT completed(mErrorMessage, 0);
