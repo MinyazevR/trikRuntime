@@ -125,6 +125,7 @@ PythonEngineWorker::~PythonEngineWorker()
 
 void PythonEngineWorker::init()
 {
+  QLOG_INFO() << "INIT PythonEngineWorker with current thread" << QThread::currentThread() << "with thread" << thread();
 	if (initCounter++ == 0) {
 
 		QLOG_INFO() << "Built with python:" << PY_VERSION << QString::number(PY_VERSION_HEX, 16);
@@ -413,6 +414,7 @@ void PythonEngineWorker::run(const QString &script, const QFileInfo &scriptFile)
    QLOG_INFO() << __FILE__ << __LINE__;
 	QMutexLocker locker(&mScriptStateMutex);
 	mState = starting;
+   QLOG_INFO() << "BB execute in thread" << QThread::currentThread() << "with thread" << thread();
 	QMetaObject::invokeMethod(this, [this, script, scriptFile](){this->doRun(script, scriptFile);});
    QLOG_INFO() << __FILE__ << __LINE__;
 }
@@ -420,7 +422,7 @@ void PythonEngineWorker::run(const QString &script, const QFileInfo &scriptFile)
 void PythonEngineWorker::doRun(const QString &script, const QFileInfo &scriptFile)
 {
    QLOG_INFO() << __FILE__ << __LINE__ << this;
-   QLOG_INFO() << "execute in current thread" << QThread::currentThread() << "with thread" << thread();
+   QLOG_INFO() << "nested execute in current thread" << QThread::currentThread() << "with thread" << thread();
 	Q_EMIT startedScript("", 0);
     QLOG_INFO() << __FILE__ << __LINE__;
   preRecreateContext();
@@ -429,7 +431,6 @@ void PythonEngineWorker::doRun(const QString &script, const QFileInfo &scriptFil
 	mBrick->keys()->reset();
    QLOG_INFO() << __FILE__ << __LINE__;
 	mState = running;
-  QMutexLocker locker(&testMutex);
 	auto ok = recreateContext();
    QLOG_INFO() << __FILE__ << __LINE__;
   QCoreApplication::processEvents();
