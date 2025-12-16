@@ -1,4 +1,4 @@
-name: 'Linux Build'
+name: 'RockyLinux Build'
 on:
   push:
     branches:
@@ -52,7 +52,7 @@ jobs:
             echo "LC_ALL=C.UTF-8" >> $GITHUB_ENV
 
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
         with:
           fetch-depth: 1
           submodules: recursive
