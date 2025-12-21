@@ -107,7 +107,6 @@ static void abortPythonInterpreter() {
 	PythonQtGILScope _;
 	QLOG_INFO() << __LINE__ << __FILE__;
 #endif
-	}
 }
 
 PythonEngineWorker::PythonEngineWorker(trikControl::BrickInterface *brick
