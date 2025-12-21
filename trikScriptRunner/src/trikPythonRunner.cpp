@@ -52,7 +52,7 @@ TrikPythonRunner::~TrikPythonRunner()
 	connect(mWorkerThread, &QThread::finished, &wait, &QEventLoop::quit);
 	mScriptEngineWorker->stopScript();
 	mWorkerThread->quit();
-
+	QLOG_WARN() << __LINE__ << __FILE__ << mWorkerThread->isFinished();
 	// HACK: fix dead-lock in QThread::wait after QThread::quit
 	// Chaotic use of `processEvents' in code results in dead lock
 	// in the main thread event loop in the internal processEvents call.
@@ -64,10 +64,11 @@ TrikPythonRunner::~TrikPythonRunner()
 	}
 
 	QLOG_WARN() << __LINE__ << __FILE__;
-
+	QLOG_WARN() << __LINE__ << __FILE__ << mWorkerThread->isFinished();
 	// We need an event loop to process pending calls from dying thread to the current
 	// mWorkerThread.wait(); // <-- !!! blocks pending calls
 	wait.exec();
+	QLOG_WARN() << __LINE__ << __FILE__ << mWorkerThread->isFinished();
 	// The thread has finished, events have been processed above
 	constexpr auto POLITE_TIMEOUT = 100;
 	if (!mWorkerThread->wait(POLITE_TIMEOUT)) {

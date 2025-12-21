@@ -123,25 +123,30 @@ PythonEngineWorker::PythonEngineWorker(trikControl::BrickInterface *brick
 
 PythonEngineWorker::~PythonEngineWorker()
 {
+	QLOG_WARN() << __LINE__ << __FILE__;
 	if(thread() != QThread::currentThread()) {
 		QLOG_FATAL() << "~PythonEngineWorker threading issue";
 	}
 
+	QLOG_WARN() << __LINE__ << __FILE__;
 	stopScript();
 	{
 		// In python at least before 3.7 (3.5,3.6)
 		// we need to make all pending calls before the context
 		// is destroyed, otherwise python crashes
+		QLOG_WARN() << __LINE__ << __FILE__;
 		PythonQtGILScope _;
 		Py_MakePendingCalls();
+		QLOG_WARN() << __LINE__ << __FILE__;
 		releaseContext();
+		QLOG_WARN() << __LINE__ << __FILE__;
 		mMainContext = nullptr;
 		if (mPyInterpreter) {
 			Py_EndInterpreter(mPyInterpreter);
 			mPyInterpreter = nullptr;
 		}
 	}
-
+	QLOG_WARN() << __LINE__ << __FILE__;
 	if (--initCounter == 0) {
 #if PY_MAJOR_VERSION != 3
 #error "Unsupported PYTHON version"
@@ -159,6 +164,7 @@ PythonEngineWorker::~PythonEngineWorker()
 			PythonQt::cleanup();
 		}
 	}
+	QLOG_WARN() << __LINE__ << __FILE__;
 }
 
 #if PY_VERSION_HEX >= 0x03080000
