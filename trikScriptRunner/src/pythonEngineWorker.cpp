@@ -103,8 +103,11 @@ static void abortPythonInterpreter() {
 // which is part of the public API but is not stable, to correctly queue a task from another thread.
 // A workaround is to capture and release the GIL, as the handler function is called not only when the
 // flags are changed after calling Py_AddPendingCall, but also when trying to capture the GIL from another thread
+	QLOG_INFO() << __LINE__ << __FILE__;
 	PythonQtGILScope _;
+	QLOG_INFO() << __LINE__ << __FILE__;
 #endif
+	}
 }
 
 PythonEngineWorker::PythonEngineWorker(trikControl::BrickInterface *brick
@@ -515,10 +518,10 @@ void PythonEngineWorker::doRun(const QString &script, const QFileInfo &scriptFil
 
 	auto wasError = mState != ready && PythonQt::self()->hadError();
 	mState = ready;
-	QCoreApplication::processEvents(); //dispatch events before reset
+	//QCoreApplication::processEvents(); //dispatch events before reset
 	mScriptExecutionControl->reset();
 	releaseContext();
-	QCoreApplication::processEvents(); //dispatch events before emitting the signal
+	//QCoreApplication::processEvents(); //dispatch events before emitting the signal
 	if (wasError) {
 		Q_EMIT completed(mErrorMessage, 0);
 	} else {
