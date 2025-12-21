@@ -58,9 +58,12 @@ TrikPythonRunner::~TrikPythonRunner()
 	// in the main thread event loop in the internal processEvents call.
 	// See commit message for details
 	if (auto *dispatcher = QAbstractEventDispatcher::instance(mWorkerThread)) {
+		QLOG_WARN() << __LINE__ << __FILE__;
 		connect(dispatcher, &QAbstractEventDispatcher::aboutToBlock
 			, dispatcher, &QAbstractEventDispatcher::interrupt);
 	}
+
+	QLOG_WARN() << __LINE__ << __FILE__;
 
 	// We need an event loop to process pending calls from dying thread to the current
 	// mWorkerThread.wait(); // <-- !!! blocks pending calls

@@ -517,10 +517,10 @@ void PythonEngineWorker::doRun(const QString &script, const QFileInfo &scriptFil
 
 	auto wasError = mState != ready && PythonQt::self()->hadError();
 	mState = ready;
-	//QCoreApplication::processEvents(); //dispatch events before reset
+	QCoreApplication::processEvents(); //dispatch events before reset
 	mScriptExecutionControl->reset();
 	releaseContext();
-	//QCoreApplication::processEvents(); //dispatch events before emitting the signal
+	QCoreApplication::processEvents(); //dispatch events before emitting the signal
 	if (wasError) {
 		Q_EMIT completed(mErrorMessage, 0);
 	} else {
