@@ -39,7 +39,10 @@ VectorSensor::VectorSensor(const QString &deviceName, const trikKernel::Configur
 	    connect(mIIOFile.data(), &trikHal::IIOFileInterface::newData
 	            , this, [this](QVector<int> reading, const trikKernel::TimeVal &eventTime){
 	                Q_UNUSED(eventTime);
-	                mResult = reading;
+	                // Possible performance issues due to locks, otherwise it works.
+	                // Faults with concurrent reader/writer across threads — see commit message for details.
+	                QWriteLocker locker(&mResultLock);
+	                mResult = std::move(reading);
 	            });
 
 	    QLOG_INFO() << "Starting VectorSensor";
@@ -60,5 +63,7 @@ VectorSensor::Status VectorSensor::status() const
 
 QVector<int> VectorSensor::read() const
 {
+	// Possible performance issues
+	QReadLocker locker(&mResultLock);
 	return mResult;
 }

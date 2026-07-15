@@ -57,6 +57,7 @@ private:
 
 	QVector<int> mResult {};
 	QScopedPointer<trikHal::IIOFileInterface> mIIOFile;
+	mutable QReadWriteLock mResultLock;
 };
 
 }
