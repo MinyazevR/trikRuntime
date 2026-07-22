@@ -1,0 +1,68 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  ROS 2 node configuration on the TRIK controller.
+  Copy this file to the robot as /home/root/trik/ros2_config.xml
+  (or change kRos2ConfigPath in src/ros2Config.h).
+
+  If the XML file is not found, the node starts with this same default port set.
+
+  Publishers (data flows from the controller to the host):
+    <sensors>   — analog (A1-A6) and digital (D1-D3) sensors
+    <encoders>  — encoders (E1-E4)
+
+  Subscribers (commands flow from the host to the controller):
+    <motors>    — motors M1-M4, accept std_msgs/Int32 power
+    <servos>    — servos S1-S6, accept std_msgs/Int32 power/angle
+-->
+<ros2config>
+
+  <params rate_hz="20.0"/>
+
+  <!-- Sensors: publish sensor_msgs/Range to the host -->
+  <sensors>
+    <sensor port="A1" topic="sensors/a1"/>
+    <sensor port="A2" topic="sensors/a2"/>
+    <sensor port="A3" topic="sensors/a3"/>
+    <sensor port="A4" topic="sensors/a4"/>
+    <sensor port="A5" topic="sensors/a5"/>
+    <sensor port="A6" topic="sensors/a6"/>
+    <sensor port="D1" topic="sensors/d1"/>
+    <sensor port="D2" topic="sensors/d2"/>
+    <sensor port="D3" topic="sensors/d3"/>
+  </sensors>
+
+  <!-- Encoders: publish sensor_msgs/Range (value in degrees) to the host -->
+  <encoders>
+    <encoder port="E1" topic="encoders/e1"/>
+    <encoder port="E2" topic="encoders/e2"/>
+    <encoder port="E3" topic="encoders/e3"/>
+    <encoder port="E4" topic="encoders/e4"/>
+  </encoders>
+
+  <!-- Motors: subscribe to std_msgs/Int32 (power -100..100) from the host -->
+  <motors>
+    <motor port="M1" topic="motors/m1"/>
+    <motor port="M2" topic="motors/m2"/>
+    <motor port="M3" topic="motors/m3"/>
+    <motor port="M4" topic="motors/m4"/>
+  </motors>
+
+  <!-- Servos: subscribe to std_msgs/Int32 (power/angle -100..100) from the host -->
+  <servos>
+    <servo port="S1" topic="servos/s1"/>
+    <servo port="S2" topic="servos/s2"/>
+    <servo port="S3" topic="servos/s3"/>
+    <servo port="S4" topic="servos/s4"/>
+    <servo port="S5" topic="servos/s5"/>
+    <servo port="S6" topic="servos/s6"/>
+  </servos>
+
+  <!-- IMU: publish geometry_msgs/Vector3Stamped to the host.
+       To disable — remove the relevant element or the whole <imu> block.
+       Values are raw integer sensor readings (x, y, z). -->
+  <imu>
+    <accelerometer topic="imu/accelerometer"/>
+    <gyroscope     topic="imu/gyroscope"/>
+  </imu>
+
+</ros2config>

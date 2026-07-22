@@ -57,6 +57,11 @@ trikTelemetry.depends = trikControl trikNetwork
 trikGui.depends = trikCommunicator trikScriptRunner trikWiFi trikTelemetry
 trikCppProgram.depends = trikKernel trikControl trikNetwork trikScriptRunner
 
+!trik_not_brick {
+    SUBDIRS += trikRos2
+    trikRos2.depends = trikKernel trikControl trikNetwork trikScriptRunner
+}
+
 !trik_nopython {
     SUBDIRS += PythonQt
     trikScriptRunner.depends += PythonQt

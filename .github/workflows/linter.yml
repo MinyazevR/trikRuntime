@@ -96,7 +96,7 @@ jobs:
          database: ${{ env.BUILD_DIR }}
          verbosity: 'info'
          files-changed-only: true
-         ignore-tidy: 'PythonQt/**|mlx90640-library/**|**/generated_cpp/**'
+         ignore-tidy: 'PythonQt/**|mlx90640-library/**|**/generated_cpp/**|trikRos2/**'
    
       - name: Clang-tidy exit
         if: ${{ steps.linter.outputs.checks-failed > 0 }}
@@ -110,7 +110,7 @@ jobs:
           fail-on-warning: true
           install-stable: true
           only-diff: true
-          ignore-dirs: '^(PythonQt|mlx90640-library)$'
+          ignore-dirs: '^(PythonQt|mlx90640-library|trikRos2)$'
           root-dir: ${{ github.workspace }}
           ignore-header-deps: true
           ignore-external-files: true
