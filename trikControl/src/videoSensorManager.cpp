@@ -25,11 +25,11 @@ VideoSensorManager::VideoSensorManager(const trikKernel::Configurer &configurer,
 	, mHardwareAbstractionInterface(hardwareAbstraction)
 	, mState("VideoSensorManager")
 {
-	mDspServer.reset(new trikDsp::DspServer(DSP_RPROC_ID));
-	connect(mDspServer.data(), &trikDsp::DspServer::resultReady,this, &VideoSensorManager::onResult);
-	connect(mDspServer.data(), &trikDsp::DspServer::videoFrameReady, this, &VideoSensorManager::videoFrameReady);
-	connect(mDspServer.data(), &trikDsp::DspServer::videoDisplayStarted, this, &VideoSensorManager::videoDisplayStarted);
-	connect(mDspServer.data(), &trikDsp::DspServer::videoDisplayFinished, this, &VideoSensorManager::videoDisplayFinished);
+	// mDspServer.reset(new trikDsp::DspServer(DSP_RPROC_ID));
+	//connect(mDspServer.data(), &trikDsp::DspServer::resultReady,this, &VideoSensorManager::onResult);
+	//connect(mDspServer.data(), &trikDsp::DspServer::videoFrameReady, this, &VideoSensorManager::videoFrameReady);
+	//connect(mDspServer.data(), &trikDsp::DspServer::videoDisplayStarted, this, &VideoSensorManager::videoDisplayStarted);
+	//connect(mDspServer.data(), &trikDsp::DspServer::videoDisplayFinished, this, &VideoSensorManager::videoDisplayFinished);
 	mState.ready();
 }
 
