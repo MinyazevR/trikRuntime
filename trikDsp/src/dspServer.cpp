@@ -4,6 +4,7 @@
 
 #include <QsLog.h>
 #include <QEventLoop>
+#include <QTimer>
 #include <trikHal/VideoDeviceFileInterface.h>
 
 namespace trikDsp {
@@ -101,6 +102,11 @@ void DspServer::init()
 	QEventLoop loop;
 	bool ladOk = false;
 
+	QTimer::singleShot(5000, &loop, [&]() {
+		QLOG_ERROR() << "DspServer: timed out waiting for LAD daemon";
+		loop.quit();
+	});
+
 	connect(&mLadProcess, &QProcess::started, &loop, [&]() {
 		QLOG_INFO() << "DspServer: LAD daemon started";
 		ladOk = true;
@@ -109,6 +115,19 @@ void DspServer::init()
 
 	connect(&mLadProcess, &QProcess::errorOccurred, &loop, [&](QProcess::ProcessError error) {
 		QLOG_ERROR() << "DspServer: failed to start LAD daemon:" << error;
+		loop.quit();
+	});
+
+	using ExitStatus = QProcess::ExitStatus;
+	connect(&mLadProcess, QOverload<int, ExitStatus>::of(&QProcess::finished), &loop,
+	        [&](int exitCode, ExitStatus status) {
+		if (exitCode != 0 || status != ExitStatus::NormalExit) {
+			QLOG_ERROR() << "DspServer: LAD daemon exited with code"
+			             << exitCode << "status" << status;
+		} else {
+			QLOG_INFO() << "DspServer: LAD daemon started (parent exited)";
+			ladOk = true;
+		}
 		loop.quit();
 	});
 
