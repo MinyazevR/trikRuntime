@@ -43,6 +43,10 @@ public:
 	/// Returns value of given attribute of a device on given port.
 	QString attributeByPort(const QString &port, const QString &attributeName, QString *defaultValue = nullptr) const;
 
+	/// Returns value of given attribute of a child device on given port.
+	QString childAttributeByPort(const QString &port, const QString &childDevice,
+					const QString &attributeName, QString *defaultValue = nullptr) const;
+
 	/// Returns true if device is enabled in current configuration (either explicitly enabled in model configuration
 	/// or can not be disabled at all).
 	bool isEnabled(const QString &deviceName) const;
@@ -53,8 +57,12 @@ public:
 	/// Returns type of a device configured on given port.
 	QString deviceType(const QString &port) const;
 
+	QString mainerOfGroupDeviceClass(const QString &port) const;
+
 	/// Returns class of a device configured on given port.
 	QString deviceClass(const QString &port) const;
+
+	bool isPartOfGroupDeviceClass(const QString &deviceGroup, const QString &deviceClass) const;
 
 	/// Returns init scripts defined in config files, first from system config then from model config.
 	QStringList initScripts() const;
@@ -95,14 +103,20 @@ private:
 	void parseDeviceClasses(const QDomElement &element);
 	void parseDevicePorts(const QDomElement &element);
 	void parseDeviceTypes(const QDomElement &element);
+	void parseDeviceGroups(const QDomElement &element);
 	void parseInitScript(const QDomElement &element);
 	void parseAdditionalConfigurations(const QDomElement &element);
 	void parseModelConfig(const QDomElement &element);
+	QList<QDomElement> parseDeviceClassChildList(const QDomElement &element);
+	QString attribute(const QString &port, const QString &deviceType,
+				const QString &attributeName, QString *defaultValue = nullptr) const;
 
 	QStringList mInitScripts;
 
 	/// Maps device class name to its configuration.
 	QHash<QString, Device> mDevices;
+
+	QHash<QString, QStringList> mGroupsDevices;
 
 	/// Maps device type name to its configuration.
 	QHash<QString, DeviceType> mDeviceTypes;

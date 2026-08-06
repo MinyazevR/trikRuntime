@@ -18,7 +18,6 @@
 
 #include <QtCore/qglobal.h>
 #include <QtXml/QDomElement>
-
 #include "exceptions/malformedConfigException.h"
 #include "fileUtils.h"
 
@@ -49,6 +48,7 @@ Configurer::Configurer(const QString &systemConfigFileName, const QString &model
 	parseSection("deviceClasses", [this](const QDomElement &element) { parseDeviceClasses(element); });
 	parseSection("devicePorts", [this](const QDomElement &element) { parseDevicePorts(element); });
 	parseSection("deviceTypes", [this](const QDomElement &element) { parseDeviceTypes(element); });
+	parseSection("deviceGroups", [this](const QDomElement &element) { parseDeviceGroups(element); });
 
 	parseSection("initScript", [this](const QDomElement &element) { parseInitScript(element); });
 
@@ -87,18 +87,9 @@ QString Configurer::getDefaultOrException(QString *defaultValue, const QString &
 	throw MalformedConfigException(error);
 }
 
-QString Configurer::attributeByPort(const QString &port, const QString &attributeName, QString *defaultValue) const
+QString Configurer::attribute(const QString &port, const QString &deviceType,
+					const QString &attributeName, QString *defaultValue) const
 {
-	if (!mModelConfiguration.contains(port)) {
-		return getDefaultOrException(defaultValue, QString("Port '%1' is not configured").arg(port));
-	}
-
-	if (mModelConfiguration[port].attributes.contains(attributeName)) {
-		return mModelConfiguration[port].attributes[attributeName];
-	}
-
-	const QString &deviceType = mModelConfiguration.value(port).deviceType;
-
 	if (mDeviceTypes.contains(deviceType)) {
 		if (mDeviceTypes[deviceType].attributes.contains(attributeName)) {
 			return mDeviceTypes[deviceType].attributes[attributeName];
@@ -143,6 +134,62 @@ QString Configurer::attributeByPort(const QString &port, const QString &attribut
 
 	return getDefaultOrException(defaultValue, QString("Unknown attribute '%1' of device '%2' on port '%3'")
 			.arg(attributeName, deviceType, port));
+}
+
+QString Configurer::childAttributeByPort(const QString &port, const QString &childDevice,
+				const QString &attributeName, QString *defaultValue) const
+{
+	auto it = mModelConfiguration.find(port);
+
+	if (it == mModelConfiguration.end()) {
+		return getDefaultOrException(defaultValue, QString("Port '%1' is not configured").arg(port));
+	}
+
+	const auto &groupOwnerDeviceClassName = it->deviceType;
+
+	auto childListIt = mGroupsDevices.find(groupOwnerDeviceClassName);
+
+	if (childListIt == mGroupsDevices.end()) {
+		return getDefaultOrException(defaultValue,
+			QString("The DeviceClass '%1' is not the owner of the group of DeviceClasses in deviceGroup.")
+							.arg(groupOwnerDeviceClassName));
+	}
+
+	QString deviceClass;
+	for (auto &&childDeviceType: *childListIt) {
+		if (mDeviceTypes.contains(childDeviceType)) {
+			deviceClass = mDeviceTypes[childDeviceType].deviceClass;
+			break;
+		}
+		if (mDevices.contains(childDeviceType)) {
+			deviceClass = mDevices[childDeviceType].name;
+			break;
+		}
+	}
+
+	if (deviceClass.isEmpty()) {
+		return getDefaultOrException(defaultValue,
+			QString("bebebebebebebebebeebebebeebbe %1")
+							.arg(groupOwnerDeviceClassName));
+	}
+
+	return attribute(port, childDevice, attributeName, defaultValue);
+
+}
+
+QString Configurer::attributeByPort(const QString &port, const QString &attributeName, QString *defaultValue) const
+{
+	if (!mModelConfiguration.contains(port)) {
+		return getDefaultOrException(defaultValue, QString("Port '%1' is not configured").arg(port));
+	}
+
+	if (mModelConfiguration[port].attributes.contains(attributeName)) {
+		return mModelConfiguration[port].attributes[attributeName];
+	}
+
+	const QString &deviceType = mModelConfiguration.value(port).deviceType;
+
+	return attribute(port, deviceType, attributeName, defaultValue);
 }
 
 bool Configurer::isEnabled(const QString &deviceName) const
@@ -278,6 +325,59 @@ void Configurer::parseDeviceTypes(const QDomElement &element)
 
 			mDeviceTypes.insert(deviceType.name, deviceType);
 		}
+	}
+}
+
+QList<QDomElement> Configurer::parseDeviceClassChildList(const QDomElement &element)
+{
+	QList<QDomElement> deviceClassesList;
+	QHash<QString, bool> exist;
+
+	const auto &deviceClasses = element.childNodes();
+
+	for (auto i = 0; i < deviceClasses.size(); ++i) {
+		const auto &deviceClassNode = deviceClasses.item(i).toElement();
+
+		if (deviceClassNode.isNull()) {
+			continue;
+		}
+
+		const auto deviceClassName = deviceClassNode.tagName();
+
+		const auto deviceTypeIt = mDeviceTypes.find(deviceClassName);
+
+		if (deviceTypeIt == mDeviceTypes.end()) {
+			const auto it = mDevices.find(deviceClassName);
+
+			if (it == mDevices.end()) {
+				throw MalformedConfigException(
+					"Device '%1' is not listed in 'DeviceClasses' or `Device type` section",
+												deviceClassNode);
+			}
+		}
+
+		if (exist.contains(deviceClassNode.tagName())) {
+			throw MalformedConfigException("aaaaaaaaaaaaaaaaaa", deviceClassNode);
+		}
+
+		exist.insert(deviceClassNode.tagName(), true);
+		deviceClassesList.append(deviceClassNode);
+	}
+
+	return deviceClassesList;
+}
+
+void Configurer::parseDeviceGroups(const QDomElement &element)
+{
+	const auto &deviceClassesList = parseDeviceClassChildList(element);
+	for (auto &&deviceClass: deviceClassesList) {
+		const auto &deviceClassName = deviceClass.tagName();
+		const auto &childDeviceClassesList = parseDeviceClassChildList(deviceClass);
+		QStringList childDeviceClassesStringList;
+		for (auto &&childDeviceClass: childDeviceClassesList) {
+			childDeviceClassesStringList.append(childDeviceClass.tagName());
+		}
+		mGroupsDevices.insert(deviceClassName, childDeviceClassesStringList);
 	}
 }
 

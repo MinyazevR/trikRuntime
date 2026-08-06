@@ -23,6 +23,7 @@
 #include "mspI2cInterface.h"
 #include "mspUsbInterface.h"
 #include "systemConsoleInterface.h"
+#include "VideoDeviceFileInterface.h"
 
 #include <trikHal/trikHalDeclSpec.h>
 #include <QtCore/QDir>
@@ -78,6 +79,11 @@ public:
 	/// @param port - port name for device
 	/// @param pathToPic - path to picture
 	virtual QVector<uint8_t> captureV4l2StillImage(const QString &port, const QDir &pathToPic) const = 0;
+
+	virtual VideoDeviceFileInterface *createVideoDeviceFile(
+			const QString &devicePath, uint32_t width, uint32_t height, uint32_t fourcc) const = 0;
+
+	virtual OutputDeviceFileInterface *createDspCommunicator() const = 0;
 };
 
 }

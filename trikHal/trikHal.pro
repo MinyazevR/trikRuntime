@@ -28,6 +28,7 @@ PUBLIC_HEADERS += \
 	$$PWD/include/trikHal/outputDeviceFileInterface.h \
 	$$PWD/include/trikHal/systemConsoleInterface.h \
 	$$PWD/include/trikHal/IIOFileInterface.h \
+	$$PWD/include/trikHal/VideoDeviceFileInterface.h \
 
 !win32:!macx {
 	HEADERS += \
@@ -44,6 +45,8 @@ PUBLIC_HEADERS += \
 		$$PWD/src/trik/usbMsp/usbMSP430Defines.h \
 		$$PWD/src/trik/trikV4l2VideoDevice.h \
 		$$PWD/src/trik/trikIIOFile.h \
+		$$PWD/src/trik/trikVideoDeviceFile.h \
+		$$PWD/src/trik/videoDeviceFileBase.h \
 }
 
 HEADERS += \
@@ -56,6 +59,7 @@ HEADERS += \
 	$$PWD/src/stub/stubOutputDeviceFile.h \
 	$$PWD/src/stub/stubFifo.h \
 	$$PWD/src/stub/stubIIOFile.h \
+	$$PWD/src/stub/stubVideoDeviceFile.h \
 	$$PWD/src/stub/stubCommonI2c.h
 
 !win32:!macx {
@@ -72,6 +76,8 @@ HEADERS += \
 		$$PWD/src/trik/usbMsp/usbMSP430Interface.cpp \
 		$$PWD/src/trik/trikV4l2VideoDevice.cpp \
 		$$PWD/src/trik/trikIIOFile.cpp \
+		$$PWD/src/trik/trikVideoDeviceFile.cpp \
+		$$PWD/src/trik/videoDeviceFileBase.cpp \
 }
 
 SOURCES += \
@@ -84,6 +90,7 @@ SOURCES += \
 	$$PWD/src/stub/stubOutputDeviceFile.cpp \
 	$$PWD/src/stub/stubFifo.cpp \
 	$$PWD/src/stub/stubIIOFile.cpp \
+	$$PWD/src/stub/stubVideoDeviceFile.cpp \
 	$$PWD/src/stub/stubCommonI2c.cpp
 
 !trik_not_brick {

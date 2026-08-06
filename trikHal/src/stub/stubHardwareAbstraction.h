@@ -40,6 +40,8 @@ public:
 	InputDeviceFileInterface *createInputDeviceFile(const QString &fileName) const override;
 	OutputDeviceFileInterface *createOutputDeviceFile(const QString &fileName) const override;
 	QVector<uint8_t> captureV4l2StillImage(const QString &port, const QDir &pathToPic) const override;
+	VideoDeviceFileInterface *createVideoDeviceFile(const QString &devicePath, uint32_t width, uint32_t height, uint32_t fourcc) const override;
+	OutputDeviceFileInterface *createDspCommunicator() const override;
 
 private:
 	QScopedPointer<MspI2cInterface> mMspI2cBus;

@@ -1,56 +1,26 @@
-/* Copyright 2014 - 2015 CyberTech Labs Ltd.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License. */
-
 #include "lineSensor.h"
 
 #include <trikKernel/configurer.h>
-#include <QsLog.h>
 
-#include "lineSensorWorker.h"
 #include "configurerHelper.h"
 
 using namespace trikControl;
 
-LineSensor::LineSensor(const QString &port, const trikKernel::Configurer &configurer
-		, trikHal::HardwareAbstractionInterface &hardwareAbstraction)
+LineSensor::LineSensor(const QString &port, const trikKernel::Configurer &configurer)
 	: mState("Line Sensor on " + port)
+	, mConfigurer(configurer)
+	, mPort(port)
 {
-	const QString &script = configurer.attributeByPort(port, "script");
-	const QString &inputFile = configurer.attributeByPort(port, "inputFile");
-	const QString &outputFile = configurer.attributeByPort(port, "outputFile");
-	const qreal toleranceFactor = ConfigurerHelper::configureReal(configurer, mState, port, "toleranceFactor");
+	mToleranceFactor = ConfigurerHelper::configureChildReal(
+	                       configurer, mState, port, "lineSensor", "toleranceFactor");
 
-	if (!mState.isFailed()) {
-		mLineSensorWorker.reset(new LineSensorWorker(script, inputFile, outputFile, toleranceFactor, mState
-				, hardwareAbstraction));
-
-		mLineSensorWorker->moveToThread(&mWorkerThread);
-		connect(mLineSensorWorker.data(), &LineSensorWorker::stopped, this, &LineSensor::onStopped);
-
-		QLOG_INFO() << "Starting LineSensor worker thread" << &mWorkerThread;
-
-		mWorkerThread.setObjectName(mLineSensorWorker->metaObject()->className());
-		mWorkerThread.start();
-	}
+	if (!mState.isFailed())
+		mState.ready();
 }
 
 LineSensor::~LineSensor()
 {
-	if (mWorkerThread.isRunning()) {
-		mWorkerThread.quit();
-		mWorkerThread.wait();
-	}
+	emit stopped();
 }
 
 LineSensor::Status LineSensor::status() const
@@ -60,52 +30,67 @@ LineSensor::Status LineSensor::status() const
 
 void LineSensor::init(bool showOnDisplay)
 {
-	if (!mState.isFailed()) {
-		QMetaObject::invokeMethod(mLineSensorWorker.data()
-								  , [this, showOnDisplay](){mLineSensorWorker->init(showOnDisplay);});
-	}
+	if (mState.isFailed())
+		return;
+
+	mVideoOut = showOnDisplay;
+	emit activateRequested(mInArgs, showOnDisplay, true);
 }
 
 void LineSensor::detect()
 {
-	if (mState.isReady()) {
-		QMetaObject::invokeMethod(mLineSensorWorker.data(), &LineSensorWorker::detect);
-	} else {
-		QLOG_WARN() << "Calling 'detect' for sensor which is not ready";
+	if (status() == Status::ready) {
+		mInArgs.autoDetect = true;
+		emit activateRequested(mInArgs, mVideoOut, false);
 	}
 }
 
 QVector<int> LineSensor::read()
 {
-	if (mState.isReady()) {
-		// Read is called synchronously and only takes prepared value from sensor.
-		return mLineSensorWorker->read();
-	} else {
-		QLOG_WARN() << "Calling 'read' for sensor which is not ready";
-		return {};
-	}
+	QReadLocker locker(&mReadingLock);
+	return mReading;
 }
 
-void LineSensor::stop()
+void LineSensor::stop(bool deinit)
 {
-	if (mState.isReady()) {
-		/// @todo Correctly stop starting sensor.
-		QMetaObject::invokeMethod(mLineSensorWorker.data(), &LineSensorWorker::stop);
-	}
+	emit stopRequested(deinit);
+	emit stopped();
 }
 
 QVector<int> LineSensor::getDetectParameters() const
 {
-	if (mState.isReady()) {
-		// Read is called synchronously and only takes prepared value from sensor.
-		return mLineSensorWorker->getDetectParameters();
-	} else {
-		QLOG_WARN() << "Calling 'read' for sensor which is not ready";
-		return {};
-	}
+	QReadLocker locker(&mDetectParametersLock);
+	return mDetectParameters;
 }
 
-void LineSensor::onStopped()
+void LineSensor::onResult(trikDsp::OutArgs result)
 {
-	Q_EMIT stopped();
+	bool hsvUpdated = false;
+
+	if (mInArgs.autoDetect) {
+		mInArgs.autoDetect = false;
+		mInArgs.params = result.detected;
+		hsvUpdated = true;
+	}
+
+	{
+		QWriteLocker locker(&mReadingLock);
+		mReading = {result.location.x, result.location.y,
+		            static_cast<int>(result.location.size)};
+	}
+
+	if (hsvUpdated) {
+		{
+			QWriteLocker locker(&mDetectParametersLock);
+			mDetectParameters = {
+				static_cast<int>(result.detected.hue.from),
+				static_cast<int>(result.detected.hue.to),
+				static_cast<int>(result.detected.saturation.from),
+				static_cast<int>(result.detected.saturation.to),
+				static_cast<int>(result.detected.value.from),
+				static_cast<int>(result.detected.value.to)
+			};
+		}
+		emit activateRequested(mInArgs, mVideoOut, false);
+	}
 }

@@ -56,6 +56,7 @@ class CameraDeviceInterface;
 class I2cCommunicator;
 class Lidar;
 class IrCameraInterface;
+class VideoSensorManager;
 
 /// Class representing TRIK controller board and devices installed on it, also provides access
 /// to peripherals like motors and sensors.
@@ -186,7 +187,7 @@ private:
 	QScopedPointer<TonePlayer> mTonePlayer;
 	QScopedPointer<CameraDeviceInterface> mCamera;
 	QScopedPointer<IrCameraInterface> mIrCamera;
-
+	QScopedPointer<VideoSensorManager> mVideoSensorManager;
 	QHash<QString, ServoMotor *> mServoMotors;  // Has ownership.
 	QHash<QString, PwmCapture *> mPwmCaptures;  // Has ownership.
 	QHash<QString, PowerMotor *> mPowerMotors;  // Has ownership.
@@ -194,9 +195,6 @@ private:
 	QHash<QString, Encoder *> mEncoders;  // Has ownership.
 	QHash<QString, DigitalSensor *> mDigitalSensors;  // Has ownership.
 	QHash<QString, RangeSensor *> mRangeSensors;  // Has ownership.
-	QHash<QString, LineSensor *> mLineSensors;  // Has ownership.
-	QHash<QString, ColorSensor *> mColorSensors;  // Has ownership.
-	QHash<QString, ObjectSensor *> mObjectSensors;  // Has ownership.
 	QHash<QString, SoundSensor *> mSoundSensors;  // Has ownership.
 	QHash<QString, Lidar *> mLidars;  // Has ownership.
 	QHash<QString, Fifo *> mFifos;  // Has ownership.

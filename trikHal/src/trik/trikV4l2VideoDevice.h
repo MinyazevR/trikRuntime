@@ -14,64 +14,14 @@
 
 #pragma once
 
-#include <QObject>
-#include <QSocketNotifier>
-#include <QtCore/QString>
-#include <QtCore/QVector>
-#include <QtCore/QSocketNotifier>
-#include <linux/videodev2.h>
+#include "videoDeviceFileBase.h"
 
-using convertFunctionPtr = QVector<uint8_t> (*)(const QVector<uint8_t> &realCameraShot, int height, int width);
-
-/// Class for working with a camera on a TRIK controller
-class TrikV4l2VideoDevice: public QObject
+class TrikV4l2VideoDevice : public trikHal::VideoDeviceFileBase
 {
 	Q_OBJECT
 public:
-
-	/// TRIK v4l2 video device constructor
-	/// @param inputFile - camera device name
 	explicit TrikV4l2VideoDevice(const QString &inputFile);
 
-	~TrikV4l2VideoDevice();
-
-	/// Make photo using TRIK camera
-	const QVector<uint8_t> & makeShot();
-
-	/// Get last frame
-	const QVector<uint8_t> & getFrame() const { return mFrame; }
-
-Q_SIGNALS:
-	/// Signal when photo was made
-	void dataReady();
-
-public Q_SLOTS:
-	/// Read data from v4l2 buffers
-	/// @param fd - file descriptor
-	void readFrameData(int fd);
-
-private:
-	void closeDevice();
-	void setFormat();
-	void openDevice();
-	int xioctl(unsigned long request, void *arg, const QString &possibleError);
-	void initMMAP();
-	void startCapturing();
-	int readFrame();
-	void stopCapturing();
-	void freeMMAP();
-
-	int mFileDescriptor = -1;
-	const QString fileDevicePath;
-
-	struct buffer {
-		uint8_t *start;
-		size_t  length;
-	};
-	QVector<uint8_t> mFrame;
-	QVector<buffer> buffers;
-	v4l2_format mFormat {};
-	QScopedPointer<QSocketNotifier> mNotifier;
-	convertFunctionPtr mConvertFunc; // convert real camera shot to RGB888
+protected:
+	bool negotiateFormat() override;
 };
-

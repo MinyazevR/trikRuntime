@@ -1,81 +1,85 @@
-/* Copyright 2014 - 2015 CyberTech Labs Ltd.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License. */
-
 #include "colorSensor.h"
 
-#include <trikKernel/configurer.h>
-#include <QsLog.h>
+#include <algorithm>
 
-#include "colorSensorWorker.h"
+#include <trikKernel/configurer.h>
+
 #include "configurerHelper.h"
 
 using namespace trikControl;
 
-ColorSensor::ColorSensor(const QString &port, const trikKernel::Configurer &configurer
-		, trikHal::HardwareAbstractionInterface &hardwareAbstraction)
-	: mState("Color Sensor on" + port)
+ColorSensor::ColorSensor(const QString &port, const trikKernel::Configurer &configurer)
+	: mState("Color Sensor on " + port)
+	, mConfigurer(configurer)
+	, mPort(port)
 {
-	const QString &script = configurer.attributeByPort(port, "script");
-	const QString &inputFile = configurer.attributeByPort(port, "inputFile");
-	const QString &outputFile = configurer.attributeByPort(port, "outputFile");
+	mM = ConfigurerHelper::configureInt(configurer, mState, port, "m");
+	mN = ConfigurerHelper::configureInt(configurer, mState, port, "n");
 
-	const int m = ConfigurerHelper::configureInt(configurer, mState, port, "m");
-	const int n = ConfigurerHelper::configureInt(configurer, mState, port, "n");
+	if (mM <= 0 || mN <= 0 || mState.isFailed()) {
+		mState.fail();
+		return;
+	}
 
-	mColorSensorWorker.reset(new ColorSensorWorker(script, inputFile, outputFile, m, n, mState, hardwareAbstraction));
-	mColorSensorWorker->moveToThread(&mWorkerThread);
+	mState.ready();
 
-	connect(mColorSensorWorker.data(), &ColorSensorWorker::stopped
-			, this, &ColorSensor::onStopped, Qt::DirectConnection);
+	mInArgs.m = mM;
+	mInArgs.n = mN;
 
-	QLOG_INFO() << "Starting ColorSensor worker thread" << &mWorkerThread;
-
-	mWorkerThread.setObjectName(mColorSensorWorker->metaObject()->className());
-	mWorkerThread.start();
+	mReading.resize(mM);
+	for (int i = 0; i < mM; ++i) {
+		mReading[i].resize(mN);
+		for (int j = 0; j < mN; ++j)
+			mReading[i][j] = {0, 0, 0};
+	}
 }
 
 ColorSensor::~ColorSensor()
 {
-	if (mWorkerThread.isRunning()) {
-		mWorkerThread.quit();
-		mWorkerThread.wait();
-	}
+	emit stopped();
 }
 
 ColorSensor::Status ColorSensor::status() const
 {
-	return mColorSensorWorker->status();
+	return mState.status();
 }
 
 void ColorSensor::init(bool showOnDisplay)
 {
-	QMetaObject::invokeMethod(mColorSensorWorker.data()
-							  , [this, showOnDisplay](){mColorSensorWorker->init(showOnDisplay);});
+	if (mState.isFailed())
+		return;
+
+	mVideoOut = showOnDisplay;
+	emit activateRequested(mInArgs, showOnDisplay, true);
 }
 
 QVector<int> ColorSensor::read(int m, int n)
 {
-	// Read is called synchronously and only takes prepared value from sensor.
-	return mColorSensorWorker->read(m, n);
+	if (m > mReading.size() || n > mReading[0].size() || m <= 0 || n <= 0) {
+		QLOG_WARN() << QString("Incorrect parameters for read: m = %1, n = %2").arg(m).arg(n);
+		return {-1, -1, -1};
+	}
+
+	return mReading[m - 1][n - 1];
 }
 
-void ColorSensor::stop()
+void ColorSensor::stop(bool deinit)
 {
-	QMetaObject::invokeMethod(mColorSensorWorker.data(), &ColorSensorWorker::stop);
+	emit stopRequested(deinit);
+	emit stopped();
 }
 
-void ColorSensor::onStopped()
+void ColorSensor::onResult(trikDsp::OutArgs result)
 {
-	Q_EMIT stopped();
+	const int total = std::min(mM * mN, 9);
+	for (int i = 0; i < total; ++i) {
+		const int row = i / mN;
+		const int col = i % mN;
+		const uint32_t c = result.colors[i];
+		mReading[row][col] = {
+			static_cast<int>((c >> 16) & 0xFF),
+			static_cast<int>((c >> 8) & 0xFF),
+			static_cast<int>(c & 0xFF)
+		};
+	}
 }

@@ -58,7 +58,6 @@ HEADERS += \
 	$$PWD/src/cameraDevice.h \
 	$$PWD/src/cameraImplementationInterface.h \
 	$$PWD/src/colorSensor.h \
-	$$PWD/src/colorSensorWorker.h \
 	$$PWD/src/configurerHelper.h \
 	$$PWD/src/deviceState.h \
 	$$PWD/src/digitalSensor.h \
@@ -78,20 +77,19 @@ HEADERS += \
 	$$PWD/src/keysWorker.h \
 	$$PWD/src/led.h \
 	$$PWD/src/lineSensor.h \
-	$$PWD/src/lineSensorWorker.h \
 	$$PWD/src/moduleLoader.h \
 	$$PWD/src/mspCommunicatorInterface.h \
 	$$PWD/src/mspBusAutoDetector.h \
 	$$PWD/src/mspI2cCommunicator.h \
 	$$PWD/src/mspUsbCommunicator.h \
 	$$PWD/src/objectSensor.h \
-	$$PWD/src/objectSensorWorker.h \
 	$$PWD/src/powerMotor.h \
 	$$PWD/src/pwmCapture.h \
 	$$PWD/src/rangeSensor.h \
 	$$PWD/src/rangeSensorWorker.h \
 	$$PWD/src/servoMotor.h \
 	$$PWD/src/soundSensor.h \
+	$$PWD/src/videoSensorManager.h \
 	$$PWD/src/soundSensorWorker.h \
 	$$PWD/src/tonePlayer.h \
 	$$PWD/src/vectorSensor.h \
@@ -123,8 +121,6 @@ SOURCES += \
 	$$PWD/src/brick.cpp \
 	$$PWD/src/brickFactory.cpp \
 	$$PWD/src/colorSensor.cpp \
-	$$PWD/src/colorSensorWorker.cpp \
-	$$PWD/src/configurerHelper.cpp \
 	$$PWD/src/deviceState.cpp \
 	$$PWD/src/digitalSensor.cpp \
 	$$PWD/src/display.cpp \
@@ -141,13 +137,11 @@ SOURCES += \
 	$$PWD/src/keysWorker.cpp \
 	$$PWD/src/led.cpp \
 	$$PWD/src/lineSensor.cpp \
-	$$PWD/src/lineSensorWorker.cpp \
 	$$PWD/src/moduleLoader.cpp \
 	$$PWD/src/mspBusAutoDetector.cpp \
 	$$PWD/src/mspI2cCommunicator.cpp \
 	$$PWD/src/mspUsbCommunicator.cpp \
 	$$PWD/src/objectSensor.cpp \
-	$$PWD/src/objectSensorWorker.cpp \
 	$$PWD/src/powerMotor.cpp \
 	$$PWD/src/pwmCapture.cpp \
 	$$PWD/src/rangeSensor.cpp \
@@ -165,6 +159,7 @@ SOURCES += \
 	$$PWD/src/audioSynthDevice.cpp \
 	$$PWD/src/gyroSensor.cpp \
 	$$PWD/src/cameraDevice.cpp \
+	$$PWD/src/videoSensorManager.cpp \
 	$$PWD/src/qtCameraImplementation.cpp \
 	$$PWD/src/v4l2CameraImplementation.cpp \
 	$$PWD/src/imitationCameraImplementation.cpp \
@@ -192,8 +187,10 @@ DEFINES += TRIKCONTROL_LIBRARY
 
 QT += xml gui multimedia serialport quick
 
-links(trikRuntimeQsLog trikKernel trikHal trik-mlx90640)
+links(trikRuntimeQsLog trikKernel trikDsp trikHal trik-mlx90640)
+interfaceIncludes(trikDsp)
 implementationIncludes(trikKernel trikHal)
+
 INCLUDEPATH += $$GLOBAL_PWD/mlx90640-library/mlx90640-library/headers
 
 QMAKE_CXXFLAGS += \

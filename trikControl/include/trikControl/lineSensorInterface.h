@@ -43,7 +43,8 @@ public Q_SLOTS:
 	virtual void detect() = 0;
 
 	/// Stops detection until init() will be called again.
-	virtual void stop() = 0;
+	/// @param deinit - if true (default), removes camera from daemon. If false, only disables sensor.
+	virtual void stop(bool deinit = true) = 0;
 
 public:
 	/// Returns current raw x coordinate of detected object. Sensor returns 0 if detect() was not called.

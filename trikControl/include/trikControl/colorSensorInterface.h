@@ -41,7 +41,8 @@ public Q_SLOTS:
 	virtual QVector<int> read(int m, int n) = 0;
 
 	/// Stops detection until init() will be called again.
-	virtual void stop() = 0;
+	/// @param deinit - if true (default), removes camera from daemon. If false, only disables sensor.
+	virtual void stop(bool deinit = true) = 0;
 };
 
 }

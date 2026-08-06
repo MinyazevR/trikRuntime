@@ -78,5 +78,6 @@
         <file>resourcesQml/telegram.png</file>
         <file>qml/DarkTheme.qml</file>
         <file>qml/LightTheme.qml</file>
+        <file>qml/VideoOutputPage.qml</file>
     </qresource>
 </RCC>

@@ -173,13 +173,23 @@ public:
 	Q_INVOKABLE virtual trikControl::EventDeviceInterface *eventDevice(const QString &deviceFile) = 0;
 
 
-Q_SIGNALS:
+	Q_SIGNALS:
 	/// Emitted when all deferred deinitialization is completed and brick completely stopped. Note that if there is no
 	/// deferred deinitialization (no video sensors are on, for example), signal will NOT be emitted.
 	void stopped();
 
 	/// Emitted when brick finished resetting to default stopped state
 	void resetCompleted();
+
+	/// Emitted when videoOut=true DSP sensor produces a new output frame.
+	void videoFrameReady(const QByteArray &data,
+	                     uint32_t width, uint32_t height);
+
+	/// Emitted when a video sensor with videoOut=true is activated.
+	void videoDisplayStarted();
+
+	/// Emitted when a video sensor with videoOut=true is deactivated.
+	void videoDisplayFinished();
 };
 
 }

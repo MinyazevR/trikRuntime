@@ -1,76 +1,53 @@
-/* Copyright 2014 - 2015 CyberTech Labs Ltd.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License. */
-
 #pragma once
 
-#include <QtCore/QThread>
-#include <QtCore/QScopedPointer>
+#include <QtCore/QObject>
+#include <QtCore/QString>
+#include <QtCore/QVector>
+
+#include <trikDsp/dspTypes.h>
 
 #include "objectSensorInterface.h"
 #include "deviceState.h"
 
-namespace trikKernel {
-class Configurer;
-}
-
-namespace trikHal {
-class HardwareAbstractionInterface;
-}
+namespace trikKernel { class Configurer; }
 
 namespace trikControl {
 
-class ObjectSensorWorker;
-
-/// Implementation of object sensor for real robot.
+/// Object-detection sensor.  Same pattern as LineSensor —
+/// emits activateRequested, receives results via onResult().
 class ObjectSensor : public ObjectSensorInterface
 {
 	Q_OBJECT
 
 public:
-	/// Constructor.
-	/// @param port - port on which this sensor is configured.
-	/// @param configurer - configurer object containing preparsed XML files with sensor parameters.
-	ObjectSensor(const QString &port, const trikKernel::Configurer &configurer
-			, trikHal::HardwareAbstractionInterface &hardwareAbstraction);
-
+	ObjectSensor(const QString &port, const trikKernel::Configurer &configurer);
 	~ObjectSensor() override;
 
 	Status status() const override;
+	void onResult(trikDsp::OutArgs result);
+
+Q_SIGNALS:
+	void activateRequested(trikDsp::InArgs args, bool videoOut, bool canOpen);
+	void stopRequested(bool deinit);
 
 public Q_SLOTS:
 	void init(bool showOnDisplay) override;
-
 	void detect() override;
-
 	QVector<int> read() override;
-
-	void stop() override;
-
+	void stop(bool deinit = true) override;
 	QVector<int> getDetectParameters() const override;
 
-private Q_SLOTS:
-	void onStopped();
-
 private:
-	/// Sensor state.
 	DeviceState mState;
+	const trikKernel::Configurer &mConfigurer;
+	const QString mPort;
+	qreal mToleranceFactor = 1.0;
 
-	/// Worker object that handles sensor in separate thread.
-	QScopedPointer<ObjectSensorWorker> mObjectSensorWorker;
+	trikDsp::InArgs mInArgs;
+	bool mVideoOut = false;
 
-	/// Worker thread.
-	QThread mWorkerThread;
+	QVector<int> mReading{0, 0, 0};
+	QVector<int> mDetectParameters{0, 0, 0, 0, 0, 0};
 };
 
 }

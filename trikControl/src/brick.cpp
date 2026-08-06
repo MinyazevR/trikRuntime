@@ -42,6 +42,7 @@
 #include "gyroSensor.h"
 #include "keys.h"
 #include "led.h"
+#include "videoSensorManager.h"
 #include "lineSensor.h"
 #include "objectSensor.h"
 #include "powerMotor.h"
@@ -132,6 +133,14 @@ Brick::Brick(const trikKernel::DifferentOwnerPointer<trikHal::HardwareAbstractio
 									, "boardGyroPort"));
 	}
 
+	mVideoSensorManager.reset(new VideoSensorManager(mConfigurer, *mHardwareAbstraction));
+	connect(mVideoSensorManager.data(), &VideoSensorManager::videoFrameReady,
+	        this, &Brick::videoFrameReady);
+	connect(mVideoSensorManager.data(), &VideoSensorManager::videoDisplayStarted,
+	        this, &Brick::videoDisplayStarted);
+	connect(mVideoSensorManager.data(), &VideoSensorManager::videoDisplayFinished,
+	        this, &Brick::videoDisplayFinished);
+
 	mPlayWavFileCommand = mConfigurer.attributeByDevice("playWavFile", "command");
 	mPlayMp3FileCommand = mConfigurer.attributeByDevice("playMp3File", "command");
 }
@@ -145,10 +154,7 @@ Brick::~Brick()
 	qDeleteAll(mAnalogSensors);
 	qDeleteAll(mDigitalSensors);
 	qDeleteAll(mRangeSensors);
-	qDeleteAll(mLineSensors);
-	qDeleteAll(mObjectSensors);
 	qDeleteAll(mSoundSensors);
-	qDeleteAll(mColorSensors);
 	qDeleteAll(mFifos);
 	qDeleteAll(mEventDevices);
 	qDeleteAll(mI2cDevices);
@@ -166,6 +172,7 @@ Brick::~Brick()
 	mLed.reset();
 	mGamepad.reset();
 	mIrCamera.reset();
+	mVideoSensorManager.reset();
 }
 
 DisplayWidgetInterface *Brick::graphicsWidget()
@@ -184,11 +191,22 @@ QString Brick::configVersion() const
 
 void Brick::configure(const QString &portName, const QString &deviceName)
 {
+	auto proxyDeviceName = deviceName;
+	const auto isVideoSensor = mVideoSensorManager->isVideoSensor(deviceName);
+
 	shutdownDevice(portName);
 
-	mConfigurer.configure(portName, deviceName);
+	if (isVideoSensor) {
+		proxyDeviceName = mVideoSensorManager->deviceClass();
+	}
 
-	createDevice(portName);
+	mConfigurer.configure(portName, proxyDeviceName);
+
+	if (isVideoSensor) {
+		mVideoSensorManager->create(portName, deviceName);
+	} else {
+		createDevice(portName);
+	}
 }
 
 void Brick::reset()
@@ -273,23 +291,8 @@ void Brick::stop()
 		mDisplay->hide();
 	}
 
-	/// @todo: Also be able to stop initializing sensor.
-	for (auto &&lineSensor : mLineSensors) {
-		if (lineSensor->status() == DeviceInterface::Status::ready) {
-			lineSensor->stop();
-		}
-	}
-
-	for (auto &&colorSensor : mColorSensors) {
-		if (colorSensor->status() == DeviceInterface::Status::ready) {
-			colorSensor->stop();
-		}
-	}
-
-	for (auto &&objectSensor : mObjectSensors) {
-		if (objectSensor->status() == DeviceInterface::Status::ready) {
-			objectSensor->stop();
-		}
+	if (mVideoSensorManager) {
+		mVideoSensorManager->stop();
 	}
 
 	for (auto &&soundSensor : mSoundSensors) {
@@ -408,17 +411,17 @@ GyroSensorInterface *Brick::gyroscope()
 
 LineSensorInterface *Brick::lineSensor(const QString &port)
 {
-	return mLineSensors.contains(port) ? mLineSensors[port] : nullptr;
+	return mVideoSensorManager->lineSensor(port);
 }
 
 ColorSensorInterface *Brick::colorSensor(const QString &port)
 {
-	return mColorSensors.contains(port) ? mColorSensors[port] : nullptr;
+	return mVideoSensorManager->colorSensor(port);
 }
 
 ObjectSensorInterface *Brick::objectSensor(const QString &port)
 {
-	return mObjectSensors.contains(port) ? mObjectSensors[port] : nullptr;
+	return mVideoSensorManager->objectSensor(port);
 }
 
 I2cDeviceInterface* Brick::createI2cDevice(int bus, int address,
@@ -561,18 +564,8 @@ void Brick::shutdownDevice(const QString &port)
 	} else if (deviceClass == "encoder") {
 		delete mEncoders[port];
 		mEncoders.remove(port);
-	} else if (deviceClass == "lineSensor") {
-		mLineSensors[port]->stop();
-		delete mLineSensors[port];
-		mLineSensors.remove(port);
-	} else if (deviceClass == "objectSensor") {
-		mObjectSensors[port]->stop();
-		delete mObjectSensors[port];
-		mObjectSensors.remove(port);
-	} else if (deviceClass == "colorSensor") {
-		mColorSensors[port]->stop();
-		delete mColorSensors[port];
-		mColorSensors.remove(port);
+	} else if (deviceClass == "dspSensor") {
+		mVideoSensorManager->shutdown(port);
 	} else if (deviceClass == "fifo") {
 		delete mFifos[port];
 		mFifos.remove(port);
@@ -603,21 +596,6 @@ void Brick::createDevice(const QString &port)
 			mRangeSensors[port]->init();
 		} else if (deviceClass == "encoder") {
 			mEncoders.insert(port, new Encoder(port, mConfigurer, *mMspCommunicator));
-		} else if (deviceClass == "lineSensor") {
-			mLineSensors.insert(port, new LineSensor(port, mConfigurer, *mHardwareAbstraction));
-
-			/// @todo This will work only in case when there can be only one video sensor launched at a time.
-			connect(mLineSensors[port], &LineSensor::stopped, this, &Brick::stopped);
-		} else if (deviceClass == "objectSensor") {
-			mObjectSensors.insert(port, new ObjectSensor(port, mConfigurer, *mHardwareAbstraction));
-
-			/// @todo This will work only in case when there can be only one video sensor launched at a time.
-			connect(mObjectSensors[port], &ObjectSensor::stopped, this, &Brick::stopped);
-		} else if (deviceClass == "colorSensor") {
-			mColorSensors.insert(port, new ColorSensor(port, mConfigurer, *mHardwareAbstraction));
-
-			/// @todo This will work only in case when there can be only one video sensor launched at a time.
-			connect(mColorSensors[port], &ColorSensor::stopped, this, &Brick::stopped);
 		} else if (deviceClass == "soundSensor") {
 			mSoundSensors.insert(port, new SoundSensor(port, mConfigurer, *mHardwareAbstraction));
 
