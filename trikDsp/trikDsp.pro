@@ -46,12 +46,11 @@ HEADERS += \
 	$$PWD/src/dspServer_p.h \
 	$$PWD/src/dspConverters.h
 
-SOURCES += \
-	$$PWD/src/dspServer.cpp
-
 !trik_not_brick {
+	SOURCES += $$PWD/src/dspServer.cpp
 	SOURCES += $$PWD/src/dspServerImpl.cpp
 } else {
+	SOURCES += $$PWD/src/stubs/dspServerStub.cpp
 	SOURCES += $$PWD/src/stubs/dspServerStubImpl.cpp
 }
 

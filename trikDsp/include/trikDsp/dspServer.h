@@ -1,6 +1,7 @@
 #pragma once
 
 #include <QtCore/QObject>
+#include <QtCore/QProcess>
 #include <QtCore/QScopedPointer>
 #include <QtCore/QThread>
 
@@ -85,6 +86,7 @@ private:
 	class Impl;
 	QScopedPointer<Impl> d;
 	QThread mThread;
+	QProcess mLadProcess;
 };
 
 }

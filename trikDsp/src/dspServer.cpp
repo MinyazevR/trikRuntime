@@ -3,6 +3,7 @@
 #include "dspConverters.h"
 
 #include <QsLog.h>
+#include <QEventLoop>
 #include <trikHal/VideoDeviceFileInterface.h>
 
 namespace trikDsp {
@@ -12,10 +13,9 @@ DspServer::DspServer(uint16_t rprocId, QObject *parent)
 	, d(new Impl)
 {
 	d->rprocId = rprocId;
-	init();
-
 	moveToThread(&mThread);
 	mThread.setObjectName(QStringLiteral("DspServer"));
+	connect(&mThread, &QThread::started, this, &DspServer::init);
 	mThread.start();
 }
 
@@ -23,6 +23,13 @@ DspServer::~DspServer()
 {
 	mThread.quit();
 	mThread.wait();
+
+	mLadProcess.terminate();
+	if (!mLadProcess.waitForFinished(3000)) {
+		QLOG_ERROR() << "DspServer: LAD daemon did not finish, killing";
+		mLadProcess.kill();
+		mLadProcess.waitForFinished(1000);
+	}
 }
 
 bool DspServer::addSource(trikHal::VideoDeviceFileInterface *source)
@@ -90,6 +97,28 @@ void DspServer::onFrameReady()
 void DspServer::init()
 {
 	QLOG_INFO() << "DspServer: initializing";
+
+	QEventLoop loop;
+	bool ladOk = false;
+
+	connect(&mLadProcess, &QProcess::started, &loop, [&]() {
+		QLOG_INFO() << "DspServer: LAD daemon started";
+		ladOk = true;
+		loop.quit();
+	});
+
+	connect(&mLadProcess, &QProcess::errorOccurred, &loop, [&](QProcess::ProcessError error) {
+		QLOG_ERROR() << "DspServer: failed to start LAD daemon:" << error;
+		loop.quit();
+	});
+
+	mLadProcess.start(QStringLiteral("lad_omapl138"), QStringList(), QIODevice::ReadOnly);
+	loop.exec();
+
+	if (!ladOk) {
+		emit errorOccurred(QStringLiteral("LAD daemon start failed"));
+		return;
+	}
 
 	if (!d->startIpc()) {
 		emit errorOccurred(QStringLiteral("Ipc_start failed"));
