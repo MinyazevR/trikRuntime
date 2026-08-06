@@ -25,11 +25,18 @@ VideoSensorManager::VideoSensorManager(const trikKernel::Configurer &configurer,
 	, mHardwareAbstractionInterface(hardwareAbstraction)
 	, mState("VideoSensorManager")
 {
-	// mDspServer.reset(new trikDsp::DspServer(DSP_RPROC_ID));
-	//connect(mDspServer.data(), &trikDsp::DspServer::resultReady,this, &VideoSensorManager::onResult);
-	//connect(mDspServer.data(), &trikDsp::DspServer::videoFrameReady, this, &VideoSensorManager::videoFrameReady);
-	//connect(mDspServer.data(), &trikDsp::DspServer::videoDisplayStarted, this, &VideoSensorManager::videoDisplayStarted);
-	//connect(mDspServer.data(), &trikDsp::DspServer::videoDisplayFinished, this, &VideoSensorManager::videoDisplayFinished);
+	mDspThread.reset(new QThread);
+	mDspThread->setObjectName(QStringLiteral("DspServer"));
+
+	mDspServer.reset(new trikDsp::DspServer(DSP_RPROC_ID));
+	mDspServer->moveToThread(mDspThread.data());
+
+	connect(mDspServer.data(), &trikDsp::DspServer::resultReady,this, &VideoSensorManager::onResult);
+	connect(mDspServer.data(), &trikDsp::DspServer::videoFrameReady, this, &VideoSensorManager::videoFrameReady);
+	connect(mDspServer.data(), &trikDsp::DspServer::videoDisplayStarted, this, &VideoSensorManager::videoDisplayStarted);
+	connect(mDspServer.data(), &trikDsp::DspServer::videoDisplayFinished, this, &VideoSensorManager::videoDisplayFinished);
+
+	mDspThread->start();
 	mState.ready();
 }
 
@@ -38,6 +45,8 @@ VideoSensorManager::~VideoSensorManager()
 	qDeleteAll(mLineSensors);
 	qDeleteAll(mColorSensors);
 	qDeleteAll(mObjectSensors);
+	mDspThread->quit();
+	mDspThread->wait();
 	mDspServer.reset();
 	qDeleteAll(mSources);
 }

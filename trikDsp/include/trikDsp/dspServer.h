@@ -3,7 +3,6 @@
 #include <QtCore/QObject>
 #include <QtCore/QProcess>
 #include <QtCore/QScopedPointer>
-#include <QtCore/QThread>
 
 #include "dspSource.h"
 #include "dspTypes.h"
@@ -17,10 +16,10 @@ namespace trikDsp {
 
 /// ARM ↔ DSP bridge via TI IPC MessageQ over RPMsg.
 ///
-/// Constructor starts the IPC stack (Ipc_start), performs MessageQ
-/// handshake with the DSP and maps shared buffers via /dev/mem.  After
-/// construction the object is moved to an internal QThread; all further
-/// state changes are processed in that thread.
+/// Constructor synchronously initialises IPC (starts LAD daemon,
+/// performs Ipc_start, MessageQ handshake and shared buffer mapping).
+/// The caller should call moveToThread() afterwards if a dedicated
+/// worker thread is needed.
 ///
 /// Sources are registered with addSource() — DspServer subscribes to
 /// frameReady() signal instead of managing poll notifiers.
@@ -85,7 +84,6 @@ private:
 
 	class Impl;
 	QScopedPointer<Impl> d;
-	QThread mThread;
 	QProcess mLadProcess;
 };
 

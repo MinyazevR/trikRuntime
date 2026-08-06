@@ -14,17 +14,11 @@ DspServer::DspServer(uint16_t rprocId, QObject *parent)
 	, d(new Impl)
 {
 	d->rprocId = rprocId;
-	moveToThread(&mThread);
-	mThread.setObjectName(QStringLiteral("DspServer"));
-	connect(&mThread, &QThread::started, this, &DspServer::init);
-	mThread.start();
+	init();
 }
 
 DspServer::~DspServer()
 {
-	mThread.quit();
-	mThread.wait();
-
 	mLadProcess.terminate();
 	if (!mLadProcess.waitForFinished(3000)) {
 		QLOG_ERROR() << "DspServer: LAD daemon did not finish, killing";

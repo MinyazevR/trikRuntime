@@ -3,6 +3,7 @@
 #include <QtCore/QHash>
 #include <QtCore/QScopedPointer>
 #include <QtCore/QString>
+#include <QtCore/QThread>
 
 #include <trikDsp/dspServer.h>
 
@@ -77,6 +78,7 @@ private:
 	DeviceState mState;
 
 	QScopedPointer<trikDsp::DspServer> mDspServer;
+	QScopedPointer<QThread> mDspThread;
 	QHash<QString, trikHal::VideoDeviceFileInterface*> mSources;
 	QHash<QString, LineSensor*> mLineSensors;
 	QHash<QString, ColorSensor*> mColorSensors;
