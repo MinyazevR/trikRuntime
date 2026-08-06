@@ -109,14 +109,14 @@ private:
 	static typename std::enable_if<std::is_same<T, int>::value, T>::type
 	convert(const QString &s, bool &ok)
 	{
-		return s.toInt(&ok);
+		return s.toInt(&ok, 0);
 	}
 
 	template<typename T>
 	static typename std::enable_if<std::is_same<T, long>::value, T>::type
 	convert(const QString &s, bool &ok)
 	{
-		return s.toLong(&ok);
+		return s.toLong(&ok, 0);
 	}
 
 	template<typename T>
