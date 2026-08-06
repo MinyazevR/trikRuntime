@@ -102,7 +102,7 @@ void DspServer::init()
 	QEventLoop loop;
 	bool ladOk = false;
 
-	QTimer::singleShot(5000, &loop, [&]() {
+	QTimer::singleShot(15000, &loop, [&]() {
 		QLOG_ERROR() << "DspServer: timed out waiting for LAD daemon";
 		loop.quit();
 	});
