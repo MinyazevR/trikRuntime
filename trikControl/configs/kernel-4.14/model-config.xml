@@ -146,6 +146,4 @@ Note that device, even if listed here, may fail by itself, then it also will not
                 <irCamera />
         </irCameraPort>
 
-<dspPort inputFile="/run/ctrl.in.fifo" outputFile="/run/ctrl.out.fifo"/>
-
 </config>

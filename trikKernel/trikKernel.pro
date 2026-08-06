@@ -34,6 +34,7 @@ HEADERS += \
 	$$PWD/include/trikKernel/timeVal.h \
 	$$PWD/include/trikKernel/translationsHelper.h \
 	$$PWD/include/trikKernel/version.h \
+	$$PWD/include/trikKernel/videoUtils.h \
 	$$PWD/include/trikKernel/exceptions/failedToOpenFileException.h \
 	$$PWD/include/trikKernel/exceptions/failedToParseXmlException.h \
 	$$PWD/include/trikKernel/exceptions/internalErrorException.h \
@@ -51,7 +52,7 @@ SOURCES += \
 	$$PWD/src/loggingHelper.cpp \
 	$$PWD/src/rcReader.cpp \
 	$$PWD/src/translationsHelper.cpp \
-
+	$$PWD/src/videoUtils.cpp
 
 OTHER_FILES += \
 	$$PWD/stubTrikRc \
