@@ -7,41 +7,38 @@
 using namespace trikControl;
 
 LineSensor::LineSensor(const QString &port, const trikKernel::Configurer &configurer)
-	: mState("Line Sensor on " + port)
-	, mConfigurer(configurer)
-	, mPort(port)
+	: m("Line Sensor on " + port, configurer, port, trikDsp::Algorithm::Line)
 {
 	mToleranceFactor = ConfigurerHelper::configureChildReal(
-	                       configurer, mState, port, "lineSensor", "toleranceFactor");
+	                       configurer, m.state(), port, "lineSensor", "toleranceFactor");
 
-	if (!mState.isFailed())
-		mState.ready();
+	if (!m.state().isFailed())
+		m.state().ready();
 }
 
 LineSensor::~LineSensor()
 {
-	emit stopped();
+	Q_EMIT stopped();
 }
 
 LineSensor::Status LineSensor::status() const
 {
-	return mState.status();
+	return m.state().status();
 }
 
 void LineSensor::init(bool showOnDisplay)
 {
-	if (mState.isFailed())
+	if (!m.doInit(showOnDisplay))
 		return;
 
-	mVideoOut = showOnDisplay;
-	emit activateRequested(mInArgs, showOnDisplay, true);
+	Q_EMIT activateRequested(m.inArgs(), showOnDisplay, true);
 }
 
 void LineSensor::detect()
 {
 	if (status() == Status::ready) {
-		mInArgs.autoDetect = true;
-		emit activateRequested(mInArgs, mVideoOut, false);
+		m.inArgs().autoDetect = true;
+		Q_EMIT activateRequested(m.inArgs(), m.videoOut(), false);
 	}
 }
 
@@ -53,8 +50,9 @@ QVector<int> LineSensor::read()
 
 void LineSensor::stop(bool deinit)
 {
-	emit stopRequested(deinit);
-	emit stopped();
+	m.doStop();
+	Q_EMIT stopRequested(deinit);
+	Q_EMIT stopped();
 }
 
 QVector<int> LineSensor::getDetectParameters() const
@@ -67,9 +65,9 @@ void LineSensor::onResult(trikDsp::OutArgs result)
 {
 	bool hsvUpdated = false;
 
-	if (mInArgs.autoDetect) {
-		mInArgs.autoDetect = false;
-		mInArgs.params = result.detected;
+	if (m.inArgs().autoDetect) {
+		m.inArgs().autoDetect = false;
+		m.inArgs().params = result.detected;
 		hsvUpdated = true;
 	}
 
@@ -91,6 +89,7 @@ void LineSensor::onResult(trikDsp::OutArgs result)
 				static_cast<int>(result.detected.value.to)
 			};
 		}
-		emit activateRequested(mInArgs, mVideoOut, false);
+		Q_EMIT activateRequested(m.inArgs(), m.videoOut(), false);
 	}
 }
+

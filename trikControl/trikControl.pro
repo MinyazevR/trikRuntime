@@ -60,6 +60,7 @@ HEADERS += \
 	$$PWD/src/colorSensor.h \
 	$$PWD/src/configurerHelper.h \
 	$$PWD/src/deviceState.h \
+	$$PWD/src/dspSensorBase.h \
 	$$PWD/src/digitalSensor.h \
 	$$PWD/src/display.h \
 	$$PWD/src/encoder.h \
@@ -122,6 +123,7 @@ SOURCES += \
 	$$PWD/src/brickFactory.cpp \
 	$$PWD/src/colorSensor.cpp \
 	$$PWD/src/deviceState.cpp \
+	$$PWD/src/dspSensorBase.cpp \
 	$$PWD/src/digitalSensor.cpp \
 	$$PWD/src/display.cpp \
 	$$PWD/src/encoder.cpp \

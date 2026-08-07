@@ -2,11 +2,10 @@
 #include "dspConverters.h"
 
 #include <algorithm>
+#include <array>
 #include <cerrno>
-#include <cstdio>
 #include <cstring>
 #include <fcntl.h>
-#include <sys/ioctl.h>
 #include <sys/mman.h>
 #include <unistd.h>
 
@@ -26,26 +25,27 @@ namespace trikDsp {
 namespace {
 
 constexpr int PAGE_SIZE = 4096;
+constexpr int MSG_QUEUE_RETRIES = 10;
 
 enum trik_cmd algoToDspCmd(enum trik_cv_algorithm algo)
 {
 	switch (algo) {
-	case TRIK_CV_ALGORITHM_MOTION_SENSOR:
-		return TRIK_CMD_MOTION_SENSOR;
-	case TRIK_CV_ALGORITHM_EDGE_LINE_SENSOR:
-		return TRIK_CMD_EDGE_LINE_SENSOR;
-	case TRIK_CV_ALGORITHM_LINE_SENSOR:
-		return TRIK_CMD_LINE_SENSOR;
-	case TRIK_CV_ALGORITHM_OBJECT_SENSOR:
-		return TRIK_CMD_OBJECT_SENSOR;
-	case TRIK_CV_ALGORITHM_MXN_SENSOR:
-		return TRIK_CMD_MXN_SENSOR;
-	default:
-		return TRIK_CMD_NOP;
+	case TRIK_CV_ALGORITHM_MOTION_SENSOR:   return TRIK_CMD_MOTION_SENSOR;
+	case TRIK_CV_ALGORITHM_EDGE_LINE_SENSOR: return TRIK_CMD_EDGE_LINE_SENSOR;
+	case TRIK_CV_ALGORITHM_LINE_SENSOR:     return TRIK_CMD_LINE_SENSOR;
+	case TRIK_CV_ALGORITHM_OBJECT_SENSOR:   return TRIK_CMD_OBJECT_SENSOR;
+	case TRIK_CV_ALGORITHM_MXN_SENSOR:      return TRIK_CMD_MXN_SENSOR;
+	default:                                 return TRIK_CMD_NOP;
 	}
 }
 
-uint8_t *physToVirt(void *physAddr)
+struct MmapResult {
+	uint8_t *data = nullptr;
+	void *base = nullptr;
+	size_t len = 0;
+};
+
+MmapResult physToVirt(void *physAddr)
 {
 	const auto addr = reinterpret_cast<uintptr_t>(physAddr);
 	const auto pageBase = addr / PAGE_SIZE * PAGE_SIZE;
@@ -54,24 +54,25 @@ uint8_t *physToVirt(void *physAddr)
 	const int memfd = open("/dev/mem", O_RDWR | O_SYNC);
 	if (memfd < 0) {
 		QLOG_ERROR() << "DspServer: open /dev/mem failed:" << strerror(errno);
-		return nullptr;
+		return {};
 	}
 
-	auto *mapped = mmap(nullptr, pageOffset + BUFFER_SIZE,
+	const size_t mapLen = pageOffset + BUFFER_SIZE;
+	auto *mapped = mmap(nullptr, mapLen,
 	                    PROT_READ | PROT_WRITE, MAP_SHARED,
 	                    memfd, pageBase);
 	close(memfd);
 
 	if (mapped == MAP_FAILED) {
 		QLOG_ERROR() << "DspServer: mmap /dev/mem failed:" << strerror(errno);
-		return nullptr;
+		return {};
 	}
 
-	return static_cast<uint8_t *>(mapped) + pageOffset;
+	return {static_cast<uint8_t*>(mapped) + pageOffset, mapped, mapLen};
 }
 
 ::trik_msg *allocRequest(MessageQ_Handle hostQue, UInt16 heapId,
-                              UInt32 msgSize, enum trik_cmd cmd)
+                         UInt32 msgSize, enum trik_cmd cmd)
 {
 	auto *msg = reinterpret_cast<::trik_msg *>(MessageQ_alloc(heapId, msgSize));
 	if (!msg)
@@ -81,12 +82,17 @@ uint8_t *physToVirt(void *physAddr)
 	return msg;
 }
 
-}
+} // namespace
 
 DspServer::Impl::~Impl()
 {
 	destroyMessageQueue();
 	Ipc_stop();
+
+	if (mMmapIn)
+		munmap(mMmapIn, mMmapInLen);
+	if (mMmapOut)
+		munmap(mMmapOut, mMmapOutLen);
 
 	QLOG_INFO() << "DspServer: destroyed";
 }
@@ -120,7 +126,7 @@ void DspServer::Impl::freeMessage(::trik_msg *msg)
 	MessageQ_free(reinterpret_cast<MessageQ_Msg>(msg));
 }
 
-void DspServer::Impl::setupMessageQueue()
+bool DspServer::Impl::setupMessageQueue()
 {
 	MessageQ_Params params;
 	MessageQ_Params_init(&params);
@@ -128,24 +134,34 @@ void DspServer::Impl::setupMessageQueue()
 	mHostQue = MessageQ_create(const_cast<char *>(TRIK_HOST_MSG_QUE_NAME), &params);
 	if (!mHostQue) {
 		QLOG_ERROR() << "DspServer: MessageQ_create failed";
-		return;
+		return false;
 	}
 
-	char name[32];
-	sprintf(name, TRIK_SLAVE_MSG_QUE_NAME, MultiProc_getName(rprocId));
+	std::array<char, 32> name;
+	snprintf(name.data(), name.size(),
+	         TRIK_SLAVE_MSG_QUE_NAME, MultiProc_getName(rprocId));
 
 	int status = 0;
-	do {
-		status = MessageQ_open(name, &mSlaveQue);
+	for (int retry = 0; retry < MSG_QUEUE_RETRIES; ++retry) {
+		status = MessageQ_open(name.data(), &mSlaveQue);
+		if (status != MessageQ_E_NOTFOUND)
+			break;
 		sleep(1);
-	} while (status == MessageQ_E_NOTFOUND);
+	}
+
+	if (status == MessageQ_E_NOTFOUND) {
+		QLOG_ERROR() << "DspServer: MessageQ_open timed out after"
+		             << MSG_QUEUE_RETRIES << "retries";
+		return false;
+	}
 
 	if (status < 0) {
 		QLOG_ERROR() << "DspServer: MessageQ_open failed:" << status;
-		return;
+		return false;
 	}
 
 	QLOG_INFO() << "DspServer: MessageQ ready";
+	return true;
 }
 
 void DspServer::Impl::destroyMessageQueue()
@@ -160,32 +176,46 @@ void DspServer::Impl::destroyMessageQueue()
 	}
 }
 
-void DspServer::Impl::mapSharedBuffers()
+bool DspServer::Impl::mapSharedBuffers()
 {
 	auto *req = allocRequest(mHostQue, TRIK_MSG_HEAP_ID, TRIK_MSG_SIZE, TRIK_CMD_INIT);
 	if (!req) {
 		QLOG_ERROR() << "DspServer: failed to allocate INIT msg";
-		return;
+		return false;
 	}
 
 	auto *res = sendAndWaitForResponse(req);
 	if (!res) {
 		QLOG_ERROR() << "DspServer: no response to INIT";
-		return;
+		return false;
 	}
 
 	auto *initRes = reinterpret_cast<struct trik_res_init_msg *>(res);
-	mDspIn.start = physToVirt(initRes->dsp_in_buffer);
-	mDspIn.length = BUFFER_SIZE;
-	mDspOut.start = physToVirt(initRes->dsp_out_buffer);
-	mDspOut.length = BUFFER_SIZE;
+	auto inMap = physToVirt(initRes->dsp_in_buffer);
+	auto outMap = physToVirt(initRes->dsp_out_buffer);
+
+	if (inMap.data) {
+		mDspIn.start = inMap.data;
+		mDspIn.length = BUFFER_SIZE;
+		mMmapIn = inMap.base;
+		mMmapInLen = inMap.len;
+	}
+	if (outMap.data) {
+		mDspOut.start = outMap.data;
+		mDspOut.length = BUFFER_SIZE;
+		mMmapOut = outMap.base;
+		mMmapOutLen = outMap.len;
+	}
 
 	freeMessage(res);
 
-	if (mDspIn.start && mDspOut.start)
+	if (mDspIn.start && mDspOut.start) {
 		QLOG_INFO() << "DspServer: DSP buffers mapped";
-	else
-		QLOG_ERROR() << "DspServer: failed to mmap DSP buffers";
+		return true;
+	}
+
+	QLOG_ERROR() << "DspServer: failed to mmap DSP buffers";
+	return false;
 }
 
 void DspServer::Impl::registerAlgorithm(Algorithm algo, const AlgoDescriptor &desc)
@@ -224,28 +254,25 @@ void DspServer::Impl::registerAlgorithm(Algorithm algo, const AlgoDescriptor &de
 
 bool DspServer::Impl::step(const InArgs &in, OutArgs &out)
 {
-	const auto dspIn = toDspInArgs(in);
-
 	auto *req = reinterpret_cast<struct trik_res_step_msg *>(
 	    allocRequest(mHostQue, TRIK_MSG_HEAP_ID, TRIK_MSG_SIZE, TRIK_CMD_STEP));
 	if (!req)
 		return false;
 
-	req->in_args = dspIn;
+	req->in_args = toDspInArgs(in);
 
 	auto *res = sendAndWaitForResponse(&req->header);
 	if (!res)
 		return false;
 
-	auto *stepRes = reinterpret_cast<struct trik_res_step_msg *>(res);
-	out = fromDspOutArgs(stepRes->out_args);
+	out = fromDspOutArgs(reinterpret_cast<struct trik_res_step_msg *>(res)->out_args);
 
 	freeMessage(res);
 	return true;
 }
 
 bool DspServer::Impl::processFrame(trikHal::VideoDeviceFileInterface &source, const DspChannel &channel,
-                                   OutArgs &out, VideoFrame *videoFrame)
+                                    OutArgs &out, VideoFrame *videoFrame)
 {
 	const uint8_t *data = nullptr;
 	size_t size = 0;
@@ -276,3 +303,4 @@ bool DspServer::Impl::processFrame(trikHal::VideoDeviceFileInterface &source, co
 }
 
 } // namespace trikDsp
+

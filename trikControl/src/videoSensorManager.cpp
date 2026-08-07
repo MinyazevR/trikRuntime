@@ -10,6 +10,7 @@
 #include <trikDsp/dspTypes.h>
 
 #include "configurerHelper.h"
+#include "dspSensorBase.h"
 
 namespace trikControl {
 
@@ -29,75 +30,148 @@ VideoSensorManager::VideoSensorManager(const trikKernel::Configurer &configurer,
 	mDspThread->setObjectName(QStringLiteral("DspServer"));
 
 	mDspServer.reset(new trikDsp::DspServer(DSP_RPROC_ID));
-	mDspServer->moveToThread(mDspThread.data());
+
+	connect(mDspServer.data(), &trikDsp::DspServer::errorOccurred, this, [this](const QString &message) {
+		QLOG_ERROR() << "The VideoSensorManager constructor terminated with an error:"
+			     << message;
+		mState.fail();
+	});
+
+	connect(mDspServer.data(), &trikDsp::DspServer::successfullyInited, this, [this]() {
+		mState.ready();
+	});
 
 	connect(mDspServer.data(), &trikDsp::DspServer::resultReady,this, &VideoSensorManager::onResult);
 	connect(mDspServer.data(), &trikDsp::DspServer::videoFrameReady, this, &VideoSensorManager::videoFrameReady);
 	connect(mDspServer.data(), &trikDsp::DspServer::videoDisplayStarted, this, &VideoSensorManager::videoDisplayStarted);
 	connect(mDspServer.data(), &trikDsp::DspServer::videoDisplayFinished, this, &VideoSensorManager::videoDisplayFinished);
 
+	mDspServer->init();
+
+	if (!mState.isReady())
+		return;
+
+	mDspServer->moveToThread(mDspThread.data());
 	mDspThread->start();
-	mState.ready();
+}
+
+void VideoSensorManager::destroyDsp()
+{
+	mDspThread->quit();
+	mDspThread->wait();
+	mDspServer.reset();
 }
 
 VideoSensorManager::~VideoSensorManager()
 {
+	destroyDsp();
+
 	qDeleteAll(mLineSensors);
 	qDeleteAll(mColorSensors);
 	qDeleteAll(mObjectSensors);
-	mDspThread->quit();
-	mDspThread->wait();
-	mDspServer.reset();
+	mLineSensors.clear();
+	mColorSensors.clear();
+	mObjectSensors.clear();
+
 	qDeleteAll(mSources);
+	mSources.clear();
+	mPortStatuses.clear();
 }
 
-bool VideoSensorManager::ensureSourceOpened(const QString &port)
+bool VideoSensorManager::checkManagerState(const QString &message) const
 {
 	if (!mState.isReady()) {
+		QLOG_ERROR() << QString("An attempt to %1 a device on an uninitialized VideoSensorManager")
+					.arg(message);
+		return false;
+	}
+	return true;
+}
+
+void VideoSensorManager::createSensor(const QString &port, const QString &deviceClass)
+{
+	if (deviceClass == QStringLiteral("lineSensor")) {
+		auto *s = new LineSensor(port, mConfigurer);
+		connect(s, &LineSensor::activateRequested, this,
+		        [this, port](trikDsp::InArgs args, bool videoOut, bool canOpen) {
+			activateForPort(port, trikDsp::Algorithm::Line, args, videoOut, canOpen);
+		}, Qt::QueuedConnection);
+		connect(s, &LineSensor::stopRequested, this,
+		        [this, port](bool deinit) { handleStopRequested(port, deinit); },
+		        Qt::QueuedConnection);
+		mLineSensors.insert(port, s);
+	} else if (deviceClass == QStringLiteral("objectSensor")) {
+		auto *s = new ObjectSensor(port, mConfigurer);
+		connect(s, &ObjectSensor::activateRequested, this,
+		        [this, port](trikDsp::InArgs args, bool videoOut, bool canOpen) {
+			activateForPort(port, trikDsp::Algorithm::Object, args, videoOut, canOpen);
+		}, Qt::QueuedConnection);
+		connect(s, &ObjectSensor::stopRequested, this,
+		        [this, port](bool deinit) { handleStopRequested(port, deinit); },
+		        Qt::QueuedConnection);
+		mObjectSensors.insert(port, s);
+	} else if (deviceClass == QStringLiteral("colorSensor")) {
+		auto *s = new ColorSensor(port, mConfigurer);
+		connect(s, &ColorSensor::activateRequested, this,
+		        [this, port](trikDsp::InArgs args, bool videoOut, bool canOpen) {
+			activateForPort(port, trikDsp::Algorithm::Mxn, args, videoOut, canOpen);
+		}, Qt::QueuedConnection);
+		connect(s, &ColorSensor::stopRequested, this,
+		        [this, port](bool deinit) { handleStopRequested(port, deinit); },
+		        Qt::QueuedConnection);
+		mColorSensors.insert(port, s);
+	}
+}
+
+bool VideoSensorManager::openSource(const QString &port)
+{
+	auto *source = mSources.value(port);
+	if (!source) {
+		QLOG_ERROR() << "VideoSensorManager: no source for port" << port;
+		mPortStatuses[port] = PortStatus::Stopped;
 		return false;
 	}
 
-	auto &&source = mSources.value(port);
-
-	if (!source || !source->isOpen()) {
-		if (source)
-			QLOG_ERROR() << "VideoSensorManager: failed to open" << source->id();
-		else
-			QLOG_ERROR() << "VideoSensorManager: no source for port" << port;
-		mState.fail();
+	if (!source->isOpen() && !source->open()) {
+		QLOG_ERROR() << "VideoSensorManager: failed to open" << source->id();
+		mPortStatuses[port] = PortStatus::Stopped;
 		return false;
 	}
 
 	if (!mDspServer->addSource(source)) {
 		QLOG_ERROR() << "VideoSensorManager: failed to register" << source->id();
-		source->close();
-		mState.fail();
+		mPortStatuses[port] = PortStatus::Stopped;
 		return false;
 	}
 
+	mPortStatuses[port] = PortStatus::Ready;
 	return true;
 }
 
 void VideoSensorManager::closeSource(const QString &port)
 {
 	auto *source = mSources.value(port);
-	if (!source || !source->isOpen())
+	if (!source) {
 		return;
+	}
 
 	mDspServer->removeSource(source);
-	source->close();
+	mPortStatuses[port] = PortStatus::Stopped;
 }
 
 void VideoSensorManager::activateForPort(const QString &port, trikDsp::Algorithm algo,
                                          trikDsp::InArgs args, bool videoOut, bool canOpen)
 {
 	if (canOpen) {
-		if (!ensureSourceOpened(port))
-			return;
+		const auto status = mPortStatuses.value(port, PortStatus::Stopped);
+		if (status == PortStatus::Stopped || status == PortStatus::Starting) {
+			if (!openSource(port))
+				return;
+		}
 	} else {
-		auto *source = mSources.value(port);
-		if (!source || !source->isOpen())
+		if (mPortStatuses.value(port, PortStatus::Stopped) != PortStatus::Ready) {
 			return;
+		}
 	}
 
 	mDspServer->activate({mSources[port], algo, args, videoOut});
@@ -114,75 +188,81 @@ void VideoSensorManager::handleStopRequested(const QString &port, bool deinit)
 
 void VideoSensorManager::create(const QString &port, const QString &deviceClass)
 {
-	const auto devFile = mConfigurer.attributeByPort(port, "device");
-	const auto fmtStr = mConfigurer.attributeByPort(port, "format");
-
-	if (devFile.isEmpty()) {
-		mState.fail();
-		QLOG_ERROR() << "VideoSensorManager: no device for port" << port;
+	if (!checkManagerState("create")) {
 		return;
 	}
 
-	const auto w = ConfigurerHelper::configureInt(mConfigurer, mState, port, "width");
-	const auto h = ConfigurerHelper::configureInt(mConfigurer, mState, port, "height");
+	auto it = mSources.find(port);
 
-	if (!mState.isReady()) {
-		return;
+	if (it == mSources.end()) {
+		DeviceState state("dspSensor");
+
+		const auto width = ConfigurerHelper::configureInt(mConfigurer, state, port, "width");
+		const auto height = ConfigurerHelper::configureInt(mConfigurer, state, port, "height");
+
+		QString defaultDevFile;
+		QString defaultFmtStr;
+		const auto devFile = mConfigurer.attributeByPort(port, "device", &defaultDevFile);
+		const auto fmtStr = mConfigurer.attributeByPort(port, "format", &defaultFmtStr);
+
+		if (state.isFailed()) {
+			QLOG_ERROR() << "DspSensor does not contain a correct description of"
+					"the frame width and height";
+			mPortStatuses[port] = PortStatus::Stopped;
+			return;
+		}
+
+		if (defaultDevFile.isEmpty() || defaultFmtStr.isEmpty()) {
+			QLOG_ERROR() << "DspSensor does not contain a correct description of"
+					"the video format and the path to the device";
+			mPortStatuses[port] = PortStatus::Stopped;
+			return;
+		}
+
+		auto *src = mHardwareAbstractionInterface.createVideoDeviceFile(devFile,
+				static_cast<uint32_t>(width), static_cast<uint32_t>(height),
+				trikKernel::toV4l2Fourcc(trikDsp::pixelFormatFromString(fmtStr)));
+		mSources.insert(port, src);
+		mPortStatuses[port] = PortStatus::Starting;
 	}
 
-	auto &&src = mHardwareAbstractionInterface.createVideoDeviceFile(
-				devFile, static_cast<uint32_t>(w), static_cast<uint32_t>(h), trikKernel::toV4l2Fourcc(trikDsp::pixelFormatFromString(fmtStr)));
-	if (!src->open()) {
-		QLOG_ERROR() << "VideoSensorManager: failed to open" << devFile;
-		mState.fail();
-		delete src;
-		return;
-	}
-	mSources.insert(port, src);
-
-	if (deviceClass == QStringLiteral("lineSensor")) {
-		auto &&s = new LineSensor(port, mConfigurer);
-		connect(s, &LineSensor::activateRequested, this,
-		        [this, port](trikDsp::InArgs args, bool videoOut, bool canOpen) {
-			activateForPort(port, trikDsp::Algorithm::Line, args, videoOut, canOpen);
-		}, Qt::QueuedConnection);
-		connect(s, &LineSensor::stopRequested, this,
-		        [this, port](bool deinit) {
-			handleStopRequested(port, deinit);
-		}, Qt::QueuedConnection);
-		mLineSensors.insert(port, s);
-	} else if (deviceClass == QStringLiteral("colorSensor")) {
-		auto &&s = new ColorSensor(port, mConfigurer);
-		connect(s, &ColorSensor::activateRequested, this,
-		        [this, port](trikDsp::InArgs args, bool videoOut, bool canOpen) {
-			activateForPort(port, trikDsp::Algorithm::Mxn, args, videoOut, canOpen);
-		}, Qt::QueuedConnection);
-		connect(s, &ColorSensor::stopRequested, this,
-		        [this, port](bool deinit) {
-			handleStopRequested(port, deinit);
-		}, Qt::QueuedConnection);
-		mColorSensors.insert(port, s);
-	} else if (deviceClass == QStringLiteral("objectSensor")) {
-		auto &&s = new ObjectSensor(port, mConfigurer);
-		connect(s, &ObjectSensor::activateRequested, this,
-		        [this, port](trikDsp::InArgs args, bool videoOut, bool canOpen) {
-			activateForPort(port, trikDsp::Algorithm::Object, args, videoOut, canOpen);
-		}, Qt::QueuedConnection);
-		connect(s, &ObjectSensor::stopRequested, this,
-		        [this, port](bool deinit) {
-			handleStopRequested(port, deinit);
-		}, Qt::QueuedConnection);
-		mObjectSensors.insert(port, s);
-	}
+	createSensor(port, deviceClass);
 }
 
 void VideoSensorManager::shutdown(const QString &port)
 {
+	if (!checkManagerState("shutdown")) {
+		return;
+	}
+
+	{
+		auto it = mLineSensors.find(port);
+		if (it != mLineSensors.end()) {
+			auto *s = it.value();
+			mLineSensors.erase(it);
+			delete s;
+		}
+	}
+	{
+		auto it = mColorSensors.find(port);
+		if (it != mColorSensors.end()) {
+			auto *s = it.value();
+			mColorSensors.erase(it);
+			delete s;
+		}
+	}
+	{
+		auto it = mObjectSensors.find(port);
+		if (it != mObjectSensors.end()) {
+			auto *s = it.value();
+			mObjectSensors.erase(it);
+			delete s;
+		}
+	}
+
 	mDspServer->deactivate();
 
-	if (auto *src = mSources.value(port)) {
-		mDspServer->removeSource(src);
-	}
+	closeSource(port);
 
 	{
 		auto it = mSources.find(port);
@@ -192,54 +272,37 @@ void VideoSensorManager::shutdown(const QString &port)
 		}
 	}
 
-	{
-		auto it = mLineSensors.find(port);
-		if (it != mLineSensors.end()) {
-			delete it.value();
-			mLineSensors.erase(it);
-		}
-	}
-	{
-		auto it = mColorSensors.find(port);
-		if (it != mColorSensors.end()) {
-			delete it.value();
-			mColorSensors.erase(it);
-		}
-	}
-	{
-		auto it = mObjectSensors.find(port);
-		if (it != mObjectSensors.end()) {
-			delete it.value();
-			mObjectSensors.erase(it);
-		}
-	}
+	mPortStatuses.remove(port);
 }
 
 void VideoSensorManager::stop()
 {
+	if (!checkManagerState("stop")) {
+		return;
+	}
+
 	mDspServer->deactivate();
 
-	for (auto *s : mLineSensors) s->stop(false);
-	for (auto *s : mColorSensors) s->stop(false);
-	for (auto *s : mObjectSensors) s->stop(false);
+	for (const auto &port : mSources.keys()) {
+		closeSource(port);
+	}
 }
 
-QString VideoSensorManager::deviceClass() const
+QString VideoSensorManager::deviceClass()
 {
 	return QStringLiteral("dspSensor");
 }
 
-QString VideoSensorManager::deviceToPort(const QString &device) const
+QString VideoSensorManager::deviceToPort(const QString &device)
 {
 	return device;
 }
 
-bool VideoSensorManager::isVideoSensor(const QString &deviceClass) const
+bool VideoSensorManager::isVideoSensor(const QString &deviceClass)
 {
 	return deviceClass == QStringLiteral("lineSensor")
-	       || deviceClass == QStringLiteral("colorSensor")
-	       || deviceClass == QStringLiteral("objectSensor")
-	       || deviceClass == QStringLiteral("dspSensor");
+	    || deviceClass == QStringLiteral("objectSensor")
+	    || deviceClass == QStringLiteral("colorSensor");
 }
 
 LineSensorInterface *VideoSensorManager::lineSensor(const QString &port)

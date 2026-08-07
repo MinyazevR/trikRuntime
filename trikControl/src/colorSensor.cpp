@@ -9,22 +9,20 @@
 using namespace trikControl;
 
 ColorSensor::ColorSensor(const QString &port, const trikKernel::Configurer &configurer)
-	: mState("Color Sensor on " + port)
-	, mConfigurer(configurer)
-	, mPort(port)
+	: m("Color Sensor on " + port, configurer, port, trikDsp::Algorithm::Mxn)
 {
-	mM = ConfigurerHelper::configureInt(configurer, mState, port, "m");
-	mN = ConfigurerHelper::configureInt(configurer, mState, port, "n");
+	mM = ConfigurerHelper::configureInt(configurer, m.state(), port, "m");
+	mN = ConfigurerHelper::configureInt(configurer, m.state(), port, "n");
 
-	if (mM <= 0 || mN <= 0 || mState.isFailed()) {
-		mState.fail();
+	if (mM <= 0 || mN <= 0 || m.state().isFailed()) {
+		m.state().fail();
 		return;
 	}
 
-	mState.ready();
+	m.state().ready();
 
-	mInArgs.m = mM;
-	mInArgs.n = mN;
+	m.inArgs().m = mM;
+	m.inArgs().n = mN;
 
 	mReading.resize(mM);
 	for (int i = 0; i < mM; ++i) {
@@ -36,37 +34,37 @@ ColorSensor::ColorSensor(const QString &port, const trikKernel::Configurer &conf
 
 ColorSensor::~ColorSensor()
 {
-	emit stopped();
+	Q_EMIT stopped();
 }
 
 ColorSensor::Status ColorSensor::status() const
 {
-	return mState.status();
+	return m.state().status();
 }
 
 void ColorSensor::init(bool showOnDisplay)
 {
-	if (mState.isFailed())
+	if (!m.doInit(showOnDisplay))
 		return;
 
-	mVideoOut = showOnDisplay;
-	emit activateRequested(mInArgs, showOnDisplay, true);
+	Q_EMIT activateRequested(m.inArgs(), showOnDisplay, true);
 }
 
-QVector<int> ColorSensor::read(int m, int n)
+QVector<int> ColorSensor::read(int mIdx, int nIdx)
 {
-	if (m > mReading.size() || n > mReading[0].size() || m <= 0 || n <= 0) {
-		QLOG_WARN() << QString("Incorrect parameters for read: m = %1, n = %2").arg(m).arg(n);
+	if (mIdx > mReading.size() || nIdx > mReading[0].size() || mIdx <= 0 || nIdx <= 0) {
+		QLOG_WARN() << QString("Incorrect parameters for read: m = %1, n = %2").arg(mIdx).arg(nIdx);
 		return {-1, -1, -1};
 	}
 
-	return mReading[m - 1][n - 1];
+	return mReading[mIdx - 1][nIdx - 1];
 }
 
 void ColorSensor::stop(bool deinit)
 {
-	emit stopRequested(deinit);
-	emit stopped();
+	m.doStop();
+	Q_EMIT stopRequested(deinit);
+	Q_EMIT stopped();
 }
 
 void ColorSensor::onResult(trikDsp::OutArgs result)
@@ -83,3 +81,4 @@ void ColorSensor::onResult(trikDsp::OutArgs result)
 		};
 	}
 }
+

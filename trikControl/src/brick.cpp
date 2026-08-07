@@ -120,6 +120,18 @@ Brick::Brick(const trikKernel::DifferentOwnerPointer<trikHal::HardwareAbstractio
 		mGamepad.reset(new Gamepad(mConfigurer, *mHardwareAbstraction));
 	}
 
+	if (mConfigurer.isEnabled("dspSensor")) {
+		mVideoSensorManager.reset(
+			new VideoSensorManager(mConfigurer, *mHardwareAbstraction));
+
+		connect(mVideoSensorManager.data(), &VideoSensorManager::videoFrameReady,
+			this, &Brick::videoFrameReady);
+		connect(mVideoSensorManager.data(), &VideoSensorManager::videoDisplayStarted,
+			this, &Brick::videoDisplayStarted);
+		connect(mVideoSensorManager.data(), &VideoSensorManager::videoDisplayFinished,
+			this, &Brick::videoDisplayFinished);
+	}
+
 	// Accelerometer must be created before gyroscope — gyro depends on it for calibration.
 	// Cannot rely on createDevice loop: XML may list gyroscope first.
 	if (mConfigurer.ports().contains("boardAccelPort")
@@ -132,14 +144,6 @@ Brick::Brick(const trikKernel::DifferentOwnerPointer<trikHal::HardwareAbstractio
 		mGyroscope.reset(new GyroSensor("gyroscope", mConfigurer, *mHardwareAbstraction, mAccelerometer.data()
 									, "boardGyroPort"));
 	}
-
-	mVideoSensorManager.reset(new VideoSensorManager(mConfigurer, *mHardwareAbstraction));
-	connect(mVideoSensorManager.data(), &VideoSensorManager::videoFrameReady,
-	        this, &Brick::videoFrameReady);
-	connect(mVideoSensorManager.data(), &VideoSensorManager::videoDisplayStarted,
-	        this, &Brick::videoDisplayStarted);
-	connect(mVideoSensorManager.data(), &VideoSensorManager::videoDisplayFinished,
-	        this, &Brick::videoDisplayFinished);
 
 	mPlayWavFileCommand = mConfigurer.attributeByDevice("playWavFile", "command");
 	mPlayMp3FileCommand = mConfigurer.attributeByDevice("playMp3File", "command");
@@ -192,14 +196,24 @@ QString Brick::configVersion() const
 void Brick::configure(const QString &portName, const QString &deviceName)
 {
 	auto proxyDeviceName = deviceName;
-	const auto isVideoSensor = mVideoSensorManager->isVideoSensor(deviceName);
-
-	shutdownDevice(portName);
+	const auto isVideoSensor = VideoSensorManager::isVideoSensor(deviceName);
+	const auto previousDeviceIsDspSensor =
+			mConfigurer.deviceClass(portName) == VideoSensorManager::deviceClass();
 
 	if (isVideoSensor) {
-		proxyDeviceName = mVideoSensorManager->deviceClass();
+		proxyDeviceName = VideoSensorManager::deviceClass();
+		if (!mVideoSensorManager) {
+			shutdownDevice(portName);
+			return;
+		}
 	}
 
+	if (isVideoSensor && previousDeviceIsDspSensor) {
+		mVideoSensorManager->create(portName, deviceName);
+		return;
+	}
+
+	shutdownDevice(portName);
 	mConfigurer.configure(portName, proxyDeviceName);
 
 	if (isVideoSensor) {
@@ -411,17 +425,17 @@ GyroSensorInterface *Brick::gyroscope()
 
 LineSensorInterface *Brick::lineSensor(const QString &port)
 {
-	return mVideoSensorManager->lineSensor(port);
+	return mVideoSensorManager ? mVideoSensorManager->lineSensor(port): nullptr;
 }
 
 ColorSensorInterface *Brick::colorSensor(const QString &port)
 {
-	return mVideoSensorManager->colorSensor(port);
+	return mVideoSensorManager ? mVideoSensorManager->colorSensor(port): nullptr;
 }
 
 ObjectSensorInterface *Brick::objectSensor(const QString &port)
 {
-	return mVideoSensorManager->objectSensor(port);
+	return mVideoSensorManager ? mVideoSensorManager->objectSensor(port): nullptr;
 }
 
 I2cDeviceInterface* Brick::createI2cDevice(int bus, int address,
@@ -564,7 +578,7 @@ void Brick::shutdownDevice(const QString &port)
 	} else if (deviceClass == "encoder") {
 		delete mEncoders[port];
 		mEncoders.remove(port);
-	} else if (deviceClass == "dspSensor") {
+	} else if (deviceClass == "dspSensor" && mVideoSensorManager) {
 		mVideoSensorManager->shutdown(port);
 	} else if (deviceClass == "fifo") {
 		delete mFifos[port];

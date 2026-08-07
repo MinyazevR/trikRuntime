@@ -305,6 +305,8 @@ bool VideoDeviceFileBase::startStreaming()
 
 void VideoDeviceFileBase::stopStreaming()
 {
+	mNotifier.reset();
+
 	v4l2_buf_type type = V4L2_BUF_TYPE_VIDEO_CAPTURE;
 	if (ioctl(mFd, VIDIOC_STREAMOFF, &type) < 0) {
 		QLOG_ERROR() << "VideoDeviceFileBase: STREAMOFF failed:" << strerror(errno);

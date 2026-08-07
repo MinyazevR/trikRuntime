@@ -35,6 +35,17 @@ bool DeviceState::isReady() const
 	return mStatus == DeviceInterface::Status::ready;
 }
 
+bool DeviceState::isStarting() const
+{
+	return mStatus == DeviceInterface::Status::starting;
+}
+
+bool DeviceState::isStopped() const
+{
+	return mStatus == DeviceInterface::Status::stopping;
+}
+
+
 bool DeviceState::isFailed() const
 {
 	// Read operation is atomic here, so it does not require locking.

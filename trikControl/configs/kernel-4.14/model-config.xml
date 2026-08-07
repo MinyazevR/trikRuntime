@@ -130,6 +130,7 @@ Note that device, even if listed here, may fail by itself, then it also will not
 	<!-- Optional modules -->
 	<gamepad />
 	<mailbox />
+	<dspSensor />
 
 	<!-- Example of custom FIFO sensor -->
 	<!--
@@ -145,5 +146,4 @@ Note that device, even if listed here, may fail by itself, then it also will not
         <irCameraPort>
                 <irCamera />
         </irCameraPort>
-
 </config>

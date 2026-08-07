@@ -7,41 +7,38 @@
 using namespace trikControl;
 
 ObjectSensor::ObjectSensor(const QString &port, const trikKernel::Configurer &configurer)
-	: mState("Object Sensor on " + port)
-	, mConfigurer(configurer)
-	, mPort(port)
+	: m("Object Sensor on " + port, configurer, port, trikDsp::Algorithm::Object)
 {
 	mToleranceFactor = ConfigurerHelper::configureChildReal(
-	                       configurer, mState, port, "objectSensor", "toleranceFactor");
+	                       configurer, m.state(), port, "objectSensor", "toleranceFactor");
 
-	if (!mState.isFailed())
-		mState.ready();
+	if (!m.state().isFailed())
+		m.state().ready();
 }
 
 ObjectSensor::~ObjectSensor()
 {
-	emit stopped();
+	Q_EMIT stopped();
 }
 
 ObjectSensor::Status ObjectSensor::status() const
 {
-	return mState.status();
+	return m.state().status();
 }
 
 void ObjectSensor::init(bool showOnDisplay)
 {
-	if (mState.isFailed())
+	if (!m.doInit(showOnDisplay))
 		return;
 
-	mVideoOut = showOnDisplay;
-	emit activateRequested(mInArgs, showOnDisplay, true);
+	Q_EMIT activateRequested(m.inArgs(), showOnDisplay, true);
 }
 
 void ObjectSensor::detect()
 {
 	if (status() == Status::ready) {
-		mInArgs.autoDetect = true;
-		emit activateRequested(mInArgs, mVideoOut, false);
+		m.inArgs().autoDetect = true;
+		Q_EMIT activateRequested(m.inArgs(), m.videoOut(), false);
 	}
 }
 
@@ -52,8 +49,9 @@ QVector<int> ObjectSensor::read()
 
 void ObjectSensor::stop(bool deinit)
 {
-	emit stopRequested(deinit);
-	emit stopped();
+	m.doStop();
+	Q_EMIT stopRequested(deinit);
+	Q_EMIT stopped();
 }
 
 QVector<int> ObjectSensor::getDetectParameters() const
@@ -65,9 +63,9 @@ void ObjectSensor::onResult(trikDsp::OutArgs result)
 {
 	bool hsvUpdated = false;
 
-	if (mInArgs.autoDetect) {
-		mInArgs.autoDetect = false;
-		mInArgs.params = result.detected;
+	if (m.inArgs().autoDetect) {
+		m.inArgs().autoDetect = false;
+		m.inArgs().params = result.detected;
 		hsvUpdated = true;
 	}
 
@@ -83,6 +81,7 @@ void ObjectSensor::onResult(trikDsp::OutArgs result)
 			static_cast<int>(result.detected.value.from),
 			static_cast<int>(result.detected.value.to)
 		};
-		emit activateRequested(mInArgs, mVideoOut, false);
+		Q_EMIT activateRequested(m.inArgs(), m.videoOut(), false);
 	}
 }
+

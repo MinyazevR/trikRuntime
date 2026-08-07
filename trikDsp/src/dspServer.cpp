@@ -14,7 +14,6 @@ DspServer::DspServer(uint16_t rprocId, QObject *parent)
 	, d(new Impl)
 {
 	d->rprocId = rprocId;
-	init();
 }
 
 DspServer::~DspServer()
@@ -47,12 +46,15 @@ void DspServer::removeSource(trikHal::VideoDeviceFileInterface *source)
 	QMetaObject::invokeMethod(this, [this, source]() {
 		disconnect(source, nullptr, this, nullptr);
 		source->stopStreaming();
+		source->close();
 	}, Qt::BlockingQueuedConnection);
 }
 
 void DspServer::activate(const DspChannel &channel)
 {
 	QMetaObject::invokeMethod(this, [this, channel]() {
+		if (d->channel().videoOut)
+			emit videoDisplayFinished();
 		d->setChannel(channel);
 		if (channel.videoOut)
 			emit videoDisplayStarted();
@@ -129,17 +131,18 @@ void DspServer::init()
 	loop.exec();
 
 	if (!ladOk) {
-		emit errorOccurred(QStringLiteral("LAD daemon start failed"));
+		Q_EMIT errorOccurred(QStringLiteral("LAD daemon start failed"));
 		return;
 	}
 
 	if (!d->startIpc()) {
-		emit errorOccurred(QStringLiteral("Ipc_start failed"));
+		Q_EMIT errorOccurred(QStringLiteral("Ipc_start failed"));
 		return;
 	}
 
-	d->setupMessageQueue();
-	d->mapSharedBuffers();
+	if (d->setupMessageQueue() && d->mapSharedBuffers()) {
+		Q_EMIT successfullyInited();
+	};
 }
 
 }

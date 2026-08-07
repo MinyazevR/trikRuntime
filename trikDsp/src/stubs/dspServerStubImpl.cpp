@@ -16,9 +16,10 @@ bool DspServer::Impl::startIpc()
 	return true;
 }
 
-void DspServer::Impl::setupMessageQueue()
+bool DspServer::Impl::setupMessageQueue()
 {
 	QLOG_INFO() << "DspServer: MessageQ setup skipped (stub)";
+	return true;
 }
 
 void DspServer::Impl::destroyMessageQueue()
@@ -26,9 +27,10 @@ void DspServer::Impl::destroyMessageQueue()
 	QLOG_INFO() << "DspServer: MessageQ destroy skipped (stub)";
 }
 
-void DspServer::Impl::mapSharedBuffers()
+bool DspServer::Impl::mapSharedBuffers()
 {
 	QLOG_INFO() << "DspServer: buffer mapping skipped (stub)";
+	return true;
 }
 
 void DspServer::Impl::registerAlgorithm(Algorithm algo, const AlgoDescriptor &desc)

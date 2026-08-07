@@ -64,7 +64,7 @@ equal to its class name.
 	<!-- A list of known devices. -->
 	<deviceClasses>
                 <!-- URI protocol: v4l2, file, qtmultimedia  -->
-                <camera type="v4l2" src="/dev/video0" />
+		<camera type="v4l2" src="/dev/video2" />
 		<servoMotor period="20000000" invert="false" controlMin="-90" controlMax="90" />
 		<pwmCapture />
 		<powerMotor period="4096" invert="false" measures="(0;0)(100;100)" />
@@ -180,10 +180,10 @@ equal to its class name.
 	</devicePorts>
 
 	<deviceTypes>
-        <angularServomotor180 class="servoMotor" min="500000" max="2500000" zero="1500000" stop="0"
+		<angularServomotor180 class="servoMotor" min="500000" max="2500000" zero="1500000" stop="0"
 		        controlMin="-90" controlMax="90" />
 
-        <angularServomotor270 class="servoMotor" min="500000" max="2500000" zero="1500000" stop="0"
+		<angularServomotor270 class="servoMotor" min="500000" max="2500000" zero="1500000" stop="0"
 		        controlMin="-135" controlMax="135" />
 
 		<continuousRotationServomotor class="servoMotor" min="700000" max="2300000" zero="1500000" stop="0"
@@ -228,12 +228,12 @@ equal to its class name.
 		<gyroscope class="iioDevice" deviceFile="/dev/iio:device1" scanType="le:s16/16>>0" modelNameFile="/sys/bus/iio/devices/iio:device1/name"/>
 	</deviceTypes>
 
-<deviceGroups>
-<dspSensor>
-<lineSensor/>
-<objectSensor/>
-<colorSensor/>
-</dspSensor>
+	<deviceGroups>
+		<dspSensor>
+			<lineSensor/>
+			<objectSensor/>
+			<colorSensor/>
+		</dspSensor>
 	</deviceGroups>
 	
 	<!-- Format for playSound command, used to play .wav files. %1 designates file name to be played. -->
