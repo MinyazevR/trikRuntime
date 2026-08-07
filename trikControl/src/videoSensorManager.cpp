@@ -207,14 +207,14 @@ void VideoSensorManager::create(const QString &port, const QString &deviceClass)
 
 		if (state.isFailed()) {
 			QLOG_ERROR() << "DspSensor does not contain a correct description of"
-					"the frame width and height";
+					" the frame width and height";
 			mPortStatuses[port] = PortStatus::Stopped;
 			return;
 		}
 
-		if (defaultDevFile.isEmpty() || defaultFmtStr.isEmpty()) {
+		if (devFile.isEmpty() || fmtStr.isEmpty()) {
 			QLOG_ERROR() << "DspSensor does not contain a correct description of"
-					"the video format and the path to the device";
+					" the video format and the path to the device";
 			mPortStatuses[port] = PortStatus::Stopped;
 			return;
 		}
