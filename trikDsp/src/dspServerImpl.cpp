@@ -75,8 +75,11 @@ MmapResult physToVirt(void *physAddr)
                          UInt32 msgSize, enum trik_cmd cmd)
 {
 	auto *msg = reinterpret_cast<::trik_msg *>(MessageQ_alloc(heapId, msgSize));
-	if (!msg)
+	if (!msg) {
+		QLOG_ERROR() << "DspServer: MessageQ_alloc failed (heap" << heapId
+		             << "size" << msgSize << "cmd" << cmd << ")";
 		return nullptr;
+	}
 	msg->cmd = cmd;
 	MessageQ_setReplyQueue(hostQue, reinterpret_cast<MessageQ_Msg>(msg));
 	return msg;
@@ -89,10 +92,14 @@ DspServer::Impl::~Impl()
 	destroyMessageQueue();
 	Ipc_stop();
 
-	if (mMmapIn)
+	if (mMmapIn) {
+		QLOG_INFO() << "DspServer: unmapping input buffer";
 		munmap(mMmapIn, mMmapInLen);
-	if (mMmapOut)
+	}
+	if (mMmapOut) {
+		QLOG_INFO() << "DspServer: unmapping output buffer";
 		munmap(mMmapOut, mMmapOutLen);
+	}
 
 	QLOG_INFO() << "DspServer: destroyed";
 }
@@ -112,8 +119,10 @@ bool DspServer::Impl::startIpc()
 
 ::trik_msg *DspServer::Impl::sendAndWaitForResponse(::trik_msg *msg)
 {
-	if (MessageQ_put(mSlaveQue, reinterpret_cast<MessageQ_Msg>(msg)) < 0)
+	if (MessageQ_put(mSlaveQue, reinterpret_cast<MessageQ_Msg>(msg)) < 0) {
+		QLOG_ERROR() << "DspServer: MessageQ_put failed for cmd" << msg->cmd;
 		return nullptr;
+	}
 
 	::trik_msg *res = nullptr;
 	MessageQ_get(mHostQue, reinterpret_cast<MessageQ_Msg *>(&res),
@@ -167,10 +176,12 @@ bool DspServer::Impl::setupMessageQueue()
 void DspServer::Impl::destroyMessageQueue()
 {
 	if (mSlaveQue != MessageQ_INVALIDMESSAGEQ) {
+		QLOG_INFO() << "DspServer: closing slave message queue";
 		MessageQ_close(&mSlaveQue);
 		mSlaveQue = MessageQ_INVALIDMESSAGEQ;
 	}
 	if (mHostQue) {
+		QLOG_INFO() << "DspServer: deleting host message queue";
 		MessageQ_delete(&mHostQue);
 		mHostQue = nullptr;
 	}
@@ -195,12 +206,14 @@ bool DspServer::Impl::mapSharedBuffers()
 	auto outMap = physToVirt(initRes->dsp_out_buffer);
 
 	if (inMap.data) {
+		QLOG_INFO() << "DspServer: mapped DSP input buffer at" << inMap.data;
 		mDspIn.start = inMap.data;
 		mDspIn.length = BUFFER_SIZE;
 		mMmapIn = inMap.base;
 		mMmapInLen = inMap.len;
 	}
 	if (outMap.data) {
+		QLOG_INFO() << "DspServer: mapped DSP output buffer at" << outMap.data;
 		mDspOut.start = outMap.data;
 		mDspOut.length = BUFFER_SIZE;
 		mMmapOut = outMap.base;
@@ -256,14 +269,18 @@ bool DspServer::Impl::step(const InArgs &in, OutArgs &out)
 {
 	auto *req = reinterpret_cast<struct trik_res_step_msg *>(
 	    allocRequest(mHostQue, TRIK_MSG_HEAP_ID, TRIK_MSG_SIZE, TRIK_CMD_STEP));
-	if (!req)
+	if (!req) {
+		QLOG_ERROR() << "DspServer: failed to allocate STEP msg";
 		return false;
+	}
 
 	req->in_args = toDspInArgs(in);
 
 	auto *res = sendAndWaitForResponse(&req->header);
-	if (!res)
+	if (!res) {
+		QLOG_ERROR() << "DspServer: no response to STEP";
 		return false;
+	}
 
 	out = fromDspOutArgs(reinterpret_cast<struct trik_res_step_msg *>(res)->out_args);
 
@@ -277,11 +294,15 @@ bool DspServer::Impl::processFrame(trikHal::VideoDeviceFileInterface &source, co
 	const uint8_t *data = nullptr;
 	size_t size = 0;
 
-	if (!source.capture(data, size))
+	if (!source.capture(data, size)) {
+		QLOG_WARN() << "DspServer: capture failed for source" << source.id();
 		return false;
+	}
 
 	const auto dspAlgo = toDspAlgo(channel.algorithm);
 	if (dspAlgo != mCurrentAlgo) {
+		QLOG_INFO() << "DspServer: switching algorithm from" << mCurrentAlgo
+		            << "to" << dspAlgo;
 		AlgoDescriptor desc = {fromV4l2Fourcc(source.actualFourcc()), source.bytesPerLine()};
 		registerAlgorithm(channel.algorithm, desc);
 		mCurrentAlgo = dspAlgo;
@@ -292,6 +313,8 @@ bool DspServer::Impl::processFrame(trikHal::VideoDeviceFileInterface &source, co
 	const bool ok = step(channel.inArgs, out);
 
 	if (channel.videoOut) {
+		QLOG_INFO() << "DspServer: filling video frame from DSP output buffer"
+		            << source.id();
 		videoFrame->data = static_cast<const uint8_t *>(mDspOut.start);
 		videoFrame->size = mDspOut.length;
 		videoFrame->width = source.actualWidth();

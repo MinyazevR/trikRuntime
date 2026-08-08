@@ -53,11 +53,15 @@ void DspServer::removeSource(trikHal::VideoDeviceFileInterface *source)
 void DspServer::activate(const DspChannel &channel)
 {
 	QMetaObject::invokeMethod(this, [this, channel]() {
-		if (d->channel().videoOut)
+		if (d->channel().videoOut) {
+			QLOG_INFO() << "DspServer: deactivating video display for activation";
 			emit videoDisplayFinished();
+		}
 		d->setChannel(channel);
-		if (channel.videoOut)
+		if (channel.videoOut) {
+			QLOG_INFO() << "DspServer: activating video display for new channel";
 			emit videoDisplayStarted();
+		}
 	}, Qt::QueuedConnection);
 }
 
@@ -66,21 +70,28 @@ void DspServer::deactivate()
 	QMetaObject::invokeMethod(this, [this]() {
 		const bool wasVideoOut = d->channel().videoOut;
 		d->clearChannel();
-		if (wasVideoOut)
+		if (wasVideoOut) {
+			QLOG_INFO() << "DspServer: deactivating channel, was video display";
 			emit videoDisplayFinished();
+		}
 	}, Qt::QueuedConnection);
 }
 
 void DspServer::onFrameReady()
 {
 	auto *source = qobject_cast<trikHal::VideoDeviceFileInterface *>(sender());
-	if (!source || source != d->channelSource())
+	if (!source || source != d->channelSource()) {
+		QLOG_WARN() << "DspServer: dropped frame from source"
+		            << (source ? source->id() : "null")
+		            << "expected" << (d->channelSource() ? d->channelSource()->id() : "null");
 		return;
+	}
 
 	OutArgs out;
 	VideoFrame videoFrame;
 	const bool needVideo = d->channel().videoOut;
 	if (d->processFrame(*source, d->channel(), out, needVideo ? &videoFrame : nullptr)) {
+		QLOG_INFO() << "DspServer: frame processed for source" << source->id();
 		emit resultReady(source->id(), d->channelAlgo(), out);
 		if (needVideo && videoFrame.data) {
 			const auto frameData = QByteArray(reinterpret_cast<const char *>(videoFrame.data),
@@ -88,6 +99,8 @@ void DspServer::onFrameReady()
 			emit videoFrameReady(frameData,
 			                     videoFrame.width, videoFrame.height);
 		}
+	} else {
+		QLOG_WARN() << "DspServer: processFrame failed for source" << source->id();
 	}
 }
 
@@ -131,17 +144,22 @@ void DspServer::init()
 	loop.exec();
 
 	if (!ladOk) {
+		QLOG_ERROR() << "DspServer: LAD daemon start failed, aborting init";
 		Q_EMIT errorOccurred(QStringLiteral("LAD daemon start failed"));
 		return;
 	}
 
 	if (!d->startIpc()) {
+		QLOG_ERROR() << "DspServer: Ipc_start failed, aborting init";
 		Q_EMIT errorOccurred(QStringLiteral("Ipc_start failed"));
 		return;
 	}
 
 	if (d->setupMessageQueue() && d->mapSharedBuffers()) {
+		QLOG_INFO() << "DspServer: message queue and shared buffers set up successfully";
 		Q_EMIT successfullyInited();
+	} else {
+		QLOG_ERROR() << "DspServer: message queue or shared buffer setup failed";
 	};
 }
 

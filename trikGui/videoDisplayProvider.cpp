@@ -1,6 +1,7 @@
 #include "videoDisplayProvider.h"
 
 #include <trikControl/brickInterface.h>
+#include <QsLog.h>
 
 namespace trikGui {
 
@@ -21,9 +22,10 @@ VideoDisplayProvider::VideoDisplayProvider(trikControl::BrickInterface &brick)
 QImage VideoDisplayProvider::requestImage(const QString &id, QSize *size,
 					   const QSize &requestedSize)
 {
-	Q_UNUSED(id)
 	Q_UNUSED(requestedSize)
 
+	QLOG_DEBUG() << "VideoDisplayProvider: requestImage id" << id
+	             << "size" << (size ? mFrame.size() : QSize());
 	if (size) {
 		*size = mFrame.size();
 	}
@@ -32,8 +34,11 @@ QImage VideoDisplayProvider::requestImage(const QString &id, QSize *size,
 
 void VideoDisplayProvider::updateFrame(QByteArray data, uint32_t width, uint32_t height)
 {
-	if (data.isEmpty() || width == 0 || height == 0)
+	if (data.isEmpty() || width == 0 || height == 0) {
+		QLOG_WARN() << "VideoDisplayProvider: updateFrame skipped — empty data or zero dimensions"
+		            << "dataSize" << data.size() << "width" << width << "height" << height;
 		return;
+	}
 
 	auto *buf = new QByteArray(std::move(data));
 	mFrame = QImage(reinterpret_cast<const uchar *>(buf->constData()),
