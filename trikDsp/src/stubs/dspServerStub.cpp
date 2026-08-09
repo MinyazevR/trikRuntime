@@ -4,6 +4,18 @@
 
 #include <QsLog.h>
 
+namespace {
+
+static const int _registerDspMetaTypes = []() {
+	qRegisterMetaType<trikDsp::Algorithm>("trikDsp::Algorithm");
+	qRegisterMetaType<trikDsp::InArgs>("trikDsp::InArgs");
+	qRegisterMetaType<trikDsp::OutArgs>("trikDsp::OutArgs");
+	qRegisterMetaType<uint32_t>("uint32_t");
+	return 0;
+}();
+
+} // namespace
+
 namespace trikDsp {
 
 DspServer::DspServer(uint16_t rprocId, QObject *parent)
