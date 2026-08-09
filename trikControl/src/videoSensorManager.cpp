@@ -27,6 +27,7 @@ VideoSensorManager::VideoSensorManager(const trikKernel::Configurer &configurer,
 	, mState("VideoSensorManager")
 {
 	qRegisterMetaType<trikDsp::InArgs>();
+	qRegisterMetaType<trikDsp::OutArgs>();
 	qRegisterMetaType<trikDsp::Algorithm>();
 	qRegisterMetaType<uint32_t>();
 
@@ -142,8 +143,16 @@ bool VideoSensorManager::openSource(const QString &port)
 		return false;
 	}
 
+	if (!source->startStreaming()) {
+		QLOG_ERROR() << "VideoSensorManager: startStreaming failed for" << source->id();
+		mPortStatuses[port] = PortStatus::Stopped;
+		return false;
+	}
+	QLOG_INFO() << "VideoSensorManager: streaming started for" << source->id();
+
 	if (!mDspServer->addSource(source)) {
 		QLOG_ERROR() << "VideoSensorManager: failed to register" << source->id();
+		source->stopStreaming();
 		mPortStatuses[port] = PortStatus::Stopped;
 		return false;
 	}
@@ -163,6 +172,10 @@ void VideoSensorManager::closeSource(const QString &port)
 	}
 
 	mDspServer->removeSource(source);
+	source->stopStreaming();
+	QLOG_INFO() << "VideoSensorManager: streaming stopped for" << source->id();
+	source->close();
+	QLOG_INFO() << "VideoSensorManager: source closed for" << source->id();
 	mPortStatuses[port] = PortStatus::Stopped;
 }
 
@@ -233,6 +246,7 @@ void VideoSensorManager::create(const QString &port, const QString &deviceClass)
 		            << "device" << devFile << "format" << fmtStr
 		            << "fourcc" << Qt::hex << trikKernel::toV4l2Fourcc(trikDsp::pixelFormatFromString(fmtStr))
 		            << "size" << width << "x" << height;
+		src->moveToThread(thread());
 		mSources.insert(port, src);
 		mPortStatuses[port] = PortStatus::Starting;
 	}
@@ -273,15 +287,17 @@ void VideoSensorManager::shutdown(const QString &port)
 
 	mDspServer->deactivate();
 
-	closeSource(port);
+	QMetaObject::invokeMethod(this, [this, port]() {
+		closeSource(port);
+	}, Qt::BlockingQueuedConnection);
 
-	{
+	QMetaObject::invokeMethod(this, [this, port]() {
 		auto it = mSources.find(port);
 		if (it != mSources.end()) {
 			delete it.value();
 			mSources.erase(it);
 		}
-	}
+	}, Qt::BlockingQueuedConnection);
 
 	mPortStatuses.remove(port);
 }
@@ -295,7 +311,9 @@ void VideoSensorManager::stop()
 	mDspServer->deactivate();
 
 	for (const auto &port : mSources.keys()) {
-		closeSource(port);
+		QMetaObject::invokeMethod(this, [this, port]() {
+			closeSource(port);
+		}, Qt::BlockingQueuedConnection);
 	}
 }
 

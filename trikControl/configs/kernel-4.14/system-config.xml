@@ -168,8 +168,8 @@ equal to its class name.
                 <rangeSensor port="D2" eventFile="/dev/input/by-path/platform-trik_jd2-event" module="hcsr04" />
                 <rangeSensor port="D3" eventFile="/dev/input/by-path/platform-trik_jf1-event" module="hcsr04" />
 		<!-- <digitalSensor port="D3" deviceFile="/sys/devices/platform/da850_trik/sensor_dc" /> -->
-		<dspSensor port="video1" device="/dev/video2" format="nv16" width="320" height="240"/>
-		<dspSensor port="video2" device="/dev/video1" format="nv16" width="320" height="240"/>
+		<dspSensor port="video1" device="/dev/video2" format="yuv422" width="320" height="240"/>
+		<dspSensor port="video2" device="/dev/video1" format="yuv422" width="320" height="240"/>
                 <camera port="video1" />
                 <camera port="video2" />
 		<fifo port="soundSensor" file="/home/root/trik/soundSensor.fifo" />

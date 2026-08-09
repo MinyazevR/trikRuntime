@@ -27,13 +27,9 @@ void DspServer::init()
 
 bool DspServer::addSource(trikHal::VideoDeviceFileInterface *source)
 {
-	QLOG_INFO() << "DspServer: addSource (stub)";
+	QLOG_INFO() << "DspServer: addSource (stub)" << source->id();
 	bool ok = false;
 	QMetaObject::invokeMethod(this, [&]() {
-		if (!source->startStreaming()) {
-			QLOG_ERROR() << "DspServer: startStreaming failed for" << source->id();
-			return;
-		}
 		connect(source, &trikHal::VideoDeviceFileInterface::frameReady,
 		        this, &DspServer::onFrameReady);
 		ok = true;
@@ -43,11 +39,8 @@ bool DspServer::addSource(trikHal::VideoDeviceFileInterface *source)
 
 void DspServer::removeSource(trikHal::VideoDeviceFileInterface *source)
 {
-	QLOG_INFO() << "DspServer: removeSource (stub)";
-	QMetaObject::invokeMethod(this, [this, source]() {
-		disconnect(source, nullptr, this, nullptr);
-		source->stopStreaming();
-	}, Qt::BlockingQueuedConnection);
+	QLOG_INFO() << "DspServer: removeSource (stub)" << source->id();
+	disconnect(source, nullptr, this, nullptr);
 }
 
 void DspServer::activate(const DspChannel &channel)

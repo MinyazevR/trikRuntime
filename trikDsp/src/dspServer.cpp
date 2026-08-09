@@ -28,25 +28,24 @@ DspServer::~DspServer()
 
 bool DspServer::addSource(trikHal::VideoDeviceFileInterface *source)
 {
-	if (!source->startStreaming()) {
-		QLOG_ERROR() << "DspServer: startStreaming failed for" << source->id();
-		return false;
-	}
-
 	bool ok = false;
 	QMetaObject::invokeMethod(this, [&]() {
 		connect(source, &trikHal::VideoDeviceFileInterface::frameReady,
 		        this, &DspServer::onFrameReady, Qt::QueuedConnection);
 		ok = true;
 	}, Qt::BlockingQueuedConnection);
+	if (ok) {
+		QLOG_INFO() << "DspServer: subscribed to" << source->id();
+	} else {
+		QLOG_ERROR() << "DspServer: failed to subscribe to" << source->id();
+	}
 	return ok;
 }
 
 void DspServer::removeSource(trikHal::VideoDeviceFileInterface *source)
 {
 	disconnect(source, nullptr, this, nullptr);
-	source->stopStreaming();
-	source->close();
+	QLOG_INFO() << "DspServer: unsubscribed from" << source->id();
 }
 
 void DspServer::activate(const DspChannel &channel)
