@@ -1,6 +1,7 @@
 #pragma once
 
 #include <QtCore/QString>
+#include <QMetaType>
 #include <cstdint>
 #include <trikKernel/videoUtils.h>
 
@@ -55,4 +56,6 @@ struct OutArgs {
 	uint32_t colors[9] = {};    ///< MxN colour grid (MxnSensor only)
 };
 
-}
+} // namespace trikDsp
+
+Q_DECLARE_METATYPE(trikDsp::InArgs)

@@ -305,6 +305,9 @@ bool VideoDeviceFileBase::startStreaming()
 
 void VideoDeviceFileBase::stopStreaming()
 {
+	if (!mStreaming || mFd < 0)
+		return;
+
 	mNotifier.reset();
 
 	v4l2_buf_type type = V4L2_BUF_TYPE_VIDEO_CAPTURE;

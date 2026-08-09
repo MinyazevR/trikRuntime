@@ -26,6 +26,8 @@ VideoSensorManager::VideoSensorManager(const trikKernel::Configurer &configurer,
 	, mHardwareAbstractionInterface(hardwareAbstraction)
 	, mState("VideoSensorManager")
 {
+	qRegisterMetaType<trikDsp::InArgs>();
+
 	mDspThread.reset(new QThread);
 	mDspThread->setObjectName(QStringLiteral("DspServer"));
 
@@ -150,6 +152,9 @@ bool VideoSensorManager::openSource(const QString &port)
 
 void VideoSensorManager::closeSource(const QString &port)
 {
+	if (mPortStatuses.value(port) != PortStatus::Ready)
+		return;
+
 	auto *source = mSources.value(port);
 	if (!source) {
 		return;
