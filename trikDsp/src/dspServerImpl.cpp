@@ -27,6 +27,11 @@ namespace {
 constexpr int PAGE_SIZE = 4096;
 constexpr int MSG_QUEUE_RETRIES = 10;
 
+constexpr int DSP_IMG_WIDTH = 320;
+constexpr int DSP_IMG_HEIGHT = 240;
+constexpr int DSP_OUT_WIDTH = DSP_IMG_HEIGHT;
+constexpr int DSP_OUT_HEIGHT = DSP_IMG_HEIGHT;  // = BUFFER_SIZE_FOR_FB / (240*2)
+
 enum trik_cmd algoToDspCmd(enum trik_cv_algorithm algo)
 {
 	switch (algo) {
@@ -309,9 +314,9 @@ bool DspServer::Impl::processFrame(const uint8_t *data, size_t size, const DspCh
 		QLOG_INFO() << "DspServer: filling video frame from DSP output buffer"
 		            << channel.sourceId;
 		videoFrame->data = static_cast<const uint8_t *>(mDspOut.start);
-		videoFrame->size = mDspOut.length;
-		videoFrame->width = channel.width;
-		videoFrame->height = channel.height;
+		videoFrame->size = DSP_OUT_WIDTH * DSP_OUT_HEIGHT * 2;
+		videoFrame->width = DSP_OUT_WIDTH;
+		videoFrame->height = DSP_OUT_HEIGHT;
 	}
 
 	return ok;
