@@ -8,10 +8,6 @@
 #include "dspTypes.h"
 #include "trikDspDeclSpec.h"
 
-namespace trikHal {
-class VideoDeviceFileInterface;
-}
-
 namespace trikDsp {
 
 /// ARM ↔ DSP bridge via TI IPC MessageQ over RPMsg.
@@ -34,10 +30,9 @@ namespace trikDsp {
 ///
 /// ## Single-channel design
 ///
-/// DspServer processes frames for ALL registered sources, but only ONE channel
-/// (source + algorithm pair) is active at a time.  When a new channel is
-/// activated the old one is silently replaced.  Frames from non-active sources
-/// are ignored (source != channelSource check in onFrameReady).
+/// DspServer processes frames from one active channel at a time.
+/// When a new channel is activated the old one is silently replaced.
+/// Frames from non-active sources are dropped.
 ///
 /// ## Signal contract for video display
 ///
@@ -47,21 +42,12 @@ namespace trikDsp {
 /// videoFrameReady() carries a deep-copied QByteArray of the DSP output buffer
 /// (RGB565) — safe across thread boundaries.
 ///
-/// ## Ownership
-///
-/// DspServer does NOT own video sources — the caller is responsible for their
-/// lifetime.  addSource() starts streaming and subscribes to frameReady();
-/// removeSource() stops streaming, closes and unsubscribes.  The source must
-/// outlive its registration on DspServer.
-///
 /// ## Concurrency
 ///
-/// - addSource() / removeSource(): BlockingQueuedConnection — blocks caller
-///   until the DspServer thread processes the request.  DspServer MUST live in
-///   a thread with a running event loop.
+/// - init(): runs in caller's thread, blocking.
 /// - activate() / deactivate(): QueuedConnection — non-blocking.
-/// - onFrameReady(): runs in the DspServer thread.  Frame signals from sources
-///   travel via queued connection (AutoConnection across threads).
+/// - processFrameData(): MUST be called from DspServer's thread via
+///   QMetaObject::invokeMethod with Qt::QueuedConnection.
 /// - mLadProcess: value member.  Started in init() (caller's thread), stays in
 ///   that thread regardless of moveToThread().  terminate() is thread-safe.
 class TRIKDSP_EXPORT DspServer : public QObject
@@ -78,12 +64,6 @@ public:
 	explicit DspServer(uint16_t rprocId, QObject *parent = nullptr);
 
 	/// Terminates the LAD daemon and destroys IPC resources.
-	///
-	/// If init() was called: mLadProcess.terminate() (3s) → kill() (1s).
-	/// If init() was never called: terminate() is a no-op (process not started).
-	///
-	/// Impl destructor always calls destroyMessageQueue() → Ipc_stop() →
-	/// munmap().  All three are safe with partial/zero initialisation.
 	~DspServer() override;
 
 	/// Synchronously bring up the IPC stack.  BLOCKING.
@@ -95,34 +75,8 @@ public:
 	///
 	/// @warning Caller MUST connect to errorOccurred and successfullyInited
 	///          BEFORE calling init().  These signals fire synchronously during
-	///          this call.  Do NOT destroy DspServer from inside errorOccurred
-	///          — init() is still on the stack.
-	///
-	/// @post If successful: DSP is ready, shared buffers are mapped, MessageQ
-	///       is open. If failed: nothing allocated (all partial resources are
-	///       cleaned up in ~Impl()).
+	///          this call.
 	void init();
-
-	/// Register a video source.  BLOCKS the calling thread (BlockingQueued).
-	///
-	/// - Calls source->startStreaming() — source must already be open()'d.
-	/// - Connects source->frameReady to internal onFrameReady slot.
-	///
-	/// @return true on success, false if startStreaming failed.
-	/// @note  Idempotency: NOT guaranteed.  Calling addSource twice on the same
-	///        source results in duplicate frameReady connections.  Caller
-	///        (VideoSensorManager) must guard against this.
-	bool addSource(trikHal::VideoDeviceFileInterface *source);
-
-	/// Unregister a video source.  BLOCKS the calling thread (BlockingQueued).
-	///
-	/// - Disconnects ALL frameReady signals from this source to DspServer.
-	/// - Calls source->stopStreaming() then source->close().
-	/// - The source pointer is NOT deleted — caller owns it.
-	///
-	/// @note  Safe to call on a source that was never added (no-op).
-	///        Safe to call on a source that is already stopped/closed.
-	void removeSource(trikHal::VideoDeviceFileInterface *source);
 
 	/// Activate a DSP channel.  Non-blocking (QueuedConnection).
 	///
@@ -136,35 +90,36 @@ public:
 	/// Deactivate the current channel.  Non-blocking (QueuedConnection).
 	///
 	/// Clears the active channel.  If it had videoOut=true, emits
-	/// videoDisplayFinished().  Idempotent — repeated calls are no-ops.
+	/// videoDisplayFinished().  Idempotent.
 	///
 	/// Thread-safe — can be called from any thread.
 	void deactivate();
+
+	/// Process a video frame from the given source.
+	/// MUST be called from the DspServer thread (use invokeMethod).
+	///
+	/// Drops frames from non-active sources.
+	/// On success, emits resultReady() and optionally videoFrameReady().
+	Q_INVOKABLE void processFrameData(const QString &sourceId,
+	                                  const uint8_t *data, size_t size);
 
 Q_SIGNALS:
 	/// @name DSP processing signals
 	/// @{
 
 	/// Emitted from the worker thread after each successfully processed frame.
-	/// @param sourceId  unique identifier of the video source (device path).
-	/// @param algorithm the algorithm that produced this result.
-	/// @param result    processed output (coordinates, detected colours, etc.).
 	void resultReady(const QString &sourceId,
 	                 Algorithm algorithm,
 	                 OutArgs result);
 
 	/// Emitted when videoOut=true after DSP processing.
-	/// Carries a deep-copied QByteArray of the DSP output buffer (RGB565),
-	/// safe to pass across thread boundaries.
 	void videoFrameReady(const QByteArray &data,
 	                     uint32_t width, uint32_t height);
 
 	/// Emitted when a channel with videoOut=true is deactivated or replaced.
-	/// Consumer (trikGui) should clear the display.
 	void videoDisplayFinished();
 
 	/// Emitted when a channel with videoOut=true is activated.
-	/// Consumer (trikGui) should prepare the display for DSP frames.
 	void videoDisplayStarted();
 
 	/// @}
@@ -173,26 +128,17 @@ Q_SIGNALS:
 	/// @{
 
 	/// Emitted synchronously from init() when IPC initialisation fails.
-	/// The object is in a permanently failed state — destroy it.
 	void errorOccurred(const QString &message);
 
 	/// Emitted synchronously from init() when IPC initialisation succeeds.
-	/// The object is ready for addSource/activate/deactivate.
 	void successfullyInited();
 
 	/// @}
-
-private Q_SLOTS:
-	void onFrameReady();
 
 private:
 	class Impl;
 	QScopedPointer<Impl> d;
 
-	/// QProcess for the LAD daemon (lad_omapl138).  Value member — thread
-	/// affinity follows the thread where init() is called.  Not moved by
-	/// moveToThread() (not a parented child).  terminate() in destructor
-	/// is called from the caller's thread regardless.
 	QProcess mLadProcess;
 };
 

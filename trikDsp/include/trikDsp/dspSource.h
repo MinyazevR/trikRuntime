@@ -3,7 +3,6 @@
 #include <QtCore/QString>
 
 #include "dspTypes.h"
-#include <trikHal/VideoDeviceFileInterface.h>
 
 namespace trikDsp {
 
@@ -14,10 +13,12 @@ struct AlgoDescriptor {
 };
 
 struct DspChannel {
-	trikHal::VideoDeviceFileInterface *source = nullptr;
+	QString sourceId;
 	Algorithm algorithm = Algorithm::None;
 	InArgs inArgs = {};
 	bool videoOut = false;
+	uint32_t width = 0;
+	uint32_t height = 0;
 };
 
 struct VideoFrame {

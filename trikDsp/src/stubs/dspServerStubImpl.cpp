@@ -48,10 +48,11 @@ bool DspServer::Impl::step(const InArgs &in, OutArgs &out)
 	return false;
 }
 
-bool DspServer::Impl::processFrame(trikHal::VideoDeviceFileInterface &source, const DspChannel &channel,
-                                   OutArgs &out, VideoFrame *videoFrame)
+bool DspServer::Impl::processFrame(const uint8_t *data, size_t size, const DspChannel &channel,
+                                    OutArgs &out, VideoFrame *videoFrame)
 {
-	Q_UNUSED(source)
+	Q_UNUSED(data)
+	Q_UNUSED(size)
 	Q_UNUSED(channel)
 	Q_UNUSED(out)
 	Q_UNUSED(videoFrame)

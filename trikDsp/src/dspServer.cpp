@@ -5,7 +5,18 @@
 #include <QsLog.h>
 #include <QEventLoop>
 #include <QTimer>
-#include <trikHal/VideoDeviceFileInterface.h>
+
+namespace {
+
+static const int _registerDspMetaTypes = []() {
+	qRegisterMetaType<trikDsp::Algorithm>();
+	qRegisterMetaType<trikDsp::InArgs>();
+	qRegisterMetaType<trikDsp::OutArgs>();
+	qRegisterMetaType<uint32_t>();
+	return 0;
+}();
+
+} // namespace
 
 namespace trikDsp {
 
@@ -24,28 +35,6 @@ DspServer::~DspServer()
 		mLadProcess.kill();
 		mLadProcess.waitForFinished(1000);
 	}
-}
-
-bool DspServer::addSource(trikHal::VideoDeviceFileInterface *source)
-{
-	bool ok = false;
-	QMetaObject::invokeMethod(this, [&]() {
-		connect(source, &trikHal::VideoDeviceFileInterface::frameReady,
-		        this, &DspServer::onFrameReady, Qt::QueuedConnection);
-		ok = true;
-	}, Qt::BlockingQueuedConnection);
-	if (ok) {
-		QLOG_INFO() << "DspServer: subscribed to" << source->id();
-	} else {
-		QLOG_ERROR() << "DspServer: failed to subscribe to" << source->id();
-	}
-	return ok;
-}
-
-void DspServer::removeSource(trikHal::VideoDeviceFileInterface *source)
-{
-	disconnect(source, nullptr, this, nullptr);
-	QLOG_INFO() << "DspServer: unsubscribed from" << source->id();
 }
 
 void DspServer::activate(const DspChannel &channel)
@@ -75,31 +64,34 @@ void DspServer::deactivate()
 	}, Qt::QueuedConnection);
 }
 
-void DspServer::onFrameReady()
+void DspServer::processFrameData(const QString &sourceId, const uint8_t *data, size_t size)
 {
-	auto *source = qobject_cast<trikHal::VideoDeviceFileInterface *>(sender());
-	if (!source || source != d->channelSource()) {
-		QLOG_WARN() << "DspServer: dropped frame from source"
-		            << (source ? source->id() : "null")
-		            << "expected" << (d->channelSource() ? d->channelSource()->id() : "null");
+	if (sourceId != d->channelSourceId()) {
+		QLOG_WARN() << "DspServer: dropped frame from source" << sourceId
+		            << "expected" << d->channelSourceId();
 		return;
 	}
 
 	OutArgs out;
+	const auto algo = d->channelAlgo();
 	VideoFrame videoFrame;
 	const bool needVideo = d->channel().videoOut;
-	if (d->processFrame(*source, d->channel(), out, needVideo ? &videoFrame : nullptr)) {
-		QLOG_INFO() << "DspServer: frame processed for source" << source->id();
-		emit resultReady(source->id(), d->channelAlgo(), out);
+	const auto &channel = d->channel();
+	const bool ok = d->processFrame(data, size, channel, out, needVideo ? &videoFrame : nullptr);
+
+	if (ok) {
+		QLOG_INFO() << "DspServer: frame processed for source" << sourceId;
 		if (needVideo && videoFrame.data) {
-			const auto frameData = QByteArray(reinterpret_cast<const char *>(videoFrame.data),
-			                                  static_cast<int>(videoFrame.size));
-			emit videoFrameReady(frameData,
+			const auto frameDataCopy = QByteArray(reinterpret_cast<const char *>(videoFrame.data),
+			                                      static_cast<int>(videoFrame.size));
+			emit videoFrameReady(frameDataCopy,
 			                     videoFrame.width, videoFrame.height);
 		}
 	} else {
-		QLOG_WARN() << "DspServer: processFrame failed for source" << source->id();
+		QLOG_WARN() << "DspServer: processFrame failed for source" << sourceId;
 	}
+
+	emit resultReady(sourceId, algo, out);
 }
 
 void DspServer::init()

@@ -138,9 +138,13 @@ bool VideoDeviceFileBase::setFormat()
 	mLineLen = fmt.fmt.pix.bytesperline;
 
 	QLOG_INFO() << "VideoDeviceFileBase: format" << Qt::hex << mActualFourcc
-	            << mWidth << 'x' << mHeight;
+	            << Qt::dec << mWidth << 'x' << mHeight;
 	return true;
 }
+
+// ---------------------------------------------------------------------------
+// onActivated  (QSocketNotifier slot)
+// ---------------------------------------------------------------------------
 
 void VideoDeviceFileBase::onFrameReady(const uint8_t *data, size_t size)
 {
@@ -148,7 +152,7 @@ void VideoDeviceFileBase::onFrameReady(const uint8_t *data, size_t size)
 }
 
 // ---------------------------------------------------------------------------
-// capture / release  (streaming with internal notifier)
+// capture / release
 // ---------------------------------------------------------------------------
 
 bool VideoDeviceFileBase::capture(const uint8_t *&data, size_t &size)

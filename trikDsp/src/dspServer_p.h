@@ -113,19 +113,18 @@ public:
 	/// @return true on success.
 	bool step(const InArgs &in, OutArgs &out);
 
-	/// Full frame processing pipeline for DspServer::onFrameReady:
-	///   source.capture(data, size) → registerAlgorithm if needed →
-	///   memcpy to mDspIn → step() → optionally fill videoFrame from mDspOut →
-	///   source.release()
+	/// Full frame processing pipeline:
+	///   memcpy to mDspIn → step() → optionally fill videoFrame from mDspOut
 	///
-	/// @param source      the V4L2 source.
+	/// @param data        raw frame data pointer (from V4L2 mmap, valid until release).
+	/// @param size        frame data size in bytes.
 	/// @param channel     active channel (algorithm + inArgs + videoOut flag).
 	/// @param out         filled with DSP results.
 	/// @param videoFrame  if non-null and channel.videoOut == true,
 	///                    filled with pointer into mDspOut (zero-copy).
 	///                    The caller deep-copies for cross-thread signal emission.
 	/// @return true if the frame was processed successfully.
-	bool processFrame(trikHal::VideoDeviceFileInterface &source, const DspChannel &channel,
+	bool processFrame(const uint8_t *data, size_t size, const DspChannel &channel,
 	                  OutArgs &out, VideoFrame *videoFrame = nullptr);
 
 	/// @name Active channel accessors (single-channel DSP)
@@ -141,8 +140,8 @@ public:
 	const DspChannel &channel() const { return mActive; }
 	/// Return the algorithm of the active channel.
 	Algorithm channelAlgo() const { return mActive.algorithm; }
-	/// Return the source of the active channel, or nullptr if inactive.
-	trikHal::VideoDeviceFileInterface *channelSource() const { return mActive.source; }
+	/// Return the sourceId of the active channel, or empty string if inactive.
+	QString channelSourceId() const { return mActive.sourceId; }
 
 	/// @}
 

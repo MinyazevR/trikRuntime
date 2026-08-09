@@ -288,24 +288,15 @@ bool DspServer::Impl::step(const InArgs &in, OutArgs &out)
 	return true;
 }
 
-bool DspServer::Impl::processFrame(trikHal::VideoDeviceFileInterface &source, const DspChannel &channel,
+bool DspServer::Impl::processFrame(const uint8_t *data, size_t size, const DspChannel &channel,
                                     OutArgs &out, VideoFrame *videoFrame)
 {
-	const uint8_t *data = nullptr;
-	size_t size = 0;
-
-	if (!source.capture(data, size)) {
-		QLOG_WARN() << "DspServer: capture failed for source" << source.id();
-		return false;
-	}
-
 	const auto dspAlgo = toDspAlgo(channel.algorithm);
 	if (dspAlgo != mCurrentAlgo) {
 		QLOG_INFO() << "DspServer: switching algorithm from" << mCurrentAlgo
 		            << "to" << dspAlgo;
-		QLOG_INFO() << "DspServer: actualFourcc" << Qt::hex << source.actualFourcc()
-		            << "bytesPerLine" << source.bytesPerLine();
-		AlgoDescriptor desc = {fromV4l2Fourcc(source.actualFourcc()), source.bytesPerLine()};
+		AlgoDescriptor desc = {trikKernel::fromV4l2Fourcc(V4L2_PIX_FMT_YUYV),
+		                       static_cast<uint32_t>(channel.width * 2)};
 		registerAlgorithm(channel.algorithm, desc);
 		mCurrentAlgo = dspAlgo;
 	}
@@ -316,14 +307,13 @@ bool DspServer::Impl::processFrame(trikHal::VideoDeviceFileInterface &source, co
 
 	if (channel.videoOut) {
 		QLOG_INFO() << "DspServer: filling video frame from DSP output buffer"
-		            << source.id();
+		            << channel.sourceId;
 		videoFrame->data = static_cast<const uint8_t *>(mDspOut.start);
 		videoFrame->size = mDspOut.length;
-		videoFrame->width = source.actualWidth();
-		videoFrame->height = source.actualHeight();
+		videoFrame->width = channel.width;
+		videoFrame->height = channel.height;
 	}
 
-	source.release();
 	return ok;
 }
 

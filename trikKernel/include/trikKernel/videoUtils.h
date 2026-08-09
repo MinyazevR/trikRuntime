@@ -32,7 +32,7 @@ inline PixelFormat pixelFormatFromString(const QString &s)
 {
 	if (s == QStringLiteral("nv16"))
 		return PixelFormat::Nv16;
-	if (s == QStringLiteral("yuyv"))
+	if (s == QStringLiteral("yuyv") || s == QStringLiteral("yuv422"))
 		return PixelFormat::Yuyv;
 	return PixelFormat::Unknown;
 }

@@ -26,11 +26,6 @@ VideoSensorManager::VideoSensorManager(const trikKernel::Configurer &configurer,
 	, mHardwareAbstractionInterface(hardwareAbstraction)
 	, mState("VideoSensorManager")
 {
-	qRegisterMetaType<trikDsp::InArgs>();
-	qRegisterMetaType<trikDsp::OutArgs>();
-	qRegisterMetaType<trikDsp::Algorithm>();
-	qRegisterMetaType<uint32_t>();
-
 	mDspThread.reset(new QThread);
 	mDspThread->setObjectName(QStringLiteral("DspServer"));
 
@@ -150,12 +145,12 @@ bool VideoSensorManager::openSource(const QString &port)
 	}
 	QLOG_INFO() << "VideoSensorManager: streaming started for" << source->id();
 
-	if (!mDspServer->addSource(source)) {
-		QLOG_ERROR() << "VideoSensorManager: failed to register" << source->id();
-		source->stopStreaming();
-		mPortStatuses[port] = PortStatus::Stopped;
-		return false;
-	}
+	connect(source, &trikHal::VideoDeviceFileInterface::frameReady, this,
+	        [this, port](const uint8_t *data, size_t size) {
+		QMetaObject::invokeMethod(mDspServer.data(), [this, port, data, size]() {
+			mDspServer->processFrameData(port, data, size);
+		}, Qt::QueuedConnection);
+	}, Qt::QueuedConnection);
 
 	mPortStatuses[port] = PortStatus::Ready;
 	return true;
@@ -171,7 +166,7 @@ void VideoSensorManager::closeSource(const QString &port)
 		return;
 	}
 
-	mDspServer->removeSource(source);
+	disconnect(source, nullptr, this, nullptr);
 	source->stopStreaming();
 	QLOG_INFO() << "VideoSensorManager: streaming stopped for" << source->id();
 	source->close();
@@ -194,7 +189,8 @@ void VideoSensorManager::activateForPort(const QString &port, trikDsp::Algorithm
 		}
 	}
 
-	mDspServer->activate({mSources[port], algo, args, videoOut});
+	mDspServer->activate({port, algo, args, videoOut,
+	                      mSources[port]->actualWidth(), mSources[port]->actualHeight()});
 }
 
 void VideoSensorManager::handleStopRequested(const QString &port, bool deinit)
@@ -245,7 +241,7 @@ void VideoSensorManager::create(const QString &port, const QString &deviceClass)
 		QLOG_INFO() << "VideoSensorManager: created source for port" << port
 		            << "device" << devFile << "format" << fmtStr
 		            << "fourcc" << Qt::hex << trikKernel::toV4l2Fourcc(trikDsp::pixelFormatFromString(fmtStr))
-		            << "size" << width << "x" << height;
+		            << Qt::dec << "size" << width << "x" << height;
 		src->moveToThread(thread());
 		mSources.insert(port, src);
 		mPortStatuses[port] = PortStatus::Starting;
@@ -367,6 +363,8 @@ void VideoSensorManager::onResult(const QString &sourceId,
 	if (port.isEmpty()) {
 		return;
 	}
+
+	mSources[port]->release();
 
 	switch (algorithm) {
 	case trikDsp::Algorithm::Line: {

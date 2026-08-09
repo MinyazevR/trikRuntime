@@ -28,43 +28,20 @@ public:
 	explicit VideoDeviceFileInterface(QObject *parent = nullptr) : QObject(parent) {}
 	~VideoDeviceFileInterface() override = default;
 
-	/// Open the V4L2 device, negotiate format, allocate DMA ring buffers.
-	/// Does NOT start streaming — call startStreaming() separately.
 	virtual bool open() = 0;
-
-	/// QBUF all buffers + STREAMON + start internal QSocketNotifier.
 	virtual bool startStreaming() = 0;
-
-	/// STREAMOFF.
 	virtual void stopStreaming() = 0;
-
-	/// Stop streaming, munmap buffers, close fd.
 	virtual void close() = 0;
-
-	/// Return the last dequeued frame pointer (zero-copy).
-	/// Valid until release().  Returns false if no frame available.
 	virtual bool capture(const uint8_t *&data, size_t &size) = 0;
-
-	/// Return the buffer dequeued by capture() back to the V4L2 ring (QBUF).
 	virtual void release() = 0;
-
-	/// True after successful open(), before close().
 	virtual bool isOpen() const = 0;
-
-	/// Unique identifier for this device (typically the device path).
 	virtual QString id() const = 0;
-
-	/// Negotiated frame dimensions and pixel format (available after open()).
 	virtual uint32_t actualWidth() const = 0;
 	virtual uint32_t actualHeight() const = 0;
 	virtual uint32_t actualFourcc() const = 0;
-
-	/// Bytes per scanline (may be > width * bpp due to alignment).
 	virtual uint32_t bytesPerLine() const = 0;
 
 Q_SIGNALS:
-	/// Emitted when a new frame is dequeued and ready via capture().
-	/// The data pointer is valid until release().
 	void frameReady(const uint8_t *data, size_t size);
 };
 

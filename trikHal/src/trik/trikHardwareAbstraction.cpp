@@ -109,7 +109,8 @@ QVector<uint8_t> TrikHardwareAbstraction::captureV4l2StillImage(const QString &p
 
 	QEventLoop loop;
 	QTimer::singleShot(1000, &loop, [&loop]() { loop.exit(-1); });
-	QObject::connect(&device, &VideoDeviceFileInterface::frameReady, &loop, &QEventLoop::quit);
+	QObject::connect(&device, &VideoDeviceFileInterface::frameReady, &loop,
+	                 [&loop](const uint8_t *, size_t) { loop.quit(); });
 	if (loop.exec() < 0) {
 		QLOG_WARN() << "V4l2 still image capture timeout";
 		return {};
