@@ -303,6 +303,8 @@ bool DspServer::Impl::processFrame(trikHal::VideoDeviceFileInterface &source, co
 	if (dspAlgo != mCurrentAlgo) {
 		QLOG_INFO() << "DspServer: switching algorithm from" << mCurrentAlgo
 		            << "to" << dspAlgo;
+		QLOG_INFO() << "DspServer: actualFourcc" << Qt::hex << source.actualFourcc()
+		            << "bytesPerLine" << source.bytesPerLine();
 		AlgoDescriptor desc = {fromV4l2Fourcc(source.actualFourcc()), source.bytesPerLine()};
 		registerAlgorithm(channel.algorithm, desc);
 		mCurrentAlgo = dspAlgo;

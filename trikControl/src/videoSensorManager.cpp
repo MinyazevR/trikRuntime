@@ -27,6 +27,8 @@ VideoSensorManager::VideoSensorManager(const trikKernel::Configurer &configurer,
 	, mState("VideoSensorManager")
 {
 	qRegisterMetaType<trikDsp::InArgs>();
+	qRegisterMetaType<trikDsp::Algorithm>();
+	qRegisterMetaType<uint32_t>();
 
 	mDspThread.reset(new QThread);
 	mDspThread->setObjectName(QStringLiteral("DspServer"));
@@ -227,6 +229,10 @@ void VideoSensorManager::create(const QString &port, const QString &deviceClass)
 		auto *src = mHardwareAbstractionInterface.createVideoDeviceFile(devFile,
 				static_cast<uint32_t>(width), static_cast<uint32_t>(height),
 				trikKernel::toV4l2Fourcc(trikDsp::pixelFormatFromString(fmtStr)));
+		QLOG_INFO() << "VideoSensorManager: created source for port" << port
+		            << "device" << devFile << "format" << fmtStr
+		            << "fourcc" << Qt::hex << trikKernel::toV4l2Fourcc(trikDsp::pixelFormatFromString(fmtStr))
+		            << "size" << width << "x" << height;
 		mSources.insert(port, src);
 		mPortStatuses[port] = PortStatus::Starting;
 	}

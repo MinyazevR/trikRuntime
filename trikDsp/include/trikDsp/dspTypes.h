@@ -59,3 +59,4 @@ struct OutArgs {
 } // namespace trikDsp
 
 Q_DECLARE_METATYPE(trikDsp::InArgs)
+Q_DECLARE_METATYPE(trikDsp::Algorithm)
