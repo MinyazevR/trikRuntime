@@ -109,8 +109,8 @@ Q_SIGNALS:
 
 	/// Emitted from the worker thread after each successfully processed frame.
 	void resultReady(const QString &sourceId,
-	                 Algorithm algorithm,
-	                 OutArgs result);
+			 trikDsp::Algorithm algorithm,
+			 trikDsp::OutArgs result);
 
 	/// Emitted when videoOut=true after DSP processing.
 	void videoFrameReady(const QByteArray &data,
