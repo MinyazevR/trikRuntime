@@ -243,7 +243,7 @@ void VideoSensorManager::create(const QString &port, const QString &deviceClass)
 		            << "device" << devFile << "format" << fmtStr
 		            << "fourcc" << Qt::hex << trikKernel::toV4l2Fourcc(trikDsp::pixelFormatFromString(fmtStr))
 		            << Qt::dec << "size" << width << "x" << height;
-		src->moveToThread(thread());
+		// src->moveToThread(thread());
 		mSources.insert(port, src);
 		mPortStatuses[port] = PortStatus::Starting;
 	}
@@ -283,18 +283,25 @@ void VideoSensorManager::shutdown(const QString &port)
 	}
 
 	mDspServer->deactivate();
+	closeSource(port);
 
-	QMetaObject::invokeMethod(this, [this, port]() {
-		closeSource(port);
-	}, Qt::BlockingQueuedConnection);
+//	QMetaObject::invokeMethod(this, [this, port]() {
+//		closeSource(port);
+//	}, Qt::BlockingQueuedConnection);
 
-	QMetaObject::invokeMethod(this, [this, port]() {
-		auto it = mSources.find(port);
-		if (it != mSources.end()) {
-			delete it.value();
-			mSources.erase(it);
-		}
-	}, Qt::BlockingQueuedConnection);
+	auto it = mSources.find(port);
+	if (it != mSources.end()) {
+		delete it.value();
+		mSources.erase(it);
+	}
+
+//	QMetaObject::invokeMethod(this, [this, port]() {
+//		auto it = mSources.find(port);
+//		if (it != mSources.end()) {
+//			delete it.value();
+//			mSources.erase(it);
+//		}
+//	}, Qt::BlockingQueuedConnection);
 
 	mPortStatuses.remove(port);
 }
@@ -308,9 +315,10 @@ void VideoSensorManager::stop()
 	mDspServer->deactivate();
 
 	for (const auto &port : mSources.keys()) {
-		QMetaObject::invokeMethod(this, [this, port]() {
-			closeSource(port);
-		}, Qt::BlockingQueuedConnection);
+		closeSource(port);
+//		QMetaObject::invokeMethod(this, [this, port]() {
+//			closeSource(port);
+//		}, Qt::BlockingQueuedConnection);
 	}
 }
 
