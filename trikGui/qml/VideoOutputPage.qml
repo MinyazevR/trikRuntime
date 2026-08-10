@@ -1,25 +1,31 @@
 import QtQuick 2.15
 
 Item {
-	id: root
-	objectName: "videoOutput"
+    id: root
+    objectName: "videoOutput"
 
-	property int frameCounter: 0
-	property string imageSource: ""
+    property int frameCounter: 0
+    property string imageSource: ""
 
-	Image {
-		id: videoImage
-		anchors.fill: parent
-		fillMode: Image.PreserveAspectFit
-		cache: false
-		source: root.imageSource
-	}
+    Rectangle {
+        anchors.fill: parent
+        color: "black"
+    }
 
-	Connections {
-		target: videoDisplayProvider
-		function onFrameUpdated() {
-			root.frameCounter++
-			root.imageSource = "image://dspVideo/" + root.frameCounter
-		}
-	}
+    Image {
+        id: videoImage
+        anchors.top: parent.top
+        anchors.left: parent.left
+        width: parent.width
+        cache: false
+        source: root.imageSource
+    }
+
+    Connections {
+        target: videoDisplayProvider
+        function onFrameUpdated() {
+            root.frameCounter++
+            root.imageSource = "image://dspVideo/" + root.frameCounter
+        }
+    }
 }

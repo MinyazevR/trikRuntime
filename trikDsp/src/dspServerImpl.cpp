@@ -29,8 +29,8 @@ constexpr int MSG_QUEUE_RETRIES = 10;
 
 constexpr int DSP_IMG_WIDTH = 320;
 constexpr int DSP_IMG_HEIGHT = 240;
-constexpr int DSP_OUT_WIDTH = DSP_IMG_HEIGHT;
-constexpr int DSP_OUT_HEIGHT = DSP_IMG_HEIGHT;  // = BUFFER_SIZE_FOR_FB / (240*2)
+constexpr int DSP_OUT_WIDTH = DSP_IMG_HEIGHT;                       // 240
+constexpr int DSP_OUT_HEIGHT = DSP_IMG_HEIGHT;                       // 240 (= BUFFER_SIZE_FOR_FB / 480)
 
 enum trik_cmd algoToDspCmd(enum trik_cv_algorithm algo)
 {

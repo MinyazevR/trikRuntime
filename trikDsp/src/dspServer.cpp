@@ -66,6 +66,8 @@ void DspServer::deactivate()
 
 void DspServer::processFrameData(const QString &sourceId, const uint8_t *data, size_t size)
 {
+	QLOG_DEBUG() << "DspServer: processFrameData ENTER sourceId" << sourceId << "size" << size;
+
 	if (sourceId != d->channelSourceId()) {
 		QLOG_WARN() << "DspServer: dropped frame from source" << sourceId
 		            << "expected" << d->channelSourceId();
@@ -77,7 +79,9 @@ void DspServer::processFrameData(const QString &sourceId, const uint8_t *data, s
 	VideoFrame videoFrame;
 	const bool needVideo = d->channel().videoOut;
 	const auto &channel = d->channel();
+	QLOG_DEBUG() << "DspServer: calling processFrame via IPC";
 	const bool ok = d->processFrame(data, size, channel, out, needVideo ? &videoFrame : nullptr);
+	QLOG_DEBUG() << "DspServer: processFrame IPC returned" << ok;
 
 	if (ok) {
 		QLOG_INFO() << "DspServer: frame processed for source" << sourceId;

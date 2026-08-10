@@ -147,6 +147,7 @@ bool VideoSensorManager::openSource(const QString &port)
 
 	connect(source, &trikHal::VideoDeviceFileInterface::frameReady, this,
 	        [this, port](const uint8_t *data, size_t size) {
+		QLOG_DEBUG() << "VSM: frameReady received for port" << port << "size" << size;
 		QMetaObject::invokeMethod(mDspServer.data(), [this, port, data, size]() {
 			mDspServer->processFrameData(port, data, size);
 		}, Qt::QueuedConnection);
@@ -352,35 +353,27 @@ void VideoSensorManager::onResult(const QString &sourceId,
                                   trikDsp::Algorithm algorithm,
                                   trikDsp::OutArgs result)
 {
-	QString port;
-	for (auto it = mSources.begin(); it != mSources.end(); ++it) {
-		if (it.value()->id() == sourceId) {
-			port = it.key();
-			break;
-		}
-	}
-
-	if (port.isEmpty()) {
+	if (!mSources.contains(sourceId)) {
 		return;
 	}
 
-	mSources[port]->release();
+	mSources[sourceId]->release();
 
 	switch (algorithm) {
 	case trikDsp::Algorithm::Line: {
-		auto it = mLineSensors.find(port);
+		auto it = mLineSensors.find(sourceId);
 		if (it != mLineSensors.end())
 			it.value()->onResult(result);
 		break;
 	}
 	case trikDsp::Algorithm::Object: {
-		auto it = mObjectSensors.find(port);
+		auto it = mObjectSensors.find(sourceId);
 		if (it != mObjectSensors.end())
 			it.value()->onResult(result);
 		break;
 	}
 	case trikDsp::Algorithm::Mxn: {
-		auto it = mColorSensors.find(port);
+		auto it = mColorSensors.find(sourceId);
 		if (it != mColorSensors.end())
 			it.value()->onResult(result);
 		break;
