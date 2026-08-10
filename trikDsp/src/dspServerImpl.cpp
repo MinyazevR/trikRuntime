@@ -64,10 +64,10 @@ MmapResult physToVirt(void *physAddr)
 	auto *mapped = mmap(nullptr, mapLen,
 	                    PROT_READ | PROT_WRITE, MAP_SHARED,
 	                    memfd, pageBase);
-	close(memfd);
 
 	if (mapped == MAP_FAILED) {
 		QLOG_ERROR() << "DspServer: mmap /dev/mem failed:" << strerror(errno);
+		close(memfd);
 		return {};
 	}
 
