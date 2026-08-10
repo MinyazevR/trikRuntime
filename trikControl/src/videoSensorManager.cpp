@@ -16,7 +16,7 @@ namespace trikControl {
 
 namespace {
 
-constexpr uint16_t DSP_RPROC_ID = 0;
+constexpr uint16_t DSP_RPROC_ID = 1;
 
 }
 
@@ -243,7 +243,7 @@ void VideoSensorManager::create(const QString &port, const QString &deviceClass)
 		            << "device" << devFile << "format" << fmtStr
 		            << "fourcc" << Qt::hex << trikKernel::toV4l2Fourcc(trikDsp::pixelFormatFromString(fmtStr))
 		            << Qt::dec << "size" << width << "x" << height;
-		// src->moveToThread(thread());
+		src->moveToThread(thread());
 		mSources.insert(port, src);
 		mPortStatuses[port] = PortStatus::Starting;
 	}
@@ -283,25 +283,23 @@ void VideoSensorManager::shutdown(const QString &port)
 	}
 
 	mDspServer->deactivate();
-	closeSource(port);
+//	closeSource(port);
 
-//	QMetaObject::invokeMethod(this, [this, port]() {
-//		closeSource(port);
-//	}, Qt::BlockingQueuedConnection);
+	QMetaObject::invokeMethod(this, [this, port]() { closeSource(port);});
 
-	auto it = mSources.find(port);
-	if (it != mSources.end()) {
-		delete it.value();
-		mSources.erase(it);
-	}
+//	auto it = mSources.find(port);
+//	if (it != mSources.end()) {
+//		delete it.value();
+//		mSources.erase(it);
+//	}
 
-//	QMetaObject::invokeMethod(this, [this, port]() {
-//		auto it = mSources.find(port);
-//		if (it != mSources.end()) {
-//			delete it.value();
-//			mSources.erase(it);
-//		}
-//	}, Qt::BlockingQueuedConnection);
+	QMetaObject::invokeMethod(this, [this, port]() {
+		auto it = mSources.find(port);
+		if (it != mSources.end()) {
+			delete it.value();
+			mSources.erase(it);
+		}
+	});
 
 	mPortStatuses.remove(port);
 }

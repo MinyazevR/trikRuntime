@@ -150,8 +150,7 @@ bool DspServer::Impl::setupMessageQueue()
 	}
 
 	std::array<char, 32> name;
-	snprintf(name.data(), name.size(),
-	         TRIK_SLAVE_MSG_QUE_NAME, MultiProc_getName(rprocId));
+	snprintf(name.data(), name.size(), TRIK_SLAVE_MSG_QUE_NAME, MultiProc_getName(rprocId));
 
 	int status = 0;
 	for (int retry = 0; retry < MSG_QUEUE_RETRIES; ++retry) {
