@@ -29,8 +29,6 @@ constexpr int MSG_QUEUE_RETRIES = 10;
 
 constexpr int DSP_IMG_WIDTH = 320;
 constexpr int DSP_IMG_HEIGHT = 240;
-constexpr int DSP_OUT_WIDTH = DSP_IMG_HEIGHT;                       // 240
-constexpr int DSP_OUT_HEIGHT = DSP_IMG_HEIGHT;                       // 240 (= BUFFER_SIZE_FOR_FB / 480)
 
 enum trik_cmd algoToDspCmd(enum trik_cv_algorithm algo)
 {
@@ -308,15 +306,38 @@ bool DspServer::Impl::processFrame(const uint8_t *data, size_t size, const DspCh
 
 	memcpy(mDspIn.start, data, std::min(size, mDspIn.length));
 
+	{
+		const auto *p = static_cast<const uint8_t *>(data);
+		QLOG_DEBUG() << "DspServer: V4L2 input dump [0-31]:"
+		             << Qt::hex << p[0] << p[1] << p[2] << p[3]
+		             << p[4] << p[5] << p[6] << p[7]
+		             << p[8] << p[9] << p[10] << p[11]
+		             << p[12] << p[13] << p[14] << p[15]
+		             << p[16] << p[17] << p[18] << p[19]
+		             << p[20] << p[21] << p[22] << p[23]
+		             << p[24] << p[25] << p[26] << p[27]
+		             << p[28] << p[29] << p[30] << p[31];
+	}
+
 	const bool ok = step(channel.inArgs, out);
 
 	if (channel.videoOut) {
+		const auto *p = static_cast<const uint8_t *>(mDspOut.start);
+		QLOG_DEBUG() << "DspServer: DSP output dump [0-31]:"
+		             << Qt::hex << p[0] << p[1] << p[2] << p[3]
+		             << p[4] << p[5] << p[6] << p[7]
+		             << p[8] << p[9] << p[10] << p[11]
+		             << p[12] << p[13] << p[14] << p[15]
+		             << p[16] << p[17] << p[18] << p[19]
+		             << p[20] << p[21] << p[22] << p[23]
+		             << p[24] << p[25] << p[26] << p[27]
+		             << p[28] << p[29] << p[30] << p[31];
 		QLOG_INFO() << "DspServer: filling video frame from DSP output buffer"
 		            << channel.sourceId;
 		videoFrame->data = static_cast<const uint8_t *>(mDspOut.start);
-		videoFrame->size = DSP_OUT_WIDTH * DSP_OUT_HEIGHT * 2;
-		videoFrame->width = DSP_OUT_WIDTH;
-		videoFrame->height = DSP_OUT_HEIGHT;
+		videoFrame->size = BUFFER_SIZE_FOR_FB;
+		videoFrame->width = DSP_IMG_HEIGHT;
+		videoFrame->height = DSP_IMG_HEIGHT;
 	}
 
 	return ok;
