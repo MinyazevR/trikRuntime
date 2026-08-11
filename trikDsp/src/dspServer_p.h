@@ -114,18 +114,24 @@ public:
 	bool step(const InArgs &in, OutArgs &out);
 
 	/// Full frame processing pipeline:
-	///   memcpy to mDspIn → step() → optionally fill videoFrame from mDspOut
+	///   step() → optionally fill videoFrame from mDspOut
 	///
-	/// @param data        raw frame data pointer (from V4L2 mmap, valid until release).
-	/// @param size        frame data size in bytes.
+	/// @pre  The caller MUST have already copied the frame data into mDspIn
+	///       (via the @c inBufferStart() / @c inBufferLen() helpers) before
+	///       calling this method.
 	/// @param channel     active channel (algorithm + inArgs + videoOut flag).
 	/// @param out         filled with DSP results.
 	/// @param videoFrame  if non-null and channel.videoOut == true,
 	///                    filled with pointer into mDspOut (zero-copy).
 	///                    The caller deep-copies for cross-thread signal emission.
 	/// @return true if the frame was processed successfully.
-	bool processFrame(const uint8_t *data, size_t size, const DspChannel &channel,
+	bool processFrame(const DspChannel &channel,
 	                  OutArgs &out, VideoFrame *videoFrame = nullptr);
+
+	/// Start of the DSP shared input buffer (mmap'd /dev/mem).
+	void *inBufferStart() const { return mDspIn.start; }
+	/// Length of the DSP shared input buffer.
+	size_t inBufferLen() const { return mDspIn.length; }
 
 	/// @name Active channel accessors (single-channel DSP)
 	/// @{

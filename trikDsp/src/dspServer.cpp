@@ -6,6 +6,9 @@
 #include <QEventLoop>
 #include <QTimer>
 
+#include <algorithm>
+#include <cstring>
+
 namespace {
 
 static const int _registerDspMetaTypes = []() {
@@ -74,13 +77,16 @@ void DspServer::processFrameData(const QString &sourceId, const uint8_t *data, s
 		return;
 	}
 
+	memcpy(d->inBufferStart(), data, std::min(size, d->inBufferLen()));
+	emit frameBuffered();
+
 	OutArgs out;
 	const auto algo = d->channelAlgo();
 	VideoFrame videoFrame;
 	const bool needVideo = d->channel().videoOut;
 	const auto &channel = d->channel();
 	QLOG_DEBUG() << "DspServer: calling processFrame via IPC";
-	const bool ok = d->processFrame(data, size, channel, out, needVideo ? &videoFrame : nullptr);
+	const bool ok = d->processFrame(channel, out, needVideo ? &videoFrame : nullptr);
 	QLOG_DEBUG() << "DspServer: processFrame IPC returned" << ok;
 
 	if (ok) {

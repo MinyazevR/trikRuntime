@@ -16,7 +16,7 @@ Item {
         id: videoImage
         anchors.top: parent.top
         anchors.left: parent.left
-        width: parent.width
+        fillMode: Image.Pad
         cache: false
         source: root.imageSource
     }

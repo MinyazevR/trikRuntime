@@ -117,6 +117,10 @@ bool DspServer::Impl::startIpc()
 		return false;
 	}
 
+	QLOG_INFO() << "DspServer: Ipc_start ok, MultiProc: self=" << MultiProc_self()
+	            << "name(0)=" << MultiProc_getName(0)
+	            << "name(1)=" << MultiProc_getName(1);
+
 	return true;
 }
 
@@ -148,13 +152,14 @@ bool DspServer::Impl::setupMessageQueue()
 		QLOG_ERROR() << "DspServer: MessageQ_create failed";
 		return false;
 	}
-
 	std::array<char, 32> name;
-	snprintf(name.data(), name.size(), TRIK_SLAVE_MSG_QUE_NAME, MultiProc_getName(rprocId));
+	snprintf(name.data(), name.size(), TRIK_SLAVE_MSG_QUE_NAME, "DSP");
+	QLOG_INFO() << "DspServer: opening remote queue" << name.data();
 
 	int status = 0;
 	for (int retry = 0; retry < MSG_QUEUE_RETRIES; ++retry) {
 		status = MessageQ_open(name.data(), &mSlaveQue);
+		QLOG_INFO() << "DspServer: MessageQ_open retry" << retry << "status" << status;
 		if (status != MessageQ_E_NOTFOUND)
 			break;
 		sleep(1);
@@ -295,7 +300,7 @@ bool DspServer::Impl::step(const InArgs &in, OutArgs &out)
 	return true;
 }
 
-bool DspServer::Impl::processFrame(const uint8_t *data, size_t size, const DspChannel &channel,
+bool DspServer::Impl::processFrame(const DspChannel &channel,
                                     OutArgs &out, VideoFrame *videoFrame)
 {
 	const auto dspAlgo = toDspAlgo(channel.algorithm);
@@ -308,80 +313,9 @@ bool DspServer::Impl::processFrame(const uint8_t *data, size_t size, const DspCh
 		mCurrentAlgo = dspAlgo;
 	}
 
-	memcpy(mDspIn.start, data, std::min(size, mDspIn.length));
-
-	{
-		const auto *p = static_cast<const uint8_t *>(data);
-		QLOG_DEBUG() << "DspServer: V4L2 input dump [0-31]:"
-		             << Qt::hex << p[0] << p[1] << p[2] << p[3]
-		             << p[4] << p[5] << p[6] << p[7]
-		             << p[8] << p[9] << p[10] << p[11]
-		             << p[12] << p[13] << p[14] << p[15]
-		             << p[16] << p[17] << p[18] << p[19]
-		             << p[20] << p[21] << p[22] << p[23]
-		             << p[24] << p[25] << p[26] << p[27]
-		             << p[28] << p[29] << p[30] << p[31];
-	}
-
-	{
-		const auto *o = static_cast<const uint8_t *>(mDspOut.start);
-		QLOG_DEBUG() << "DspServer: DSP out BEFORE step dump [0-31]:"
-		             << Qt::hex << o[0] << o[1] << o[2] << o[3]
-		             << o[4] << o[5] << o[6] << o[7]
-		             << o[8] << o[9] << o[10] << o[11]
-		             << o[12] << o[13] << o[14] << o[15]
-		             << o[16] << o[17] << o[18] << o[19]
-		             << o[20] << o[21] << o[22] << o[23]
-		             << o[24] << o[25] << o[26] << o[27]
-		             << o[28] << o[29] << o[30] << o[31];
-		QLOG_DEBUG() << "DspServer: DSP out BEFORE step dump [100-131]:"
-		             << Qt::hex << o[100] << o[101] << o[102] << o[103]
-		             << o[104] << o[105] << o[106] << o[107]
-		             << o[108] << o[109] << o[110] << o[111]
-		             << o[112] << o[113] << o[114] << o[115]
-		             << o[116] << o[117] << o[118] << o[119]
-		             << o[120] << o[121] << o[122] << o[123]
-		             << o[124] << o[125] << o[126] << o[127]
-		             << o[128] << o[129] << o[130] << o[131];
-		QLOG_DEBUG() << "DspServer: mDspIn=" << mDspIn.start
-		             << "mDspOut=" << mDspOut.start
-		             << "mDspIn.len=" << mDspIn.length
-		             << "mDspOut.len=" << mDspOut.length;
-	}
-
 	const bool ok = step(channel.inArgs, out);
 
 	if (channel.videoOut) {
-		const auto *p = static_cast<const uint8_t *>(mDspOut.start);
-		QLOG_DEBUG() << "DspServer: DSP output dump [0-31]:"
-		             << Qt::hex << p[0] << p[1] << p[2] << p[3]
-		             << p[4] << p[5] << p[6] << p[7]
-		             << p[8] << p[9] << p[10] << p[11]
-		             << p[12] << p[13] << p[14] << p[15]
-		             << p[16] << p[17] << p[18] << p[19]
-		             << p[20] << p[21] << p[22] << p[23]
-		             << p[24] << p[25] << p[26] << p[27]
-		             << p[28] << p[29] << p[30] << p[31];
-		QLOG_DEBUG() << "DspServer: DSP output dump [1000-1031]:"
-		             << Qt::hex << p[1000] << p[1001] << p[1002] << p[1003]
-		             << p[1004] << p[1005] << p[1006] << p[1007]
-		             << p[1008] << p[1009] << p[1010] << p[1011]
-		             << p[1012] << p[1013] << p[1014] << p[1015]
-		             << p[1016] << p[1017] << p[1018] << p[1019]
-		             << p[1020] << p[1021] << p[1022] << p[1023]
-		             << p[1024] << p[1025] << p[1026] << p[1027]
-		             << p[1028] << p[1029] << p[1030] << p[1031];
-		QLOG_DEBUG() << "DspServer: DSP output dump [10000-10031]:"
-		             << Qt::hex << p[10000] << p[10001] << p[10002] << p[10003]
-		             << p[10004] << p[10005] << p[10006] << p[10007]
-		             << p[10008] << p[10009] << p[10010] << p[10011]
-		             << p[10012] << p[10013] << p[10014] << p[10015]
-		             << p[10016] << p[10017] << p[10018] << p[10019]
-		             << p[10020] << p[10021] << p[10022] << p[10023]
-		             << p[10024] << p[10025] << p[10026] << p[10027]
-		             << p[10028] << p[10029] << p[10030] << p[10031];
-		QLOG_INFO() << "DspServer: filling video frame from DSP output buffer"
-		            << channel.sourceId;
 		videoFrame->data = static_cast<const uint8_t *>(mDspOut.start);
 		videoFrame->size = BUFFER_SIZE_FOR_FB;
 		videoFrame->width = DSP_IMG_HEIGHT;

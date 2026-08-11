@@ -107,6 +107,11 @@ Q_SIGNALS:
 	/// @name DSP processing signals
 	/// @{
 
+	/// Emitted immediately after the frame data is copied to the DSP input
+	/// buffer, before IPC processing begins.  This allows the video source to
+	/// release its buffer early (e.g. V4L2 QBUF) while the DSP is still working.
+	void frameBuffered();
+
 	/// Emitted from the worker thread after each successfully processed frame.
 	void resultReady(const QString &sourceId,
 			 trikDsp::Algorithm algorithm,

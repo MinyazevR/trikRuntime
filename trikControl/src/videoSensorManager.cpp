@@ -153,6 +153,9 @@ bool VideoSensorManager::openSource(const QString &port)
 		}, Qt::QueuedConnection);
 	}, Qt::QueuedConnection);
 
+	connect(mDspServer.data(), &trikDsp::DspServer::frameBuffered,
+	        source, &trikHal::VideoDeviceFileInterface::release);
+
 	mPortStatuses[port] = PortStatus::Ready;
 	return true;
 }
@@ -362,8 +365,6 @@ void VideoSensorManager::onResult(const QString &sourceId,
 	if (!mSources.contains(sourceId)) {
 		return;
 	}
-
-	mSources[sourceId]->release();
 
 	switch (algorithm) {
 	case trikDsp::Algorithm::Line: {
