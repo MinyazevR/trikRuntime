@@ -19,7 +19,6 @@
 
 #include <QtCore/QEventLoop>
 #include <QtCore/QSharedPointer>
-#include <QtCore/QTimer>
 #include <QtGui/QImage>
 #include <QsLog.h>
 #include <linux/videodev2.h>
@@ -49,7 +48,6 @@ QVector<uint8_t> V4l2CameraImplementation::getPhoto()
 	// latestFrameReady(); the latched buffer is ref-counted, so the raw V4L2
 	// mmap buffer is never held by this thread.
 	QEventLoop loop;
-	QTimer::singleShot(1000, &loop, &QEventLoop::quit);
 
 	const QMetaObject::Connection conn = QObject::connect(&mCameraManager,
 		&CameraManager::latestFrameReady, &loop,

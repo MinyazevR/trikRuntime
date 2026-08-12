@@ -28,11 +28,12 @@ CameraManager::CameraManager(const trikKernel::Configurer &configurer,
 	// sensor port. The Configurer is never touched after this loop — all
 	// later lookups go through mDevices.
 	for (const auto &port : configurer.ports()) {
-		if (configurer.deviceClass(port) != QStringLiteral("videoSensor"))
+		if (configurer.deviceClass(port) != QStringLiteral("videoDevice")) {
 			continue;
+		}
 
 		Entry entry;
-		DeviceState state("videoSensor");
+		DeviceState state("videoDevice");
 
 		entry.w = static_cast<uint32_t>(
 			ConfigurerHelper::configureInt(configurer, state, port, "width"));

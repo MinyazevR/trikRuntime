@@ -29,7 +29,13 @@ Rectangle {
 
             Button {
                 text: qsTr("video2")
+                Layout.fillWidth: true
+                Layout.preferredHeight: 30
                 onClicked: { _camera.port = "video2"; _camera.takePhoto() }
+                background: Rectangle {
+                    radius: 5
+                    color: activeTheme.buttonsColor
+                }
                 contentItem: Text {
                     text: parent.text
                     color: "white"
@@ -40,7 +46,13 @@ Rectangle {
             }
             Button {
                 text: qsTr("video1")
+                Layout.fillWidth: true
+                Layout.preferredHeight: 30
                 onClicked: { _camera.port = "video1"; _camera.takePhoto() }
+                background: Rectangle {
+                    radius: 5
+                    color: activeTheme.buttonsColor
+                }
                 contentItem: Text {
                     text: parent.text
                     color: "white"
@@ -51,7 +63,13 @@ Rectangle {
             }
             Button {
                 text: qsTr("usb-camera")
+                Layout.fillWidth: true
+                Layout.preferredHeight: 30
                 onClicked: { _camera.port = "usb-camera"; _camera.takePhoto() }
+                background: Rectangle {
+                    radius: 5
+                    color: activeTheme.buttonsColor
+                }
                 contentItem: Text {
                     text: parent.text
                     color: "white"
@@ -83,7 +101,6 @@ Rectangle {
 
                 Component.onCompleted: {
                     _camera.cameraObject = display
-                    display.doPhoto(_camera.port)
                 }
 
                 Loader {
