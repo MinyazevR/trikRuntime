@@ -114,11 +114,11 @@ Note that device, even if listed here, may fail by itself, then it also will not
 	</video1>
 
 <video2>
-	<videoDevice />
+<videoDevice />
 	</video2>
 
 <usb-camera>
-	<videoDevice />
+<videoDevice />
 	</usb-camera>
 	<!-- On-board sensors. -->
 	<!-- If model is not using those, they can be turned off to save system resources, by deleting them or
@@ -134,7 +134,6 @@ Note that device, even if listed here, may fail by itself, then it also will not
 	<!-- Optional modules -->
 	<gamepad />
 	<mailbox />
-	<videoSensor />
 
 	<!-- Example of custom FIFO sensor -->
 	<!--
