@@ -22,15 +22,10 @@
 #include "trikOutputDeviceFile.h"
 #include "trikFifo.h"
 #include "trikIIOFile.h"
-#include "trikVideoDeviceFile.h"
+#include "trikVideoDevice.h"
 #include "QsLog.h"
 #include "commonI2c.h"
-#include "trikV4l2VideoDevice.h"
-#include <linux/videodev2.h>
-#include <trikKernel/videoUtils.h>
-
-#include <QtCore/QEventLoop>
-#include <QtCore/QTimer>
+#include "trikFbOutput.h"
 
 using namespace trikHal;
 using namespace trikHal::trik;
@@ -95,66 +90,21 @@ OutputDeviceFileInterface *TrikHardwareAbstraction::createOutputDeviceFile(const
 	return new TrikOutputDeviceFile(fileName);
 }
 
-QVector<uint8_t> TrikHardwareAbstraction::captureV4l2StillImage(const QString &port, const QDir &pathToPic) const
-{
-	Q_UNUSED(pathToPic);
-	TrikV4l2VideoDevice device(port);
-
-	QLOG_INFO() << "Start open v4l2 device" << port;
-
-	if (!device.open() || !device.startStreaming()) {
-		QLOG_ERROR() << "Failed to open v4l2 device" << port;
-		return {};
-	}
-
-	QEventLoop loop;
-	QTimer::singleShot(1000, &loop, [&loop]() { loop.exit(-1); });
-	QObject::connect(&device, &VideoDeviceFileInterface::frameReady, &loop,
-	                 [&loop](const uint8_t *, size_t) { loop.quit(); });
-	if (loop.exec() < 0) {
-		QLOG_WARN() << "V4l2 still image capture timeout";
-		return {};
-	}
-
-	const uint8_t *data = nullptr;
-	size_t size = 0;
-	if (!device.capture(data, size)) {
-		QLOG_ERROR() << "V4l2 still image capture failed";
-		return {};
-	}
-
-	const auto h = device.actualHeight();
-	const auto w = device.actualWidth();
-	QVector<uint8_t> raw(data, data + size);
-	device.release();
-	device.stopStreaming();
-
-	QVector<uint8_t> rgb;
-	switch (device.actualFourcc()) {
-	case V4L2_PIX_FMT_NV16:
-		rgb = trikKernel::VideoUtils::yuv422pToRgb(raw, h, w);
-		break;
-	case V4L2_PIX_FMT_YUYV:
-		rgb = trikKernel::VideoUtils::yuyvToRgb(raw, h, w);
-		break;
-	default:
-		QLOG_ERROR() << "V4l2: unsupported fourcc" << Qt::hex << device.actualFourcc();
-		return {};
-	}
-
-	QLOG_INFO() << "Captrured RGB888 " << rgb.size() << "bytes image";
-	return rgb;
-}
-
 VideoDeviceFileInterface *TrikHardwareAbstraction::createVideoDeviceFile(
-		const QString &devicePath, uint32_t width, uint32_t height, uint32_t fourcc) const
+		const QString &devicePath, uint32_t width, uint32_t height,
+		uint32_t fourcc, bool needPalStandard) const
 {
-	return new TrikVideoDeviceFile(devicePath, width, height, fourcc);
+	return new TrikVideoDevice(devicePath, width, height, fourcc, 3, needPalStandard);
 }
 
 OutputDeviceFileInterface *TrikHardwareAbstraction::createDspCommunicator() const
 {
 	return new TrikOutputDeviceFile(QStringLiteral("/dev/rpmsg0"));
+}
+
+FbOutputInterface *TrikHardwareAbstraction::createFbOutput() const
+{
+	return new trik::TrikFbOutput();
 }
 
 

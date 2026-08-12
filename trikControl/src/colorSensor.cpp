@@ -14,7 +14,9 @@ ColorSensor::ColorSensor(const QString &port, const trikKernel::Configurer &conf
 	mM = ConfigurerHelper::configureInt(configurer, m.state(), port, "m");
 	mN = ConfigurerHelper::configureInt(configurer, m.state(), port, "n");
 
-	if (mM <= 0 || mN <= 0 || m.state().isFailed()) {
+	// The DSP firmware supports at most a 3x3 grid (COLORS_WIDTHM_MAX /
+	// COLORS_HEIGHTN_MAX), so anything larger can never be filled.
+	if (mM <= 0 || mM > 3 || mN <= 0 || mN > 3 || m.state().isFailed()) {
 		m.state().fail();
 		return;
 	}
@@ -52,7 +54,9 @@ void ColorSensor::init(bool showOnDisplay)
 
 QVector<int> ColorSensor::read(int mIdx, int nIdx)
 {
-	if (mIdx > mReading.size() || nIdx > mReading[0].size() || mIdx <= 0 || nIdx <= 0) {
+	QReadLocker locker(&mReadingLock);
+	if (mReading.isEmpty() || mIdx <= 0 || nIdx <= 0
+	    || mIdx > mReading.size() || nIdx > mReading[0].size()) {
 		QLOG_WARN() << QString("Incorrect parameters for read: m = %1, n = %2").arg(mIdx).arg(nIdx);
 		return {-1, -1, -1};
 	}
@@ -69,6 +73,7 @@ void ColorSensor::stop(bool deinit)
 
 void ColorSensor::onResult(trikDsp::OutArgs result)
 {
+	QWriteLocker locker(&mReadingLock);
 	const int total = std::min(mM * mN, 9);
 	for (int i = 0; i < total; ++i) {
 		const int row = i / mN;

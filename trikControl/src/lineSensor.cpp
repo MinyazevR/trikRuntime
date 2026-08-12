@@ -67,10 +67,15 @@ void LineSensor::onResult(trikDsp::OutArgs result)
 
 	if (m.inArgs().autoDetect) {
 		m.inArgs().autoDetect = false;
+		// Feed the detected range back to the DSP, widening it by the config
+		// toleranceFactor (as the old worker did before re-sending).
 		m.inArgs().params = result.detected;
+		applyToleranceFactor(m.inArgs().params, mToleranceFactor);
 		hsvUpdated = true;
 	}
 
+	// The DSP Line algorithm reports crossroads probability in `y` and the
+	// line "mass" in `size` (see line_sensor.hpp): {x, crossroads, mass}.
 	{
 		QWriteLocker locker(&mReadingLock);
 		mReading = {result.location.x, result.location.y,
@@ -80,14 +85,7 @@ void LineSensor::onResult(trikDsp::OutArgs result)
 	if (hsvUpdated) {
 		{
 			QWriteLocker locker(&mDetectParametersLock);
-			mDetectParameters = {
-				static_cast<int>(result.detected.hue.from),
-				static_cast<int>(result.detected.hue.to),
-				static_cast<int>(result.detected.saturation.from),
-				static_cast<int>(result.detected.saturation.to),
-				static_cast<int>(result.detected.value.from),
-				static_cast<int>(result.detected.value.to)
-			};
+			mDetectParameters = toDetectParameters(result.detected);
 		}
 		Q_EMIT activateRequested(m.inArgs(), m.videoOut(), false);
 	}

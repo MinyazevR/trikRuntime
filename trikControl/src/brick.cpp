@@ -54,6 +54,7 @@
 #include "vectorSensor.h"
 #include "cameraDeviceInterface.h"
 #include "cameraDevice.h"
+#include "cameraManager.h"
 #include "i2cDevice.h"
 #include "mspI2cCommunicator.h"
 #include "lidar.h"
@@ -120,12 +121,14 @@ Brick::Brick(const trikKernel::DifferentOwnerPointer<trikHal::HardwareAbstractio
 		mGamepad.reset(new Gamepad(mConfigurer, *mHardwareAbstraction));
 	}
 
+	if (mConfigurer.isEnabled("videoSensor")) {
+		mCameraManager.reset(new CameraManager(mConfigurer, *mHardwareAbstraction));
+	}
+
 	if (mConfigurer.isEnabled("dspSensor")) {
 		mVideoSensorManager.reset(
-			new VideoSensorManager(mConfigurer, *mHardwareAbstraction));
+			new VideoSensorManager(mConfigurer, *mHardwareAbstraction, mCameraManager.data()));
 
-		connect(mVideoSensorManager.data(), &VideoSensorManager::videoFrameReady,
-			this, &Brick::videoFrameReady);
 		connect(mVideoSensorManager.data(), &VideoSensorManager::videoDisplayStarted,
 			this, &Brick::videoDisplayStarted);
 		connect(mVideoSensorManager.data(), &VideoSensorManager::videoDisplayFinished,
@@ -163,6 +166,7 @@ Brick::~Brick()
 	qDeleteAll(mEventDevices);
 	qDeleteAll(mI2cDevices);
 	qDeleteAll(mLidars);
+	qDeleteAll(mCameras);
 
 	// Clean up devices before killing hardware abstraction since their finalization may depend on it.
 	mMspCommunicator.reset();
@@ -195,32 +199,37 @@ QString Brick::configVersion() const
 
 void Brick::configure(const QString &portName, const QString &deviceName)
 {
-	auto proxyDeviceName = deviceName;
-	const auto isVideoSensor = VideoSensorManager::isVideoSensor(deviceName);
-	const auto previousDeviceIsDspSensor =
-			mConfigurer.deviceClass(portName) == VideoSensorManager::deviceClass();
+	// This method is kept for backward compatibility with the generated
+	// (PythonQt/JS) bindings: they may call configure() with a video sensor
+	// class (lineSensor, objectSensor, colorSensor) or a still camera on a
+	// video port.
+	//
+	// Video ports (video1, video2, usb-camera, ...) host
+	// camera-based devices that all share the same physical camera through
+	// VideoSensorManager/CameraManager. There is no standalone "device" to
+	// shut down on such a port — the camera itself is reused, so at most the
+	// high-level object (a sensor or a camera) has to be (re)created.
+	const bool isVideoSensor = VideoSensorManager::isVideoSensor(deviceName);
+	const bool isVideoPort = portName.startsWith(QStringLiteral("video"))
+				 || portName.startsWith(QStringLiteral("usb-camera"));
 
-	if (isVideoSensor) {
-		proxyDeviceName = VideoSensorManager::deviceClass();
-		if (!mVideoSensorManager) {
-			shutdownDevice(portName);
-			return;
+	if (isVideoPort && (isVideoSensor
+			    || deviceName == QStringLiteral("photo")
+			    || deviceName == QStringLiteral("camera"))) {
+		// A video sensor just asks VideoSensorManager to (re)create the sensor.
+		if (isVideoSensor && mVideoSensorManager) {
+			mVideoSensorManager->create(portName, deviceName);
 		}
-	}
-
-	if (isVideoSensor && previousDeviceIsDspSensor) {
-		mVideoSensorManager->create(portName, deviceName);
+		// A still camera is created lazily in getStillImage(port), so there is
+		// nothing to configure or shut down here.
 		return;
 	}
 
+	// Regular device: shut the old one down, record the new device type in the
+	// config and instantiate it.
 	shutdownDevice(portName);
-	mConfigurer.configure(portName, proxyDeviceName);
-
-	if (isVideoSensor) {
-		mVideoSensorManager->create(portName, deviceName);
-	} else {
-		createDevice(portName);
-	}
+	mConfigurer.configure(portName, deviceName);
+	createDevice(portName);
 }
 
 void Brick::reset()
@@ -477,12 +486,21 @@ I2cDeviceInterface *Brick::smBusI2c(int bus, int address)
 			       [this](){ return mHardwareAbstraction->createMspI2c();});
 }
 
-QVector<uint8_t> Brick::getStillImage()
+QVector<uint8_t> Brick::getStillImage(const QString &port)
 {
-	if (!mCamera)
-		return {};
-	else
-		return mCamera->getPhoto();
+	if (!mCameraManager) {
+		mCameraManager.reset(new CameraManager(mConfigurer, *mHardwareAbstraction));
+	}
+
+	// Create the CameraDevice for @p port lazily and cache it. Its state is
+	// self-contained, so the device can be reused for subsequent photos.
+	CameraDeviceInterface *camera = mCameras.value(port, nullptr);
+	if (!camera) {
+		camera = new CameraDevice(port, mMediaPath, mConfigurer, *mCameraManager);
+		mCameras.insert(port, camera);
+	}
+
+	return camera->getPhoto();
 }
 
 
@@ -578,8 +596,6 @@ void Brick::shutdownDevice(const QString &port)
 	} else if (deviceClass == "encoder") {
 		delete mEncoders[port];
 		mEncoders.remove(port);
-	} else if (deviceClass == "dspSensor" && mVideoSensorManager) {
-		mVideoSensorManager->shutdown(port);
 	} else if (deviceClass == "fifo") {
 		delete mFifos[port];
 		mFifos.remove(port);
@@ -619,12 +635,7 @@ void Brick::createDevice(const QString &port)
 			mFifos.insert(port, new Fifo(port, mConfigurer, *mHardwareAbstraction));
 		} else if (deviceClass == "lidar") {
 			mLidars.insert(port, new Lidar(port, mConfigurer, *mHardwareAbstraction));
-		} else if (deviceClass == "camera") {
-			QScopedPointer<CameraDeviceInterface> tmp (
-						new CameraDevice(port, mMediaPath, mConfigurer, *mHardwareAbstraction)
-					);
-			mCamera.swap(tmp);
-		} else if (deviceClass == "irCamera") {
+	} else if (deviceClass == "irCamera") {
 			QScopedPointer<IrCameraInterface> tmp (
 				new IrCamera(port, mConfigurer, *mHardwareAbstraction)
 				);

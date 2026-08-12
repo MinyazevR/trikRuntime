@@ -12,7 +12,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License. */
 
-#include "trikVideoDeviceFile.h"
+#include "trikVideoDevice.h"
 
 #include <cerrno>
 #include <linux/videodev2.h>
@@ -22,13 +22,15 @@
 
 using namespace trikHal::trik;
 
-TrikVideoDeviceFile::TrikVideoDeviceFile(const QString &devicePath,
-                                         uint32_t width, uint32_t height, uint32_t fourcc)
-	: trikHal::VideoDeviceFileBase(devicePath, width, height, fourcc)
+TrikVideoDevice::TrikVideoDevice(const QString &devicePath,
+                                 uint32_t width, uint32_t height, uint32_t fourcc,
+                                 uint32_t bufferCount, bool needPalStandard)
+	: trikHal::VideoDeviceFileBase(devicePath, width, height, fourcc,
+	                               bufferCount, needPalStandard)
 {
 }
 
-bool TrikVideoDeviceFile::setFormat()
+bool TrikVideoDevice::setFormat()
 {
 	if (!trikHal::VideoDeviceFileBase::setFormat()) {
 		return false;
@@ -42,7 +44,7 @@ bool TrikVideoDeviceFile::setFormat()
 			break;
 		if (fdesc.pixelformat == mActualFourcc) {
 			if (fdesc.flags & V4L2_FMT_FLAG_EMULATED) {
-				QLOG_WARN() << "TrikVideoDeviceFile:" << mPath
+				QLOG_WARN() << "TrikVideoDevice:" << mPath
 				            << "format is emulated, performance will be degraded";
 			}
 			break;

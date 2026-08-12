@@ -1,4 +1,4 @@
-/* Copyright 2018 Ivan Tyulyandin and CyberTech Labs Ltd.
+/* Copyright 2024 CyberTech Labs Ltd.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -14,14 +14,34 @@
 
 #pragma once
 
-#include "videoDeviceFileBase.h"
+#include "fbOutputInterface.h"
 
-class TrikV4l2VideoDevice : public trikHal::VideoDeviceFileBase
+#include <cstdint>
+
+namespace trikHal {
+namespace trik {
+
+class TrikFbOutput : public FbOutputInterface
 {
 	Q_OBJECT
-public:
-	explicit TrikV4l2VideoDevice(const QString &inputFile);
 
-protected:
-	bool negotiateFormat() override;
+public:
+	explicit TrikFbOutput(QObject *parent = nullptr);
+	~TrikFbOutput() override;
+
+	bool open() override;
+	void close() override;
+	bool isOpen() const override;
+	void writeFrame(const uint8_t *rgb565) override;
+	uint32_t frameWidth() const override;
+	uint32_t frameHeight() const override;
+
+private:
+	int mFd = -1;
+	uint8_t *mMap = nullptr;
+	size_t mMapLen = 0;
+	bool mOpen = false;
 };
+
+} // namespace trik
+} // namespace trikHal

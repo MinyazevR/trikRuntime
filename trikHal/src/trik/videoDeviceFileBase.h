@@ -34,6 +34,7 @@ public:
 	                    uint32_t width, uint32_t height,
 	                    uint32_t preferredFourcc,
 	                    uint32_t bufferCount = 3,
+	                    bool needPalStandard = false,
 	                    QObject *parent = nullptr);
 	~VideoDeviceFileBase() override;
 
@@ -67,6 +68,7 @@ protected:
 	uint32_t mActualFourcc = 0;
 	uint32_t mLineLen = 0;
 	uint32_t mBufferCount;
+	bool mNeedPalStandard = false;
 	int mFd = -1;
 	bool mStreaming = false;
 

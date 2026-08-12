@@ -1,4 +1,6 @@
 import QtQuick 2.15
+import QtQuick.Layouts 1.15
+import QtQuick.Controls 2.15
 
 Rectangle {
     id: _camera
@@ -6,67 +8,121 @@ Rectangle {
     property var idList: _listSensors
     property var cameraObject: null
     property int photoCounter: 0
+    property string port: "video1"
     color: activeTheme.backgroundColor
 
-    ListView {
-        id: _listSensors
-        anchors.fill: parent
-        model: sensors
+    function takePhoto() {
+        if (_camera.cameraObject) {
+            _camera.cameraObject.doPhoto(_camera.port)
+        }
+    }
 
-        Keys.onPressed: {
-            if (event.key === Qt.Key_Return && _camera.cameraObject) {
-                _camera.cameraObject.doPhoto()
-                event.accepted = true
+    ColumnLayout {
+        anchors.fill: parent
+        spacing: 5
+
+        RowLayout {
+            id: _portsRow
+            Layout.fillWidth: true
+            Layout.alignment: Qt.AlignHCenter
+            spacing: 5
+
+            Button {
+                text: qsTr("video2")
+                onClicked: { _camera.port = "video2"; _camera.takePhoto() }
+                contentItem: Text {
+                    text: parent.text
+                    color: "white"
+                    font.pointSize: fontSizes.small
+                    horizontalAlignment: Text.AlignHCenter
+                    verticalAlignment: Text.AlignVCenter
+                }
+            }
+            Button {
+                text: qsTr("video1")
+                onClicked: { _camera.port = "video1"; _camera.takePhoto() }
+                contentItem: Text {
+                    text: parent.text
+                    color: "white"
+                    font.pointSize: fontSizes.small
+                    horizontalAlignment: Text.AlignHCenter
+                    verticalAlignment: Text.AlignVCenter
+                }
+            }
+            Button {
+                text: qsTr("usb-camera")
+                onClicked: { _camera.port = "usb-camera"; _camera.takePhoto() }
+                contentItem: Text {
+                    text: parent.text
+                    color: "white"
+                    font.pointSize: fontSizes.small
+                    horizontalAlignment: Text.AlignHCenter
+                    verticalAlignment: Text.AlignVCenter
+                }
             }
         }
 
-        delegate: Item {
-            id: _item
-            height: _listSensors.height
-            width: _listSensors.width
-            property string src: ""
+        ListView {
+            id: _listSensors
+            Layout.fillWidth: true
+            Layout.fillHeight: true
+            model: sensors
 
-            Component.onCompleted: {
-                _camera.cameraObject = display
-                display.doPhoto()
-            }
-
-            Loader {
-                id: _loader
-                anchors.fill: parent
-                sourceComponent: null
-                Connections {
-                    target: display
-                    function onImageChanged() {
-                        _camera.photoCounter++
-                        _item.src = "image://cameraImageProvider/" + _camera.photoCounter
-                        _loader.sourceComponent = _imageComponent
-                    }
-                    function onCameraUnavailable() {
-                        _loader.sourceComponent = _txtComponent
-                    }
+            Keys.onPressed: {
+                if (event.key === Qt.Key_Return && _camera.cameraObject) {
+                    _camera.takePhoto()
+                    event.accepted = true
                 }
             }
-            Component {
-                id: _txtComponent
-                Text {
-                    id: _txtNotify
-                    text: qsTr("Camera is not available")
-                    horizontalAlignment: Text.AlignHCenter
-                    verticalAlignment: Text.AlignVCenter
-                    font.pointSize: fontSizes.medium
-                    color: activeTheme.textColor
+
+            delegate: Item {
+                id: _item
+                height: _listSensors.height
+                width: _listSensors.width
+                property string src: ""
+
+                Component.onCompleted: {
+                    _camera.cameraObject = display
+                    display.doPhoto(_camera.port)
                 }
-            }
-            Component {
-                id: _imageComponent
-                Image {
-                    id: _imageView
-                    source: _item.src
-                    width: parent.width
-                    height: parent.height
-                    fillMode: Image.PreserveAspectFit
-                    cache: false
+
+                Loader {
+                    id: _loader
+                    anchors.fill: parent
+                    sourceComponent: null
+                    Connections {
+                        target: display
+                        function onImageChanged() {
+                            _camera.photoCounter++
+                            _item.src = "image://cameraImageProvider/" + _camera.photoCounter
+                            _loader.sourceComponent = _imageComponent
+                        }
+                        function onCameraUnavailable() {
+                            _loader.sourceComponent = _txtComponent
+                        }
+                    }
+                }
+                Component {
+                    id: _txtComponent
+                    Text {
+                        id: _txtNotify
+                        text: qsTr("Camera is not available")
+                        horizontalAlignment: Text.AlignHCenter
+                        verticalAlignment: Text.AlignVCenter
+                        font.pointSize: fontSizes.medium
+                        color: activeTheme.textColor
+                    }
+                }
+                Component {
+                    id: _imageComponent
+                    Image {
+                        id: _imageView
+                        source: _item.src
+                        width: parent.width
+                        height: parent.height
+                        fillMode: Image.PreserveAspectFit
+                        cache: false
+                    }
                 }
             }
         }

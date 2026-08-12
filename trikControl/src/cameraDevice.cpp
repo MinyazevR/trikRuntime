@@ -14,71 +14,57 @@
 
 #include "cameraDevice.h"
 
-#include <QtCore/QSysInfo>
-
 #include "qtCameraImplementation.h"
 #include "v4l2CameraImplementation.h"
 #include "imitationCameraImplementation.h"
+#include "cameraManager.h"
 #include <QsLog.h>
 #include <trikKernel/configurer.h>
-
+#include "configurerHelper.h"
 #include <QEventLoop>
 #include <QThread>
 #include <functional>
 
 namespace trikControl {
 
-CameraDevice::CameraDevice(const QString & port, const QString & mediaPath, const trikKernel::Configurer &configurer
-							, trikHal::HardwareAbstractionInterface &hardwareAbstraction)
+CameraDevice::CameraDevice(const QString & port, const QString & mediaPath,
+                           const trikKernel::Configurer &configurer,
+                           CameraManager &cameraManager)
 {
-	Q_UNUSED(hardwareAbstraction)
-
-	QString type = configurer.attributeByPort(port, "type");
-	QString src = configurer.attributeByPort(port, "src");
-
-	QString failMessage;
+	QString type = configurer.childAttributeByPort(port, "photo", "type");
+	// The device file is owned by the CameraManager, keyed by port — no need
+	// to read it from the config again.
+	const QString src = cameraManager.deviceFile(port);
 
 	if (type == "qtmultimedia") {
-			decltype(mCameraImpl)(new QtCameraImplementation(src)).swap(mCameraImpl);
+		decltype(mCameraImpl)(new QtCameraImplementation(src)).swap(mCameraImpl);
 	} else if (type == "v4l2") {
 #ifdef Q_OS_LINUX
-			decltype(mCameraImpl)(new V4l2CameraImplementation(src, hardwareAbstraction)).swap(mCameraImpl);
-#else
-			failMessage = "can use v4l2 only on Linux";
+		decltype(mCameraImpl)(new V4l2CameraImplementation(port, cameraManager)).swap(mCameraImpl);
 #endif
 	} else if (type == "file") {
-				QStringList filters = configurer.attributeByPort(port, "filters").split(',');
-				decltype(mCameraImpl)(new ImitationCameraImplementation(filters, mediaPath)).swap(mCameraImpl);
-	} else {
-		failMessage = "unknown camera device type:" + type;
+		QStringList filters = configurer.attributeByPort(port, "filters").split(',');
+		decltype(mCameraImpl)(new ImitationCameraImplementation(filters, mediaPath)).swap(mCameraImpl);
 	}
 
 	if (mCameraImpl) {
 		mCameraImpl->setTempDir(mediaPath);
 	} else {
-		if (failMessage.isEmpty()) {
-			failMessage = "object construction failure";
-		}
-
 		QLOG_ERROR() << "Failed to initialize camera device for " << src
-				<< ", " << failMessage
-				<< ", creating camera with type=file ("
-				<< mediaPath << ") and filters=\"*.jpg,*.png\"";
+		             << ", falling back to imitation";
 		decltype(mCameraImpl)(new ImitationCameraImplementation(QStringList({"*.jpg","*.png"}), mediaPath))
-				.swap(mCameraImpl);
+			.swap(mCameraImpl);
+		mCameraImpl->setTempDir(mediaPath);
 	}
 }
 
-
 QVector<uint8_t> CameraDevice::getPhoto() {
-	if (!mCameraImpl) {
-		return QVector<uint8_t>();
-	}
-
+	if (!mCameraImpl) return {};
 	QMutexLocker lock(&mCameraMutex);
+
 	QVector<uint8_t> photo;
-	std::function<void()> runFunc = [this, &photo](){ mCameraImpl->getPhoto().swap(photo); };
-#if QT_VERSION_MAJOR>=5 && QT_VERSION_MINOR>=10 && QT_VERSION_PATCH >= 2
+	std::function<void()> runFunc = [this, &photo]{ mCameraImpl->getPhoto().swap(photo); };
+#if QT_VERSION_MAJOR>=5 && QT_VERSION_MINOR>=10
 	QScopedPointer<QThread> t(QThread::create(std::move(runFunc)));
 #else
 	struct CameraThread: public QThread {
@@ -90,14 +76,12 @@ QVector<uint8_t> CameraDevice::getPhoto() {
 #endif
 	QEventLoop l;
 	QObject::connect(t.data(), &QThread::finished, &l, &QEventLoop::quit);
-	t->setObjectName(__PRETTY_FUNCTION__);
+	t->setObjectName("CameraDevice::getPhoto");
 	t->start();
 	l.exec();
 	return photo;
 }
 
+CameraDevice::Status CameraDevice::status() const { return CameraDevice::Status::ready; }
 
-CameraDevice::Status CameraDevice::status() const {
-	return CameraDevice::Status::ready;
-}
 }

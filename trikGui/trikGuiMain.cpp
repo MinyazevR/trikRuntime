@@ -82,7 +82,6 @@ int main(int argc, char *argv[])
 	MainMenuManager mainMenuManager(initHelper.configPath(), engine, &app);
 
 	auto *dspVideoProvider = new VideoDisplayProvider(mainMenuManager.brick());
-	engine->addImageProvider(QStringLiteral("dspVideo"), dspVideoProvider);
 	engine->rootContext()->setContextProperty("videoDisplayProvider", dspVideoProvider);
 
 	const QUrl url(QStringLiteral("qrc:/qml/main.qml"));

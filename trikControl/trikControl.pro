@@ -91,6 +91,7 @@ HEADERS += \
 	$$PWD/src/servoMotor.h \
 	$$PWD/src/soundSensor.h \
 	$$PWD/src/videoSensorManager.h \
+	$$PWD/src/cameraManager.h \
 	$$PWD/src/soundSensorWorker.h \
 	$$PWD/src/tonePlayer.h \
 	$$PWD/src/vectorSensor.h \
@@ -162,6 +163,7 @@ SOURCES += \
 	$$PWD/src/gyroSensor.cpp \
 	$$PWD/src/cameraDevice.cpp \
 	$$PWD/src/videoSensorManager.cpp \
+	$$PWD/src/cameraManager.cpp \
 	$$PWD/src/qtCameraImplementation.cpp \
 	$$PWD/src/v4l2CameraImplementation.cpp \
 	$$PWD/src/imitationCameraImplementation.cpp \

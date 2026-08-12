@@ -6,6 +6,8 @@
 #include <QEventLoop>
 #include <QTimer>
 
+#include <trikHal/fbOutputInterface.h>
+
 #include <algorithm>
 #include <cstring>
 
@@ -43,14 +45,17 @@ DspServer::~DspServer()
 void DspServer::activate(const DspChannel &channel)
 {
 	QMetaObject::invokeMethod(this, [this, channel]() {
-		if (d->channel().videoOut) {
-			QLOG_INFO() << "DspServer: deactivating video display for activation";
-			emit videoDisplayFinished();
-		}
+		const bool wasVideo = d->channel().videoOut && d->mFbOutput && d->mFbOutput->isOpen();
 		d->setChannel(channel);
-		if (channel.videoOut) {
-			QLOG_INFO() << "DspServer: activating video display for new channel";
-			emit videoDisplayStarted();
+		if (channel.videoOut && d->mFbOutput) {
+			if (!wasVideo) {
+				QLOG_INFO() << "DspServer: opening video display via HAL fb output";
+				d->mFbOutput->open();
+			}
+			// else: same fb, different algorithm — no reopen needed
+		} else if (wasVideo) {
+			QLOG_INFO() << "DspServer: closing video display via HAL fb output";
+			d->mFbOutput->close();
 		}
 	}, Qt::QueuedConnection);
 }
@@ -58,47 +63,46 @@ void DspServer::activate(const DspChannel &channel)
 void DspServer::deactivate()
 {
 	QMetaObject::invokeMethod(this, [this]() {
-		const bool wasVideoOut = d->channel().videoOut;
 		d->clearChannel();
-		if (wasVideoOut) {
-			QLOG_INFO() << "DspServer: deactivating channel, was video display";
-			emit videoDisplayFinished();
+		if (d->mFbOutput && d->mFbOutput->isOpen()) {
+			QLOG_INFO() << "DspServer: deactivating video display via HAL fb output";
+			d->mFbOutput->close();
 		}
 	}, Qt::QueuedConnection);
 }
 
-void DspServer::processFrameData(const QString &sourceId, const uint8_t *data, size_t size)
+void DspServer::copyFrame(const uint8_t *data, size_t size)
 {
-	QLOG_DEBUG() << "DspServer: processFrameData ENTER sourceId" << sourceId << "size" << size;
-
-	if (sourceId != d->channelSourceId()) {
-		QLOG_WARN() << "DspServer: dropped frame from source" << sourceId
-		            << "expected" << d->channelSourceId();
-		return;
-	}
-
+	// Plain memcpy into the DSP shared input buffer. See the header comment for
+	// the serialization contract with processFrameData().
 	memcpy(d->inBufferStart(), data, std::min(size, d->inBufferLen()));
-	emit frameBuffered();
+}
 
-	OutArgs out;
+void DspServer::processFrameData(const QString &sourceId)
+{
+	OutArgs out{};
 	const auto algo = d->channelAlgo();
-	VideoFrame videoFrame;
-	const bool needVideo = d->channel().videoOut;
-	const auto &channel = d->channel();
-	QLOG_DEBUG() << "DspServer: calling processFrame via IPC";
-	const bool ok = d->processFrame(channel, out, needVideo ? &videoFrame : nullptr);
-	QLOG_DEBUG() << "DspServer: processFrame IPC returned" << ok;
 
-	if (ok) {
-		QLOG_INFO() << "DspServer: frame processed for source" << sourceId;
-		if (needVideo && videoFrame.data) {
-			const auto frameDataCopy = QByteArray(reinterpret_cast<const char *>(videoFrame.data),
-			                                      static_cast<int>(videoFrame.size));
-			emit videoFrameReady(frameDataCopy,
-			                     videoFrame.width, videoFrame.height);
+	// The DSP is single-channel: frames from a non-active source are dropped.
+	// They are NOT returned early, because the caller must still be notified so
+	// it can release the V4L2 buffer back to the driver — otherwise the capture
+	// stream stalls (notifier stays disabled until QBUF).
+	if (sourceId == d->channelSourceId()) {
+		VideoFrame videoFrame;
+		const bool needVideo = d->channel().videoOut;
+		const auto &channel = d->channel();
+		const bool ok = d->processFrame(channel, out, needVideo ? &videoFrame : nullptr);
+
+		if (ok && needVideo && videoFrame.data && d->mFbOutput && d->mFbOutput->isOpen()) {
+			d->mFbOutput->writeFrame(static_cast<const uint8_t *>(videoFrame.data));
 		}
-	} else {
-		QLOG_WARN() << "DspServer: processFrame failed for source" << sourceId;
+
+		const auto count = d->mFrameCount.fetch_add(1, std::memory_order_relaxed) + 1;
+		if (d->mFpsTimer.hasExpired(1000) || !d->mFpsTimer.isValid()) {
+			QLOG_INFO() << "DSP FPS:" << count;
+			d->mFrameCount.store(0, std::memory_order_relaxed);
+			d->mFpsTimer.restart();
+		}
 	}
 
 	emit resultReady(sourceId, algo, out);
@@ -161,6 +165,17 @@ void DspServer::init()
 	} else {
 		QLOG_ERROR() << "DspServer: message queue or shared buffer setup failed";
 	};
+}
+
+void DspServer::setFbOutput(trikHal::FbOutputInterface *fb)
+{
+	d->mFbOutput = fb;
+	if (fb) {
+		connect(fb, &trikHal::FbOutputInterface::started,
+		        this, &DspServer::videoDisplayStarted);
+		connect(fb, &trikHal::FbOutputInterface::finished,
+		        this, &DspServer::videoDisplayFinished);
+	}
 }
 
 }

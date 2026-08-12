@@ -1,5 +1,6 @@
 #pragma once
 
+#include <QtCore/QReadWriteLock>
 #include <QtCore/QVector>
 
 #include <trikDsp/dspTypes.h>
@@ -38,6 +39,7 @@ private:
 	QVector<QVector<QVector<int>>> mReading;
 	int mM = 0;
 	int mN = 0;
+	mutable QReadWriteLock mReadingLock;
 };
 
 }

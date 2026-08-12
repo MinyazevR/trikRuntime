@@ -39,8 +39,8 @@ public:
 	/// If it is false, script will exit immediately.
 	bool isInEventDrivenMode() const override;
 
-	/// Returns repacked RGB88 from 3 x uint8_t into int32_t image
-	Q_INVOKABLE QVector<int32_t> getPhoto() override;
+	/// Returns repacked RGB88 from 3 x uint8_t into int32_t image from the camera on @p port.
+	Q_INVOKABLE QVector<int32_t> getPhoto(const QString &port = QStringLiteral("video1")) override;
 
 	/// Starts a new timer with given interval and returns reference to it.
 	Q_INVOKABLE QObject *timer(int milliseconds) override;

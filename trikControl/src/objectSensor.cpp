@@ -44,6 +44,7 @@ void ObjectSensor::detect()
 
 QVector<int> ObjectSensor::read()
 {
+	QReadLocker locker(&mReadingLock);
 	return mReading;
 }
 
@@ -56,6 +57,7 @@ void ObjectSensor::stop(bool deinit)
 
 QVector<int> ObjectSensor::getDetectParameters() const
 {
+	QReadLocker locker(&mDetectParametersLock);
 	return mDetectParameters;
 }
 
@@ -66,21 +68,21 @@ void ObjectSensor::onResult(trikDsp::OutArgs result)
 	if (m.inArgs().autoDetect) {
 		m.inArgs().autoDetect = false;
 		m.inArgs().params = result.detected;
+		applyToleranceFactor(m.inArgs().params, mToleranceFactor);
 		hsvUpdated = true;
 	}
 
-	mReading = {result.location.x, result.location.y,
-	            static_cast<int>(result.location.size)};
+	{
+		QWriteLocker locker(&mReadingLock);
+		mReading = {result.location.x, result.location.y,
+		            static_cast<int>(result.location.size)};
+	}
 
 	if (hsvUpdated) {
-		mDetectParameters = {
-			static_cast<int>(result.detected.hue.from),
-			static_cast<int>(result.detected.hue.to),
-			static_cast<int>(result.detected.saturation.from),
-			static_cast<int>(result.detected.saturation.to),
-			static_cast<int>(result.detected.value.from),
-			static_cast<int>(result.detected.value.to)
-		};
+		{
+			QWriteLocker locker(&mDetectParametersLock);
+			mDetectParameters = toDetectParameters(result.detected);
+		}
 		Q_EMIT activateRequested(m.inArgs(), m.videoOut(), false);
 	}
 }

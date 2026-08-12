@@ -19,6 +19,8 @@ struct DspChannel {
 	bool videoOut = false;
 	uint32_t width = 0;
 	uint32_t height = 0;
+	PixelFormat format = PixelFormat::Unknown; ///< Actual pixel format of the source.
+	uint32_t lineLength = 0;                    ///< Actual bytes per line (V4L2 bytesperline).
 };
 
 struct VideoFrame {

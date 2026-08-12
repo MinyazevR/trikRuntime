@@ -23,6 +23,7 @@
 #include "stubFifo.h"
 #include "stubIIOFile.h"
 #include "stubVideoDeviceFile.h"
+#include "stubFbOutput.h"
 #include "stubCommonI2c.h"
 #include "QsLog.h"
 
@@ -89,23 +90,23 @@ OutputDeviceFileInterface *StubHardwareAbstraction::createOutputDeviceFile(const
 	return new StubOutputDeviceFile(fileName);
 }
 
-QVector<uint8_t> StubHardwareAbstraction::captureV4l2StillImage(const QString &port, const QDir &pathToPic) const
-{
-	Q_UNUSED(pathToPic);
-	QLOG_INFO() << "Call stub HAL captureV4l2StillImage on port " + port;
-	return QVector<uint8_t>();
-}
-
 VideoDeviceFileInterface *StubHardwareAbstraction::createVideoDeviceFile(
-		const QString &devicePath, uint32_t width, uint32_t height, uint32_t fourcc) const
+		const QString &devicePath, uint32_t width, uint32_t height,
+		uint32_t fourcc, bool needPalStandard) const
 {
 	Q_UNUSED(width);
 	Q_UNUSED(height);
 	Q_UNUSED(fourcc);
+	Q_UNUSED(needPalStandard);
 	return new StubVideoDeviceFile(devicePath);
 }
 
 OutputDeviceFileInterface *StubHardwareAbstraction::createDspCommunicator() const
 {
 	return new StubOutputDeviceFile(QStringLiteral("/dev/null"));
+}
+
+FbOutputInterface *StubHardwareAbstraction::createFbOutput() const
+{
+	return new stub::StubFbOutput();
 }

@@ -57,6 +57,7 @@ class I2cCommunicator;
 class Lidar;
 class IrCameraInterface;
 class VideoSensorManager;
+class CameraManager;
 
 /// Class representing TRIK controller board and devices installed on it, also provides access
 /// to peripherals like motors and sensors.
@@ -129,7 +130,7 @@ public Q_SLOTS:
 
 	I2cDeviceInterface *smBusI2c(int bus, int address) override;
 
-	QVector<uint8_t> getStillImage() override;
+	QVector<uint8_t> getStillImage(const QString &port) override;
 
 	SoundSensorInterface *soundSensor(const QString &port) override;
 
@@ -185,9 +186,10 @@ private:
 	QScopedPointer<Led> mLed;
 	QScopedPointer<Gamepad> mGamepad;
 	QScopedPointer<TonePlayer> mTonePlayer;
-	QScopedPointer<CameraDeviceInterface> mCamera;
+	QHash<QString, CameraDeviceInterface *> mCameras;  // Has ownership, keyed by port.
 	QScopedPointer<IrCameraInterface> mIrCamera;
 	QScopedPointer<VideoSensorManager> mVideoSensorManager;
+	QScopedPointer<CameraManager> mCameraManager;
 	QHash<QString, ServoMotor *> mServoMotors;  // Has ownership.
 	QHash<QString, PwmCapture *> mPwmCaptures;  // Has ownership.
 	QHash<QString, PowerMotor *> mPowerMotors;  // Has ownership.

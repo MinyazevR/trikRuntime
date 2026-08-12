@@ -16,40 +16,26 @@
 
 #include <QtCore/QScopedPointer>
 #include <QtCore/QVector>
-
 #include <QMutex>
 
 #include "cameraDeviceInterface.h"
 #include "cameraImplementationInterface.h"
 #include <trikControl/trikControlDeclSpec.h>
 
-namespace trikKernel {
-class Configurer;
-}
-
-namespace trikHal {
-class HardwareAbstractionInterface;
-}
+namespace trikKernel { class Configurer; }
+namespace trikControl { class CameraManager; }
 
 namespace trikControl {
 
-/// Class for camera device instantiation
-class TRIKCONTROL_EXPORT CameraDevice : public CameraDeviceInterface
+class CameraDevice : public CameraDeviceInterface
 {
 public:
-
-	/// CameraDevice constructor
-	/// @param mediaPath - path where program should save photos
-	/// @param configurer - configurer to get info from config
-	/// @param hardwareAbstraction - realization of HAL
-	CameraDevice(const QString &port, const QString & mediaPath
-				 , const trikKernel::Configurer &configurer
-				 , trikHal::HardwareAbstractionInterface &hardwareAbstraction);
+	CameraDevice(const QString &port, const QString & mediaPath,
+	             const trikKernel::Configurer &configurer,
+	             CameraManager &cameraManager);
 
 	QVector<uint8_t> getPhoto() override;
-
 	Status status() const override;
-
 	~CameraDevice() override = default;
 
 private:

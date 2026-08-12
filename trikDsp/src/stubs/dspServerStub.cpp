@@ -52,11 +52,15 @@ void DspServer::deactivate()
 	}, Qt::QueuedConnection);
 }
 
-void DspServer::processFrameData(const QString &sourceId, const uint8_t *data, size_t size)
+void DspServer::copyFrame(const uint8_t *data, size_t size)
 {
-	Q_UNUSED(sourceId)
 	Q_UNUSED(data)
 	Q_UNUSED(size)
+}
+
+void DspServer::processFrameData(const QString &sourceId)
+{
+	Q_UNUSED(sourceId)
 }
 
 }

@@ -114,13 +114,13 @@ public:
 	/// Returns on-board gyroscope.
 	Q_INVOKABLE virtual trikControl::GyroSensorInterface *gyroscope() = 0;
 
-	/// Returns high-level line detector sensor using camera on given port (video0 or video1).
+	/// Returns high-level line detector sensor using camera on given port (video1 or video2).
 	Q_INVOKABLE virtual trikControl::LineSensorInterface *lineSensor(const QString &port) = 0;
 
-	/// Returns high-level color sensor using camera on given port (video0 or video1).
+	/// Returns high-level color sensor using camera on given port (video1 or video2).
 	Q_INVOKABLE virtual trikControl::ColorSensorInterface *colorSensor(const QString &port) = 0;
 
-	/// Returns high-level object detector sensor using camera on given port (video0 or video1).
+	/// Returns high-level object detector sensor using camera on given port (video1 or video2).
 	Q_INVOKABLE virtual trikControl::ObjectSensorInterface *objectSensor(const QString &port) = 0;
 
 	/// Returns lidar on given port.
@@ -134,8 +134,10 @@ public:
 	// NOLINTNEXTLINE(google-default-arguments)
 	Q_INVOKABLE virtual trikControl::I2cDeviceInterface *i2c(int bus, int address, int regSize = 1) = 0;
 
-	/// Returns QVector<uin8_t> with image using camera on given port (video0 or video1).
-	Q_INVOKABLE virtual QVector<uint8_t> getStillImage() = 0;
+	/// Returns QVector<uint8_t> with image using camera on given port (video1 or video2).
+	// TODO: The default parameter is part of the public API. Consider backward compatibility
+	// NOLINTNEXTLINE(google-default-arguments)
+	Q_INVOKABLE virtual QVector<uint8_t> getStillImage(const QString &port = QStringLiteral("video1")) = 0;
 
 	/// Returns high-level sound detector sensor using microphones.
 	Q_INVOKABLE virtual trikControl::SoundSensorInterface *soundSensor(const QString &port) = 0;
@@ -180,10 +182,6 @@ public:
 
 	/// Emitted when brick finished resetting to default stopped state
 	void resetCompleted();
-
-	/// Emitted when videoOut=true DSP sensor produces a new output frame.
-	void videoFrameReady(const QByteArray &data,
-	                     uint32_t width, uint32_t height);
 
 	/// Emitted when a video sensor with videoOut=true is activated.
 	void videoDisplayStarted();

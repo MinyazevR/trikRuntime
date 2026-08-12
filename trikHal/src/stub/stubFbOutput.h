@@ -14,22 +14,27 @@
 
 #pragma once
 
-#include "videoDeviceFileBase.h"
+#include <trikHal/fbOutputInterface.h>
 
 namespace trikHal {
-namespace trik {
+namespace stub {
 
-class TrikVideoDeviceFile : public trikHal::VideoDeviceFileBase
+class StubFbOutput : public trikHal::FbOutputInterface
 {
 	Q_OBJECT
-	Q_DISABLE_COPY(TrikVideoDeviceFile)
 
 public:
-	TrikVideoDeviceFile(const QString &devicePath, uint32_t width, uint32_t height, uint32_t fourcc);
+	explicit StubFbOutput(QObject *parent = nullptr);
+	bool open() override;
+	void close() override;
+	bool isOpen() const override;
+	void writeFrame(const uint8_t *rgb565) override;
+	uint32_t frameWidth() const override;
+	uint32_t frameHeight() const override;
 
-protected:
-	bool setFormat() override;
+private:
+	bool mOpen = false;
 };
 
-} // namespace trik
+} // namespace stub
 } // namespace trikHal

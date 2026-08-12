@@ -1,5 +1,9 @@
 #pragma once
 
+#include <atomic>
+
+#include <QElapsedTimer>
+
 #include <trik/buffer.h>
 #include <trik/sensors/cv_algorithm.h>
 #include <trik/sensors/cv_algorithm_args.h>
@@ -8,6 +12,8 @@
 
 struct MessageQ_Object;
 struct trik_msg;
+
+namespace trikHal { class FbOutputInterface; }
 
 namespace trikDsp {
 
@@ -151,8 +157,16 @@ public:
 
 	/// @}
 
-	/// TI remoteproc ID of the DSP core (0 for OMAP-L138).
+	/// 	TI remoteproc ID of the DSP core (0 for OMAP-L138).
 	uint16_t rprocId = 0;
+
+	/// FPS counter — incremented atomically from processFrameData.
+	/// Printed by DspServer once per second (hot path is lock-free).
+	mutable std::atomic<uint64_t> mFrameCount{0};
+	mutable QElapsedTimer mFpsTimer;
+
+	/// HAL framebuffer output (optional, set via setFbOutput).
+	class trikHal::FbOutputInterface *mFbOutput = nullptr;
 
 private:
 	/// Send a MessageQ request and block until the DSP responds.

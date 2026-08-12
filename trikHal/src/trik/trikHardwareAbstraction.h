@@ -39,10 +39,11 @@ public:
 	IIOFileInterface *createIIOFile(const QString &fileName, const QString &scanType) const override;
 	InputDeviceFileInterface *createInputDeviceFile(const QString &fileName) const override;
 	OutputDeviceFileInterface *createOutputDeviceFile(const QString &fileName) const override;
-	QVector<uint8_t> captureV4l2StillImage(const QString &port, const QDir &pathToPic) const override;
 	VideoDeviceFileInterface *createVideoDeviceFile(
-			const QString &devicePath, uint32_t width, uint32_t height, uint32_t fourcc) const override;
+			const QString &devicePath, uint32_t width, uint32_t height,
+			uint32_t fourcc, bool needPalStandard = false) const override;
 	OutputDeviceFileInterface *createDspCommunicator() const override;
+	FbOutputInterface *createFbOutput() const override;
 
 private:
 	/// I2C bus communicator.

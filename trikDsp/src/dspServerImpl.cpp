@@ -307,8 +307,7 @@ bool DspServer::Impl::processFrame(const DspChannel &channel,
 	if (dspAlgo != mCurrentAlgo) {
 		QLOG_INFO() << "DspServer: switching algorithm from" << mCurrentAlgo
 		            << "to" << dspAlgo;
-		AlgoDescriptor desc = {trikKernel::fromV4l2Fourcc(V4L2_PIX_FMT_YUYV),
-		                       static_cast<uint32_t>(channel.width * 2)};
+		AlgoDescriptor desc = {channel.format, channel.lineLength};
 		registerAlgorithm(channel.algorithm, desc);
 		mCurrentAlgo = dspAlgo;
 	}

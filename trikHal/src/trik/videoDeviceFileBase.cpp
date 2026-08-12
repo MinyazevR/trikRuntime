@@ -31,6 +31,7 @@ VideoDeviceFileBase::VideoDeviceFileBase(const QString &devicePath,
                                          uint32_t width, uint32_t height,
                                          uint32_t preferredFourcc,
                                          uint32_t bufferCount,
+                                         bool needPalStandard,
                                          QObject *parent)
 	: VideoDeviceFileInterface(parent)
 	, mPath(devicePath)
@@ -38,6 +39,7 @@ VideoDeviceFileBase::VideoDeviceFileBase(const QString &devicePath,
 	, mHeight(height)
 	, mRequestedFourcc(preferredFourcc)
 	, mBufferCount(bufferCount)
+	, mNeedPalStandard(needPalStandard)
 {
 }
 
@@ -111,6 +113,14 @@ void VideoDeviceFileBase::close()
 bool VideoDeviceFileBase::negotiateFormat()
 {
 	mActualFourcc = mRequestedFourcc;
+
+	if (mNeedPalStandard) {
+		v4l2_std_id stdid = V4L2_STD_625_50;
+		if (ioctl(mFd, VIDIOC_S_STD, &stdid) < 0) {
+			QLOG_INFO() << "VideoDeviceFileBase: VIDIOC_S_STD(PAL) failed for" << mPath
+			            << strerror(errno);
+		}
+	}
 	return true;
 }
 

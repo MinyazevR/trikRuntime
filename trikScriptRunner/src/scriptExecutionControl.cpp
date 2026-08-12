@@ -200,7 +200,7 @@ int ScriptExecutionControl::timeInterval(int packedTimeLeft, int packedTimeRight
 	return trikKernel::TimeVal::timeInterval(packedTimeLeft, packedTimeRight);
 }
 
-QVector<int32_t> ScriptExecutionControl::getPhoto()
+QVector<int32_t> ScriptExecutionControl::getPhoto(const QString &port)
 {
-	return trikControl::Utilities::rescalePhoto(mBrick->getStillImage());
+	return trikControl::Utilities::rescalePhoto(mBrick->getStillImage(port));
 }

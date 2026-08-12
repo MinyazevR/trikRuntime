@@ -39,13 +39,13 @@ void Camera::renew()
 	// Camera takes a single photo on construction. Periodic renew() is not needed.
 }
 
-void Camera::doPhoto()
+void Camera::doPhoto(const QString &port)
 {
 	if (mIsCreatingPhoto.exchange(true)) {
 		return;
 	}
 
-	auto const photo = trikControl::Utilities::rescalePhoto(mBrick.getStillImage());
+	auto const photo = trikControl::Utilities::rescalePhoto(mBrick.getStillImage(port));
 	// imageFromBytes allocates memory and delete it when it is necessery
 	auto image = trikControl::Utilities::imageFromBytes(photo, 160, 120, "rgb32");
 

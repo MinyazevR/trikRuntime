@@ -8,6 +8,8 @@
 #include "dspTypes.h"
 #include "trikDspDeclSpec.h"
 
+namespace trikHal { class FbOutputInterface; }
+
 namespace trikDsp {
 
 /// ARM ↔ DSP bridge via TI IPC MessageQ over RPMsg.
@@ -39,8 +41,7 @@ namespace trikDsp {
 /// activate() emits videoDisplayFinished() for the previous channel if it had
 /// videoOut=true, then emits videoDisplayStarted() if the new channel has
 /// videoOut=true.  deactivate() emits videoDisplayFinished() once.
-/// videoFrameReady() carries a deep-copied QByteArray of the DSP output buffer
-/// (RGB565) — safe across thread boundaries.
+/// Video output goes through HAL FbOutputInterface (no Qt signals in hot path).
 ///
 /// ## Concurrency
 ///
@@ -95,31 +96,35 @@ public:
 	/// Thread-safe — can be called from any thread.
 	void deactivate();
 
-	/// Process a video frame from the given source.
+	/// Copy a video frame into the DSP shared input buffer.
+	///
+	/// This is a plain (non-thread-affine) method: it may be called from the
+	/// streaming consumer's thread (main). It is serialized with the DSP-side
+	/// processing by the frame flow — releaseFrame is deferred until
+	/// resultReady, so the shared buffer is never accessed concurrently.
+	void copyFrame(const uint8_t *data, size_t size);
+
+	/// Process the frame previously copied by copyFrame().
 	/// MUST be called from the DspServer thread (use invokeMethod).
 	///
-	/// Drops frames from non-active sources.
-	/// On success, emits resultReady() and optionally videoFrameReady().
-	Q_INVOKABLE void processFrameData(const QString &sourceId,
-	                                  const uint8_t *data, size_t size);
+	/// Drops frames from non-active sources (but still emits resultReady so the
+	/// caller can release the V4L2 buffer).
+	/// On success, emits resultReady() and writes video to FbOutput if attached.
+	Q_INVOKABLE void processFrameData(const QString &sourceId);
+
+	/// Attach a HAL framebuffer output for direct video display.
+	/// Must be called before activate with videoOut=true.
+	/// DspServer takes ownership.
+	void setFbOutput(trikHal::FbOutputInterface *fb);
 
 Q_SIGNALS:
 	/// @name DSP processing signals
 	/// @{
 
-	/// Emitted immediately after the frame data is copied to the DSP input
-	/// buffer, before IPC processing begins.  This allows the video source to
-	/// release its buffer early (e.g. V4L2 QBUF) while the DSP is still working.
-	void frameBuffered();
-
 	/// Emitted from the worker thread after each successfully processed frame.
 	void resultReady(const QString &sourceId,
 			 trikDsp::Algorithm algorithm,
 			 trikDsp::OutArgs result);
-
-	/// Emitted when videoOut=true after DSP processing.
-	void videoFrameReady(const QByteArray &data,
-	                     uint32_t width, uint32_t height);
 
 	/// Emitted when a channel with videoOut=true is deactivated or replaced.
 	void videoDisplayFinished();

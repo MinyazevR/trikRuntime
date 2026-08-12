@@ -1,4 +1,4 @@
-/* Copyright 2018 Ivan Tyulyandin and CyberTech Labs Ltd.
+/* Copyright 2024 CyberTech Labs Ltd.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -14,23 +14,24 @@
 
 #pragma once
 
-#include "cameraImplementationInterface.h"
-#include <trikControl/trikControlDeclSpec.h>
+#include "videoDeviceFileBase.h"
 
-namespace trikControl { class CameraManager; }
+namespace trikHal {
+namespace trik {
 
-namespace trikControl {
-
-class V4l2CameraImplementation : public CameraImplementationInterface
+class TrikVideoDevice : public trikHal::VideoDeviceFileBase
 {
+	Q_OBJECT
+	Q_DISABLE_COPY(TrikVideoDevice)
+
 public:
-	V4l2CameraImplementation(const QString &port, CameraManager &cameraManager);
+	TrikVideoDevice(const QString &devicePath, uint32_t width, uint32_t height,
+	                uint32_t fourcc, uint32_t bufferCount = 3,
+	                bool needPalStandard = false);
 
-	QVector<uint8_t> getPhoto() override;
-
-private:
-	QString mPort;
-	CameraManager &mCameraManager;
+protected:
+	bool setFormat() override;
 };
 
-}
+} // namespace trik
+} // namespace trikHal

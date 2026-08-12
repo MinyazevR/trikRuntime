@@ -64,7 +64,7 @@ equal to its class name.
 	<!-- A list of known devices. -->
 	<deviceClasses>
                 <!-- URI protocol: v4l2, file, qtmultimedia  -->
-		<camera type="v4l2" src="/dev/video2" />
+		<camera type="v4l2"/>
 		<servoMotor period="20000000" invert="false" controlMin="-90" controlMax="90" />
 		<pwmCapture />
 		<powerMotor period="4096" invert="false" measures="(0;0)(100;100)" />
@@ -75,10 +75,10 @@ equal to its class name.
 		<fifo />
                 <lidar />
                 <iioDevice />
-		<dspSensor />
-		<lineSensor script="/etc/init.d/line-sensor-ov7670" inputFile="/run/line-sensor.in.fifo" outputFile="/run/line-sensor.out.fifo" toleranceFactor="1.0" />
-		<objectSensor script="/etc/init.d/object-sensor-ov7670" inputFile="/run/object-sensor.in.fifo" outputFile="/run/object-sensor.out.fifo" toleranceFactor="1.0" />
-		<colorSensor script="/etc/init.d/mxn-sensor-ov7670" inputFile="/run/mxn-sensor.in.fifo" outputFile="/run/mxn-sensor.out.fifo" m="3" n="3" />
+		<videoDevice />
+		<lineSensor toleranceFactor="1.0" />
+		<objectSensor toleranceFactor="1.0" />
+		<colorSensor m="3" n="3" />
 
 		<!-- Device files for LED on a brick. -->
 		<led green="/sys/class/leds/led_green/brightness" red="/sys/class/leds/led_red/brightness" />
@@ -168,10 +168,9 @@ equal to its class name.
                 <rangeSensor port="D2" eventFile="/dev/input/by-path/platform-trik_jd2-event" module="hcsr04" />
                 <rangeSensor port="D3" eventFile="/dev/input/by-path/platform-trik_jf1-event" module="hcsr04" />
 		<!-- <digitalSensor port="D3" deviceFile="/sys/devices/platform/da850_trik/sensor_dc" /> -->
-		<dspSensor port="video1" device="/dev/video2" format="yuv422" width="320" height="240"/>
-		<dspSensor port="video2" device="/dev/video1" format="yuv422" width="320" height="240"/>
-                <camera port="video1" />
-                <camera port="video2" />
+		<videoSensor port="video1" device="/dev/video2" format="nv16" width="320" height="240"/>
+		<videoSensor port="video2" device="/dev/video1" format="nv16" width="320" height="240"/>
+		<videoSensor port="usb-camera" device="/dev/video0" format="yuv422" width="320" height="240"/>
 		<fifo port="soundSensor" file="/home/root/trik/soundSensor.fifo" />
                 <iioDevice port="boardAccelPort" />
                 <iioDevice port="boardGyroPort" />
@@ -222,18 +221,19 @@ equal to its class name.
 
 		<colorSensor3x3 class="colorSensor" m="3" n="3" />
 
-        <photo class="camera" type="v4l2" src="/dev/video0" />
+<photo class="camera" type="v4l2" src="/dev/video0" />
 
 		<accelerometer class="iioDevice" deviceFile="/dev/iio:device0" scanType="be:s14/16>>2"/>
 		<gyroscope class="iioDevice" deviceFile="/dev/iio:device1" scanType="le:s16/16>>0" modelNameFile="/sys/bus/iio/devices/iio:device1/name"/>
 	</deviceTypes>
 
 	<deviceGroups>
-		<dspSensor>
+	<videoDevice>
 			<lineSensor/>
 			<objectSensor/>
 			<colorSensor/>
-		</dspSensor>
+			<photo/>
+		</videoDevice>
 	</deviceGroups>
 	
 	<!-- Format for playSound command, used to play .wav files. %1 designates file name to be played. -->
