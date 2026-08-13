@@ -58,6 +58,14 @@ protected:
 	virtual bool setFormat();
 	virtual void onFrameReady(const uint8_t *data, size_t size);
 
+	/// Apply the default V4L2 control values for a USB (UVC) webcam. Mirrors the
+	/// init_webcam()/fix_webcam() sequence previously performed by the
+	/// media-sensor init script before the sensor was started.
+	void applyWebcamDefaults();
+
+	/// Set a single V4L2 control on the device.
+	bool setControl(uint32_t id, int32_t value);
+
 	virtual bool allocateBuffers();
 	virtual void freeBuffers();
 

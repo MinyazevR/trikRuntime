@@ -80,6 +80,17 @@ public:
 			const QString &devicePath, uint32_t width, uint32_t height,
 			uint32_t fourcc, bool needPalStandard = false) const = 0;
 
+	/// Initialize an analog video sensor (ov7670) before it is opened. Mirrors
+	/// the media-sensor init-ov7670 script: prefer the kernel driver's `reinit`
+	/// sysfs interface when available, otherwise pulse the reset GPIO and program
+	/// the sensor registers over I2C.
+	/// @param deviceFile - the /dev/videoN path the sensor is bound to.
+	/// @param i2cBus - I2C bus number the sensor is connected to.
+	/// @param i2cAddress - I2C address of the sensor.
+	/// @param gpioNumber - GPIO number used for the sensor reset pulse.
+	virtual bool initVideoSensor(const QString &deviceFile, int i2cBus, int i2cAddress,
+			int gpioNumber) const = 0;
+
 	virtual OutputDeviceFileInterface *createDspCommunicator() const = 0;
 
 	virtual FbOutputInterface *createFbOutput() const = 0;

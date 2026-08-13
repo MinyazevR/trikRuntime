@@ -39,6 +39,10 @@ VideoSensorManager::VideoSensorManager(const trikKernel::Configurer &configurer,
 	connect(mDspServer.data(), &trikDsp::DspServer::videoDisplayStarted, this, &VideoSensorManager::videoDisplayStarted);
 	connect(mDspServer.data(), &trikDsp::DspServer::videoDisplayFinished, this, &VideoSensorManager::videoDisplayFinished);
 
+	// The camera manager lives on its own thread, so its acquire() is async and
+	// reports completion via this queued signal.
+	connect(mCameraManager, &CameraManager::acquired, this, &VideoSensorManager::onAcquired);
+
 	mDspServer->init();
 	if (!mState.isReady()) return;
 
@@ -51,6 +55,7 @@ void VideoSensorManager::destroyDsp() { mDspThread->quit(); mDspThread->wait(); 
 VideoSensorManager::~VideoSensorManager()
 {
 	destroyDsp();
+	mPendingActivations.clear();
 	for (const auto &port : mActivePorts) mCameraManager->release(port);
 	mActivePorts.clear();
 
@@ -118,32 +123,66 @@ void VideoSensorManager::createSensor(const QString &port, const QString &device
 void VideoSensorManager::activateForPort(const QString &port, trikDsp::Algorithm algo,
                                          trikDsp::InArgs args, bool videoOut, bool canOpen)
 {
-	if (canOpen && !mActivePorts.contains(port)) {
-		if (!mCameraManager->acquire(port)) {
-			QLOG_ERROR() << "CameraManager: failed to acquire" << port; return;
-		}
-
-		mCameraManager->subscribe(port, this, [this, port](const uint8_t *data, size_t size) {
-			mCameraFrameCount++;
-			if (mCameraFpsTimer.hasExpired(1000) || !mCameraFpsTimer.isValid()) {
-				QLOG_INFO() << "CAM FPS:" << mCameraFrameCount;
-				mCameraFrameCount = 0; mCameraFpsTimer.restart();
-			}
-			// Lightweight callback: copy the frame into the DSP shared buffer,
-			// then queue processing on the DspServer thread. The data pointer is
-			// zero-copy and valid only within this callback.
-			mDspServer->copyFrame(data, size);
-			QMetaObject::invokeMethod(mDspServer.data(), [this, port]() {
-				mDspServer->processFrameData(port);
-			}, Qt::QueuedConnection);
-		});
-
-		mActivePorts.insert(port);
-		QLOG_INFO() << "VideoSensorManager: camera acquired for port" << port;
+	// An acquire is already in flight: the latest request wins, whether it is a
+	// re-init or a detect() re-activation that arrived before the camera opened.
+	if (mPendingActivations.contains(port)) {
+		mPendingActivations[port] = {algo, args, videoOut};
+		return;
 	}
 
-	if (!mActivePorts.contains(port)) return;
+	if (!mActivePorts.contains(port)) {
+		// The camera is not held. Start the (async) acquisition and defer the
+		// DSP activation to onAcquired(); without the right to open the camera
+		// there is nothing to do.
+		if (canOpen) {
+			mPendingActivations[port] = {algo, args, videoOut};
+			mCameraManager->acquire(port);
+		}
+		return;
+	}
 
+	activateDsp(port, algo, args, videoOut);
+}
+
+void VideoSensorManager::onAcquired(const QString &port, bool ok)
+{
+	auto it = mPendingActivations.find(port);
+	if (it == mPendingActivations.end())
+		return;
+
+	const PendingActivation activation = it.value();
+	mPendingActivations.erase(it);
+
+	if (!ok) {
+		QLOG_ERROR() << "VideoSensorManager: failed to acquire camera for port" << port;
+		return;
+	}
+
+	// The camera is open and streaming. Subscribe to frames and activate the DSP.
+	mCameraManager->subscribe(port, this, [this, port](const uint8_t *data, size_t size) {
+		mCameraFrameCount++;
+		if (mCameraFpsTimer.hasExpired(1000) || !mCameraFpsTimer.isValid()) {
+			QLOG_INFO() << "CAM FPS:" << mCameraFrameCount;
+			mCameraFrameCount = 0; mCameraFpsTimer.restart();
+		}
+		// Lightweight callback: copy the frame into the DSP shared buffer,
+		// then queue processing on the DspServer thread. The data pointer is
+		// zero-copy and valid only within this callback.
+		mDspServer->copyFrame(data, size);
+		QMetaObject::invokeMethod(mDspServer.data(), [this, port]() {
+			mDspServer->processFrameData(port);
+		}, Qt::QueuedConnection);
+	});
+
+	mActivePorts.insert(port);
+	QLOG_INFO() << "VideoSensorManager: camera acquired for port" << port;
+
+	activateDsp(port, activation.algo, activation.args, activation.videoOut);
+}
+
+void VideoSensorManager::activateDsp(const QString &port, trikDsp::Algorithm algo,
+                                     trikDsp::InArgs args, bool videoOut)
+{
 	// The DSP CV algorithms must know the actual pixel format (NV16 vs YUYV) and
 	// the actual bytes-per-line to decode the frame correctly. They are taken
 	// from the CameraManager (cached at acquire), not from the raw device.
@@ -155,6 +194,12 @@ void VideoSensorManager::activateForPort(const QString &port, trikDsp::Algorithm
 void VideoSensorManager::handleStopRequested(const QString &port, bool deinit)
 {
 	mDspServer->deactivate();
+
+	// A stop cancels any acquire still in flight for this port; the released
+	// camera is closed by the manager's queued release() even if the acquire
+	// later completes (refcount is preserved by the manager's event order).
+	mPendingActivations.remove(port);
+
 	if (deinit) {
 		mCameraManager->unsubscribe(port, this);
 		mCameraManager->release(port);
@@ -173,10 +218,7 @@ void VideoSensorManager::stop()
 	if (!checkManagerState("stop")) return;
 
 	mDspServer->deactivate();
-	for (const auto &port : mActivePorts) {
-		mCameraManager->unsubscribe(port, this);
-		mCameraManager->release(port);
-	}
+	mPendingActivations.clear();
 	mActivePorts.clear();
 }
 

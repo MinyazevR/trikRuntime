@@ -44,6 +44,22 @@ CameraManager::CameraManager(const trikKernel::Configurer &configurer,
 		const auto devFile = configurer.attributeByPort(port, "device", &defaultDevFile);
 		const auto fmt = configurer.attributeByPort(port, "format", &fmtStr);
 
+		// The ov7670 analog ports (named "video*") carry the I2C bus/address and
+		// reset GPIO used for sensor initialization. They are optional: the USB
+		// webcam port does not have them, and a missing value is simply 0.
+		const auto optInt = [&configurer, &port](const QString &name) {
+			try {
+				bool ok = false;
+				const int v = configurer.attributeByPort(port, name).toInt(&ok, 0);
+				return ok ? v : 0;
+			} catch (const trikKernel::MalformedConfigException &) {
+				return 0;
+			}
+		};
+		entry.i2cBus = optInt(QStringLiteral("i2cBus"));
+		entry.i2cAddress = optInt(QStringLiteral("i2cAddress"));
+		entry.gpioNumber = optInt(QStringLiteral("gpioNumber"));
+
 		entry.devFile = devFile;
 		entry.ready = !state.isFailed() && !devFile.isEmpty() && !fmt.isEmpty();
 		if (entry.ready) {
@@ -57,38 +73,49 @@ CameraManager::CameraManager(const trikKernel::Configurer &configurer,
 		QLOG_INFO() << "CameraManager: registered port" << port << "->" << entry.devFile
 		            << entry.w << 'x' << entry.h << "ready=" << entry.ready;
 	}
+
+	// Run the manager (and its V4L2 devices / QSocketNotifiers) on a dedicated
+	// thread, so the slow sensor initialization and device I/O never block the
+	// GUI thread. The static port state above was recorded before the move and
+	// is never mutated afterwards except through the locked device entries.
+	mThread.reset(new QThread);
+	mThread->setObjectName(QStringLiteral("CameraManager"));
+	moveToThread(mThread.data());
+	mThread->start();
 }
 
 CameraManager::~CameraManager()
 {
-	QWriteLocker lock(&mLock);
-	for (auto &entry : mDevices) {
-		if (entry.dev) {
-			entry.dev->disconnect();
-			entry.dev->stopStreaming();
-			entry.dev->close();
-			delete entry.dev;
-		}
-	}
-	mDevices.clear();
+	// Tear the devices down on their own thread (blocking), then stop it.
+	runInManagerThread([this]() {
+		QWriteLocker lock(&mLock);
+		tearDownLocked();
+		mDevices.clear();
+	});
+
+	mThread->quit();
+	mThread->wait();
 }
 
 // ---------------------------------------------------------------------------
 // Acquire / release (refcount)
 // ---------------------------------------------------------------------------
 
-bool CameraManager::acquire(const QString &port)
+void CameraManager::acquire(const QString &port)
 {
-	return callInManagerThread<bool>([this, port]() {
-		QWriteLocker lock(&mLock);
-		auto it = mDevices.find(port);
-		if (it == mDevices.end() || !it->ready) {
-			QLOG_ERROR() << "CameraManager: port" << port << "is not available";
-			return false;
+	runAsync([this, port]() {
+		bool ok = false;
+		{
+			QWriteLocker lock(&mLock);
+			auto it = mDevices.find(port);
+			if (it != mDevices.end() && it->ready) {
+				// Open with the format recorded in the config.
+				ok = openDeviceLocked(port, it.value());
+			} else {
+				QLOG_ERROR() << "CameraManager: port" << port << "is not available";
+			}
 		}
-
-		// Open with the format recorded in the config.
-		return openDeviceLocked(port, it.value());
+		emit acquired(port, ok);
 	});
 }
 
@@ -102,6 +129,17 @@ bool CameraManager::openDeviceLocked(const QString &port, Entry &entry)
 		// The analog ov7670 cameras (ports named "video*") need the PAL video
 		// standard to be negotiated; the USB camera does not.
 		const bool needPalStandard = port.startsWith(QStringLiteral("video"));
+
+		// Initialize the analog ov7670 sensor (reinit via kernel driver, or a
+		// full I2C register programming as a fallback) before opening the device.
+		// It is done only once per process lifetime: the sensor keeps its
+		// configuration across close/reopen, so a hot-plug re-open must not
+		// re-run the slow init (the 1s exposure-stabilization sleep in the
+		// fallback path) on an already-initialized sensor.
+		if (needPalStandard && !entry.sensorInitialized) {
+			entry.sensorInitialized = mHal.initVideoSensor(entry.devFile, entry.i2cBus,
+			                                               entry.i2cAddress, entry.gpioNumber);
+		}
 
 		auto *dev = mHal.createVideoDeviceFile(entry.devFile, entry.w, entry.h,
 		                                       entry.fmt, needPalStandard);
@@ -139,7 +177,7 @@ bool CameraManager::isOccupied(const QString &port) const
 
 void CameraManager::release(const QString &port)
 {
-	runInManagerThread([this, port]() {
+	runAsync([this, port]() {
 		QWriteLocker lock(&mLock);
 		auto it = mDevices.find(port);
 		if (it == mDevices.end() || !it->ready || it->refCount <= 0)
@@ -168,6 +206,32 @@ void CameraManager::release(const QString &port)
 	});
 }
 
+void CameraManager::stop()
+{
+	runInManagerThread([this]() {
+		QWriteLocker lock(&mLock);
+		tearDownLocked();
+	});
+}
+
+void CameraManager::tearDownLocked()
+{
+	for (auto &entry : mDevices) {
+		if (entry.dev) {
+			entry.dev->disconnect();
+			entry.dev->stopStreaming();
+			entry.dev->close();
+			delete entry.dev;
+			entry.dev = nullptr;
+		}
+		entry.refCount = 0;
+		entry.streaming = false;
+	}
+	mStreamingSubs.clear();
+	mPullSubs.clear();
+	mLatest.clear();
+}
+
 // ---------------------------------------------------------------------------
 // Frame subscription / notification
 // ---------------------------------------------------------------------------
@@ -175,9 +239,9 @@ void CameraManager::release(const QString &port)
 void CameraManager::subscribe(const QString &port, QObject *receiver,
                               FrameCb callback)
 {
-	// Marshalled to the manager's thread so the subscription map stays owned by
+	// Posted to the manager's thread so the subscription map stays owned by
 	// the capture hot path (onFrameReady reads it lock-free). Cold path.
-	runInManagerThread([this, port, receiver, callback = std::move(callback)]() mutable {
+	runAsync([this, port, receiver, callback = std::move(callback)]() mutable {
 		auto it = mDevices.constFind(port);
 		if (it == mDevices.constEnd() || !it->ready || !it->dev) {
 			QLOG_WARN() << "CameraManager: cannot subscribe to" << port
@@ -191,7 +255,7 @@ void CameraManager::subscribe(const QString &port, QObject *receiver,
 
 void CameraManager::unsubscribe(const QString &port, QObject *receiver)
 {
-	runInManagerThread([this, port, receiver]() {
+	runAsync([this, port, receiver]() {
 		auto it = mStreamingSubs.find(port);
 		if (it != mStreamingSubs.end() && it->receiver == receiver)
 			mStreamingSubs.erase(it);
@@ -200,7 +264,7 @@ void CameraManager::unsubscribe(const QString &port, QObject *receiver)
 
 void CameraManager::subscribeLatest(const QString &port, QObject *receiver)
 {
-	runInManagerThread([this, port, receiver]() {
+	runAsync([this, port, receiver]() {
 		auto it = mDevices.constFind(port);
 		if (it == mDevices.constEnd() || !it->ready || !it->dev) {
 			QLOG_WARN() << "CameraManager: cannot subscribe latest to" << port
@@ -236,7 +300,7 @@ void CameraManager::prunePullSubs(const QString &port)
 
 void CameraManager::unsubscribeLatest(const QString &port, QObject *receiver)
 {
-	runInManagerThread([this, port, receiver]() {
+	runAsync([this, port, receiver]() {
 		auto it = mPullSubs.find(port);
 		if (it == mPullSubs.end())
 			return;
@@ -305,7 +369,7 @@ void CameraManager::onFrameReady(const QString &port, const uint8_t *data, size_
 
 void CameraManager::stopStreaming(const QString &port)
 {
-	runInManagerThread([this, port]() {
+	runAsync([this, port]() {
 		QWriteLocker lock(&mLock);
 		auto it = mDevices.find(port);
 		if (it != mDevices.end() && it->ready && it->dev && it->streaming) {
@@ -317,7 +381,7 @@ void CameraManager::stopStreaming(const QString &port)
 
 void CameraManager::startStreaming(const QString &port)
 {
-	runInManagerThread([this, port]() {
+	runAsync([this, port]() {
 		QWriteLocker lock(&mLock);
 		auto it = mDevices.find(port);
 		if (it != mDevices.end() && it->ready && it->dev && !it->streaming) {
@@ -329,7 +393,11 @@ void CameraManager::startStreaming(const QString &port)
 
 void CameraManager::releaseFrame(const QString &port)
 {
-	runInManagerThread([this, port]() {
+	// The streaming consumer owns the buffer release (backpressure). Posting it
+	// here keeps the caller's thread (the GUI thread, in onResult) responsive:
+	// the QBUF happens in the worker thread a moment later, still gated by the
+	// disabled QSocketNotifier, so no buffer overruns.
+	runAsync([this, port]() {
 		QReadLocker lock(&mLock);
 		auto it = mDevices.constFind(port);
 		if (it != mDevices.constEnd() && it->dev)

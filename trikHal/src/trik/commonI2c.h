@@ -47,6 +47,10 @@ public:
 	/// Perform I2c transfer operation.
 	int transfer(const QVector<MspI2cInterface::Message> &vector) override;
 
+	/// Write a single register: an 8-bit register address followed by an 8-bit
+	/// value (used for devices with 1-byte registers, e.g. ov7670).
+	int writeRegister(uint8_t reg, uint8_t value);
+
 private:
 	uint8_t mRegSize;
 	int mDeviceFileDescriptor = -1;

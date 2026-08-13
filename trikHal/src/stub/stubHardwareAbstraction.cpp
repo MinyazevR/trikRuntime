@@ -101,6 +101,16 @@ VideoDeviceFileInterface *StubHardwareAbstraction::createVideoDeviceFile(
 	return new StubVideoDeviceFile(devicePath);
 }
 
+bool StubHardwareAbstraction::initVideoSensor(const QString &deviceFile, int i2cBus,
+                                              int i2cAddress, int gpioNumber) const
+{
+	Q_UNUSED(deviceFile);
+	Q_UNUSED(i2cBus);
+	Q_UNUSED(i2cAddress);
+	Q_UNUSED(gpioNumber);
+	return true;
+}
+
 OutputDeviceFileInterface *StubHardwareAbstraction::createDspCommunicator() const
 {
 	return new StubOutputDeviceFile(QStringLiteral("/dev/null"));

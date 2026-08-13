@@ -5,6 +5,7 @@
 #include <QtCore/QObject>
 #include <QtCore/QPointer>
 #include <QtCore/QReadWriteLock>
+#include <QtCore/QScopedPointer>
 #include <QtCore/QSharedPointer>
 #include <QtCore/QString>
 #include <QtCore/QThread>
@@ -65,12 +66,23 @@ namespace trikControl {
 /// device-touching operations are marshalled there, so the QSocketNotifier stays
 /// in a deterministic thread regardless of which thread acquires first.
 ///
-/// ## Thread safety
-/// mDevices and mLatest are guarded by an internal QReadWriteLock (getters may
-/// be called from any thread). Subscription maps (mStreamingSubs / mPullSubs)
-/// are mutated only in the manager's thread (subscribe*/unsubscribe* are
-/// marshalled there), so the capture hot path onFrameReady() reads them without
-/// locking.
+/// ## Threading
+/// The CameraManager lives on its own worker thread (mThread), so the slow
+/// sensor initialization and all device I/O never block the GUI thread. The
+/// device (and its QSocketNotifier) are created in the worker thread and the
+/// capture hot path onFrameReady() runs there.
+///
+/// Mutating operations (acquire/release/subscribe*/releaseFrame) are posted to
+/// the worker thread with a queued connection and, because they are serialized
+/// on that thread's event queue, their relative order is preserved — this is
+/// what guarantees correct refcounting when a stop (release) races with a
+/// start (acquire). `acquire()` is the only operation whose outcome the caller
+/// needs to observe: it reports completion through the acquired() signal.
+///
+/// Getters (width/height/fourcc/format/lineLength/isReady/deviceFile) may be
+/// called from any thread; mDevices and mLatest are guarded by an internal
+/// QReadWriteLock. Subscription maps (mStreamingSubs / mPullSubs) are mutated
+/// only in the worker thread, so onFrameReady() reads them lock-free.
 class CameraManager : public QObject
 {
 	Q_OBJECT
@@ -87,9 +99,8 @@ public:
 	/// Acquire the camera on @p port using the format recorded in the config.
 	/// On the first acquisition the device is opened and streaming is started
 	/// with the port's static format; on subsequent ones only the refcount is
-	/// incremented.
-	/// @return false if the port is unknown or its stored state is not `ready`.
-	bool acquire(const QString &port);
+	/// incremented. Asynchronous: the outcome is reported via acquired().
+	void acquire(const QString &port);
 
 	/// Whether @p port is currently held by at least one client.
 	bool isOccupied(const QString &port) const;
@@ -133,6 +144,15 @@ public:
 	/// stopped, closed, destroyed and every subscription is dropped.
 	void release(const QString &port);
 
+	/// Forcibly tear down all cameras and drop every subscription, regardless of
+	/// the current refcounts. Runs in the manager's thread and blocks until done,
+	/// so when it returns all devices are closed and the manager is back to the
+	/// post-construction state (static config preserved, nothing acquired). Used
+	/// by Brick::stop() to guarantee every camera is released when the script
+	/// stops, even if a client leaked a release(). A subsequent acquire() opens
+	/// the device again from its static config.
+	void stop();
+
 	/// Return the currently held V4L2 buffer back to the driver (QBUF), so the
 	/// next frame can be captured. Called by the streaming consumer once per
 	/// frame, after it has copied the data.
@@ -162,6 +182,11 @@ Q_SIGNALS:
 	/// subscribeLatest()). The buffer is available via grabLatestFrame().
 	void latestFrameReady(const QString &port);
 
+	/// Emitted (in the worker thread) when a previously requested acquire() of
+	/// @p port has finished. @p ok is false when the port is unknown, its
+	/// stored state is not `ready`, or the device failed to open.
+	void acquired(const QString &port, bool ok);
+
 private:
 	/// Static per-port state recorded once in the constructor.
 	struct Entry {
@@ -173,6 +198,11 @@ private:
 		int refCount = 0;                ///< Number of active clients.
 		bool streaming = false;          ///< Whether streaming is currently on.
 		bool ready = false;              ///< Config for the port is valid.
+		int i2cBus = 0;                  ///< I2C bus (ov7670 analog ports only).
+		int i2cAddress = 0;              ///< I2C address (ov7670 analog ports only).
+		int gpioNumber = 0;              ///< Reset GPIO (ov7670 analog ports only).
+		bool sensorInitialized = false;  ///< ov7670 already configured once, so
+		                                 ///< a re-open (hot-plug) skips init.
 	};
 
 	/// The single streaming (push) subscriber of a port: the receiver (for
@@ -196,8 +226,16 @@ private:
 	/// capture hot path never traverses the pull list.
 	void prunePullSubs(const QString &port);
 
+	/// Stop, close and destroy every open device, reset its refcount/streaming
+	/// flags and clear all subscriptions and latched frames. Assumes the write
+	/// lock is already held and the call is running in the manager's thread.
+	/// The static per-port config (devFile/w/h/fmt/ready) is left intact so a
+	/// later acquire() can re-open the device.
+	void tearDownLocked();
+
 	/// Runs @p fn in the manager's thread, blocking the caller if it lives in
-	/// another thread.
+	/// another thread. Used only by the destructor, which must not return before
+	/// the devices are torn down in their own thread.
 	template <typename Fn>
 	void runInManagerThread(Fn &&fn)
 	{
@@ -208,20 +246,25 @@ private:
 		QMetaObject::invokeMethod(this, std::forward<Fn>(fn), Qt::BlockingQueuedConnection);
 	}
 
-	/// Like runInManagerThread() but returns the value produced by @p fn.
-	template <typename T, typename Fn>
-	T callInManagerThread(Fn &&fn)
+	/// Runs @p fn in the manager's thread. When called from another thread the
+	/// call is posted (non-blocking); when already in the manager's thread it
+	/// runs directly (used by the capture hot path). The manager's event queue
+	/// preserves the order of all posted operations, which is what makes
+	/// acquire/release/refcount races safe.
+	template <typename Fn>
+	void runAsync(Fn &&fn)
 	{
 		if (QThread::currentThread() == thread()) {
-			return fn();
+			fn();
+			return;
 		}
-		T result{};
-		QMetaObject::invokeMethod(this, [&result, &fn]() { result = fn(); },
-		                          Qt::BlockingQueuedConnection);
-		return result;
+		QMetaObject::invokeMethod(this, std::forward<Fn>(fn), Qt::QueuedConnection);
 	}
 
 	const trikHal::HardwareAbstractionInterface &mHal;
+
+	/// Worker thread the manager and its devices live on.
+	QScopedPointer<QThread> mThread;
 
 	/// Port name -> device state. Filled once in the constructor.
 	QHash<QString, Entry> mDevices;

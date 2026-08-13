@@ -73,9 +73,15 @@ private Q_SLOTS:
 	              trikDsp::Algorithm algorithm,
 	              trikDsp::OutArgs result);
 
+	/// CameraManager::acquired() completion handler. The camera is open and
+	/// streaming here; subscribe to frames and activate the DSP algorithm.
+	void onAcquired(const QString &port, bool ok);
+
 private:
 	void activateForPort(const QString &port, trikDsp::Algorithm algo,
 	                     trikDsp::InArgs args, bool videoOut, bool canOpen);
+	void activateDsp(const QString &port, trikDsp::Algorithm algo,
+	                 trikDsp::InArgs args, bool videoOut);
 	void handleStopRequested(const QString &port, bool deinit);
 	void createSensor(const QString &port, const QString &deviceClass);
 	bool checkManagerState(const QString &message) const;
@@ -90,8 +96,22 @@ private:
 	QScopedPointer<QThread> mDspThread;
 	CameraManager *mCameraManager = nullptr;
 
+	/// A DSP activation whose camera acquisition is still in flight. The latest
+	/// request wins, so a detect() arriving while init()'s acquire is pending is
+	/// not lost.
+	struct PendingActivation {
+		trikDsp::Algorithm algo;
+		trikDsp::InArgs args;
+		bool videoOut;
+	};
+
 	/// Active camera ports (acquired via CameraManager).
 	QSet<QString> mActivePorts;
+
+	/// Ports whose acquire() is in flight, with the activation to run on
+	/// completion. The port is removed here when the acquire finishes (or is
+	/// cancelled by a stop).
+	QHash<QString, PendingActivation> mPendingActivations;
 
 	/// Sensor instances indexed by port.
 	QHash<QString, LineSensor*> mLineSensors;

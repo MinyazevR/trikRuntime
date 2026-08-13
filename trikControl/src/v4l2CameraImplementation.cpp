@@ -34,7 +34,24 @@ V4l2CameraImplementation::V4l2CameraImplementation(const QString &port,
 
 QVector<uint8_t> V4l2CameraImplementation::getPhoto()
 {
-	if (!mCameraManager.acquire(mPort))
+	// acquire() is asynchronous (the CameraManager lives on its own thread), so
+	// wait here for its completion signal. This method runs in a dedicated
+	// thread (CameraDevice::getPhoto), so a local event loop is fine.
+	QEventLoop acquireLoop;
+	bool acquired = false;
+	const QMetaObject::Connection acquireConn = QObject::connect(&mCameraManager,
+		&CameraManager::acquired, &acquireLoop,
+		[this, &acquired, &acquireLoop](const QString &port, bool ok) {
+			if (port == mPort) {
+				acquired = ok;
+				acquireLoop.quit();
+			}
+		});
+	mCameraManager.acquire(mPort);
+	acquireLoop.exec();
+	QObject::disconnect(acquireConn);
+
+	if (!acquired)
 		return {};
 
 	// The device is not touched here — only the port's static format from the

@@ -316,6 +316,10 @@ void Brick::stop()
 		mVideoSensorManager->stop();
 	}
 
+	if (mCameraManager) {
+		mCameraManager->stop();
+	}
+
 	for (auto &&soundSensor : mSoundSensors) {
 		if (soundSensor->status() == DeviceInterface::Status::ready) {
 			soundSensor->stop();

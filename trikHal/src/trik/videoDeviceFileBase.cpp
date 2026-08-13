@@ -81,7 +81,40 @@ bool VideoDeviceFileBase::open()
 		return false;
 	}
 
+	// The analog ov7670 cameras (needPalStandard) are initialized over I2C by the
+	// CameraManager; every other device (the USB webcam) gets its default V4L2
+	// controls applied here, on the very first open, before streaming starts.
+	if (!mNeedPalStandard) {
+		applyWebcamDefaults();
+	}
+
 	QLOG_INFO() << "VideoDeviceFileBase:" << mPath << "opened, format" << Qt::hex << mActualFourcc;
+	return true;
+}
+
+void VideoDeviceFileBase::applyWebcamDefaults()
+{
+	// 50 Hz anti-flicker, then fix the white balance and gain, and leave the
+	// camera in manual exposure (the exposure_auto=1 step of fix_webcam()).
+	setControl(V4L2_CID_POWER_LINE_FREQUENCY, V4L2_CID_POWER_LINE_FREQUENCY_50HZ);
+	setControl(V4L2_CID_AUTO_WHITE_BALANCE, 0);
+	setControl(V4L2_CID_WHITE_BALANCE_TEMPERATURE, 4000);
+	setControl(V4L2_CID_GAIN, 0);
+	setControl(V4L2_CID_EXPOSURE_AUTO, V4L2_EXPOSURE_MANUAL);
+}
+
+bool VideoDeviceFileBase::setControl(uint32_t id, int32_t value)
+{
+	v4l2_control ctrl = {};
+	ctrl.id = id;
+	ctrl.value = value;
+
+	if (ioctl(mFd, VIDIOC_S_CTRL, &ctrl) < 0) {
+		QLOG_WARN() << "VideoDeviceFileBase:" << mPath << "failed to set control 0x"
+		            << Qt::hex << id << "to" << Qt::dec << value << ':' << strerror(errno);
+		return false;
+	}
+
 	return true;
 }
 
