@@ -82,6 +82,11 @@ CameraManager::CameraManager(const trikKernel::Configurer &configurer,
 	mThread->setObjectName(QStringLiteral("CameraManager"));
 	moveToThread(mThread.data());
 	mThread->start();
+
+	// Kick off the (possibly slow) ov7670 initialization on the worker thread,
+	// so the Brick constructor never blocks. It runs before any acquire() can,
+	// because everything is serialized on the worker thread's event queue.
+	runAsync([this]() { initSensors(); });
 }
 
 CameraManager::~CameraManager()
@@ -230,6 +235,24 @@ void CameraManager::tearDownLocked()
 	mStreamingSubs.clear();
 	mPullSubs.clear();
 	mLatest.clear();
+}
+
+void CameraManager::initSensors()
+{
+	// Runs in the worker thread (posted from the constructor). Only ov7670
+	// analog ports carry an I2C bus (the USB webcam has none), so they are the
+	// only ones that need sensor initialization. initVideoSensor() returns
+	// false when no sensor is physically wired: such a port stays
+	// uninitialized and is retried lazily on acquire(), which also covers a
+	// later hot-plug.
+	QWriteLocker lock(&mLock);
+	for (auto it = mDevices.begin(); it != mDevices.end(); ++it) {
+		if (!it->ready || it->i2cBus <= 0 || it->sensorInitialized) {
+			continue;
+		}
+		it->sensorInitialized = mHal.initVideoSensor(it->devFile, it->i2cBus,
+		                                             it->i2cAddress, it->gpioNumber);
+	}
 }
 
 // ---------------------------------------------------------------------------

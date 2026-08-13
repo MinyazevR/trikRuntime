@@ -233,6 +233,14 @@ private:
 	/// later acquire() can re-open the device.
 	void tearDownLocked();
 
+	/// Eagerly initialize every ov7670 analog port (identified by a configured
+	/// I2C bus). Posted to the manager's thread from the constructor, so the
+	/// slow sensor bring-up (reinit or I2C programming + exposure-stabilization
+	/// sleep) happens off the GUI thread, before the first acquire().
+	/// initVideoSensor() returns false when no sensor is physically wired, so an
+	/// absent camera simply stays uninitialized and is retried on acquire().
+	void initSensors();
+
 	/// Runs @p fn in the manager's thread, blocking the caller if it lives in
 	/// another thread. Used only by the destructor, which must not return before
 	/// the devices are torn down in their own thread.
