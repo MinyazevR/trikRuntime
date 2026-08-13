@@ -5,10 +5,11 @@ import QtQuick.Controls 2.15
 Rectangle {
     id: _camera
     property var sensors: Sensors
-    property var idList: _listSensors
+    property var idList: _portsList
     property var cameraObject: null
     property int photoCounter: 0
     property string port: "video1"
+    property bool showPhoto: false
     color: activeTheme.backgroundColor
 
     function takePhoto() {
@@ -17,128 +18,148 @@ Rectangle {
         }
     }
 
-    ColumnLayout {
+    ListModel {
+        id: _portsModel
+        ListElement { portName: "video2" }
+        ListElement { portName: "video1" }
+        ListElement { portName: "usb-camera" }
+    }
+
+    // Фото — на весь экран, всегда под списком портов.
+    ListView {
+        id: _listSensors
         anchors.fill: parent
-        spacing: 5
+        model: sensors
 
-        RowLayout {
-            id: _portsRow
-            Layout.fillWidth: true
-            Layout.alignment: Qt.AlignHCenter
-            spacing: 5
-
-            Button {
-                text: qsTr("video2")
-                Layout.fillWidth: true
-                Layout.preferredHeight: 30
-                onClicked: { _camera.port = "video2"; _camera.takePhoto() }
-                background: Rectangle {
-                    radius: 5
-                    color: activeTheme.buttonsColor
-                }
-                contentItem: Text {
-                    text: parent.text
-                    color: "white"
-                    font.pointSize: fontSizes.small
-                    horizontalAlignment: Text.AlignHCenter
-                    verticalAlignment: Text.AlignVCenter
-                }
-            }
-            Button {
-                text: qsTr("video1")
-                Layout.fillWidth: true
-                Layout.preferredHeight: 30
-                onClicked: { _camera.port = "video1"; _camera.takePhoto() }
-                background: Rectangle {
-                    radius: 5
-                    color: activeTheme.buttonsColor
-                }
-                contentItem: Text {
-                    text: parent.text
-                    color: "white"
-                    font.pointSize: fontSizes.small
-                    horizontalAlignment: Text.AlignHCenter
-                    verticalAlignment: Text.AlignVCenter
-                }
-            }
-            Button {
-                text: qsTr("usb-camera")
-                Layout.fillWidth: true
-                Layout.preferredHeight: 30
-                onClicked: { _camera.port = "usb-camera"; _camera.takePhoto() }
-                background: Rectangle {
-                    radius: 5
-                    color: activeTheme.buttonsColor
-                }
-                contentItem: Text {
-                    text: parent.text
-                    color: "white"
-                    font.pointSize: fontSizes.small
-                    horizontalAlignment: Text.AlignHCenter
-                    verticalAlignment: Text.AlignVCenter
-                }
+        Keys.onPressed: {
+            if (event.key === Qt.Key_Return && _camera.cameraObject) {
+                _camera.takePhoto()
+                event.accepted = true
             }
         }
 
-        ListView {
-            id: _listSensors
-            Layout.fillWidth: true
-            Layout.fillHeight: true
-            model: sensors
+        delegate: Item {
+            id: _item
+            height: _listSensors.height
+            width: _listSensors.width
+            property string src: ""
 
-            Keys.onPressed: {
-                if (event.key === Qt.Key_Return && _camera.cameraObject) {
-                    _camera.takePhoto()
-                    event.accepted = true
-                }
+            Component.onCompleted: {
+                _camera.cameraObject = display
             }
 
-            delegate: Item {
-                id: _item
-                height: _listSensors.height
-                width: _listSensors.width
-                property string src: ""
-
-                Component.onCompleted: {
-                    _camera.cameraObject = display
-                }
-
-                Loader {
-                    id: _loader
-                    anchors.fill: parent
-                    sourceComponent: null
-                    Connections {
-                        target: display
-                        function onImageChanged() {
-                            _camera.photoCounter++
-                            _item.src = "image://cameraImageProvider/" + _camera.photoCounter
-                            _loader.sourceComponent = _imageComponent
-                        }
-                        function onCameraUnavailable() {
-                            _loader.sourceComponent = _txtComponent
-                        }
+            Loader {
+                id: _loader
+                anchors.fill: parent
+                sourceComponent: null
+                Connections {
+                    target: display
+                    function onImageChanged() {
+                        _camera.photoCounter++
+                        _item.src = "image://cameraImageProvider/" + _camera.photoCounter
+                        _loader.sourceComponent = _imageComponent
+                    }
+                    function onCameraUnavailable() {
+                        _loader.sourceComponent = _txtComponent
                     }
                 }
-                Component {
-                    id: _txtComponent
+            }
+            Component {
+                id: _txtComponent
+                Text {
+                    id: _txtNotify
+                    text: qsTr("Camera is not available")
+                    anchors.centerIn: parent
+                    font.pointSize: fontSizes.medium
+                    color: activeTheme.textColor
+                }
+            }
+            Component {
+                id: _imageComponent
+                Image {
+                    id: _imageView
+                    source: _item.src
+                    width: parent.width
+                    height: parent.height
+                    fillMode: Image.PreserveAspectFit
+                    cache: false
+                }
+            }
+        }
+    }
+
+    // Выбор порта — на весь экран, крупные строки как в меню тестирования.
+    ListView {
+        id: _portsList
+        anchors.fill: parent
+        visible: !_camera.showPhoto
+        model: _portsModel
+        spacing: 5
+        currentIndex: 1
+        clip: true
+
+        Keys.onPressed: {
+            switch (event.key) {
+            case Qt.Key_Down:
+                _portsList.currentIndex = (_portsList.currentIndex + 1) % _portsModel.count
+                event.accepted = true
+                break
+            case Qt.Key_Up:
+                _portsList.currentIndex = (_portsList.currentIndex - 1 + _portsModel.count) % _portsModel.count
+                event.accepted = true
+                break
+            case Qt.Key_Return:
+                _camera.port = _portsModel.get(_portsList.currentIndex).portName
+                _camera.showPhoto = true
+                _listSensors.focus = true
+                _camera.takePhoto()
+                event.accepted = true
+                break
+            default:
+                break
+            }
+        }
+
+        delegate: Item {
+            id: _portItem
+            width: _portsList.width
+            height: _portsList.height / 5.6
+            property bool isCurrent: ListView.isCurrentItem
+
+            MouseArea {
+                anchors.fill: parent
+                onPressed: { _portsList.currentIndex = model.index }
+                onClicked: {
+                    _camera.port = model.portName
+                    _camera.showPhoto = true
+                    _listSensors.focus = true
+                    _camera.takePhoto()
+                }
+            }
+            Rectangle {
+                anchors.fill: parent
+                anchors.leftMargin: 10
+                anchors.rightMargin: 10
+                radius: 10
+                color: _portItem.isCurrent ? activeTheme.focusElementsOfListColor : activeTheme.elementsOfListColor
+                RowLayout {
+                    anchors.fill: parent
+                    anchors.leftMargin: 7
+                    spacing: parent.width < 400 ? 10 : 15
+                    Image {
+                        source: iconsPath + "camera.png"
+                        Layout.preferredWidth: parent.width < 400 ? _camera.width / 5.5 : _camera.width / 23
+                        Layout.preferredHeight: parent.width < 400 ? _camera.width / 5.5 : _camera.width / 23
+                        Layout.alignment: Qt.AlignVCenter
+                    }
                     Text {
-                        id: _txtNotify
-                        text: qsTr("Camera is not available")
-                        horizontalAlignment: Text.AlignHCenter
-                        verticalAlignment: Text.AlignVCenter
+                        text: model.portName
+                        wrapMode: Text.Wrap
+                        Layout.fillWidth: true
+                        Layout.rightMargin: 7
+                        Layout.alignment: Qt.AlignVCenter
                         font.pointSize: fontSizes.medium
                         color: activeTheme.textColor
-                    }
-                }
-                Component {
-                    id: _imageComponent
-                    Image {
-                        id: _imageView
-                        source: _item.src
-                        width: parent.width
-                        height: parent.height
-                        fillMode: Image.PreserveAspectFit
-                        cache: false
                     }
                 }
             }

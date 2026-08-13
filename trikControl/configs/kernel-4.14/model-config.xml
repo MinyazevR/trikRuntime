@@ -119,7 +119,7 @@ Note that device, even if listed here, may fail by itself, then it also will not
 
 <usb-camera>
 <videoDevice />
-	</usb-camera>
+</usb-camera>
 	<!-- On-board sensors. -->
 	<!-- If model is not using those, they can be turned off to save system resources, by deleting them or
 		 commenting them out. -->
@@ -134,7 +134,7 @@ Note that device, even if listed here, may fail by itself, then it also will not
 	<!-- Optional modules -->
 	<gamepad />
 	<mailbox />
-
+	<dspServer/>
 	<!-- Example of custom FIFO sensor -->
 	<!--
 	<soundSensor>

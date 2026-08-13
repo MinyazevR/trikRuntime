@@ -121,11 +121,9 @@ Brick::Brick(const trikKernel::DifferentOwnerPointer<trikHal::HardwareAbstractio
 		mGamepad.reset(new Gamepad(mConfigurer, *mHardwareAbstraction));
 	}
 
-	if (mConfigurer.isEnabled("videoSensor")) {
-		mCameraManager.reset(new CameraManager(mConfigurer, *mHardwareAbstraction));
-	}
+	mCameraManager.reset(new CameraManager(mConfigurer, *mHardwareAbstraction));
 
-	if (mConfigurer.isEnabled("dspSensor")) {
+	if (mConfigurer.isEnabled("dspServer")) {
 		mVideoSensorManager.reset(
 			new VideoSensorManager(mConfigurer, *mHardwareAbstraction, mCameraManager.data()));
 
