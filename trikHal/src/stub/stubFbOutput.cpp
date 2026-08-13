@@ -27,7 +27,6 @@ StubFbOutput::StubFbOutput(QObject *parent)
 bool StubFbOutput::open()
 {
 	mOpen = true;
-	emit started();
 	return true;
 }
 
@@ -35,7 +34,6 @@ void StubFbOutput::close()
 {
 	if (!mOpen) return;
 	mOpen = false;
-	emit finished();
 }
 
 bool StubFbOutput::isOpen() const { return mOpen; }

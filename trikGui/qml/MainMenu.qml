@@ -10,7 +10,6 @@ Rectangle {
     property var confirmWindow: _confirm
     // Shared state: accessible from both Connections blocks
     property var graphicsWidgetObject: null
-    property var videoOutputObject: null
 
     Connections {
         target: RunningCode
@@ -114,32 +113,6 @@ Rectangle {
                 }
             } else {
                 _mainMenuView.graphicsWidgetObject = null;
-            }
-        }
-    }
-
-    Connections {
-        target: videoDisplayProvider
-
-        function onDisplayStarted() {
-            if (_mainMenuView.videoOutputObject !== null)
-                return;
-            var page = stack.push("qrc:/qml/VideoOutputPage.qml");
-            if (page) {
-                _mainMenuView.videoOutputObject = page;
-                page.focus = true;
-            }
-        }
-
-        function onDisplayFinished() {
-            if (_mainMenuView.videoOutputObject !== null && _mainMenuView.videoOutputObject === stack.currentItem) {
-                stack.pop();
-                _mainMenuView.videoOutputObject = null;
-                if (stack.currentItem && stack.currentItem.idList) {
-                    stack.currentItem.idList.focus = true;
-                }
-            } else {
-                _mainMenuView.videoOutputObject = null;
             }
         }
     }

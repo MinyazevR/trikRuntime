@@ -11,8 +11,10 @@ using namespace trikControl;
 ColorSensor::ColorSensor(const QString &port, const trikKernel::Configurer &configurer)
 	: m("Color Sensor on " + port, configurer, port, trikDsp::Algorithm::Mxn)
 {
-	mM = ConfigurerHelper::configureInt(configurer, m.state(), port, "m");
-	mN = ConfigurerHelper::configureInt(configurer, m.state(), port, "n");
+	mM = ConfigurerHelper::configureChildInt(
+				       configurer, m.state(), port, "colorSensor", "m");
+	mN = ConfigurerHelper::configureChildInt(
+				       configurer, m.state(), port, "colorSensor", "n");
 
 	// The DSP firmware supports at most a 3x3 grid (COLORS_WIDTHM_MAX /
 	// COLORS_HEIGHTN_MAX), so anything larger can never be filled.
@@ -84,6 +86,9 @@ void ColorSensor::onResult(trikDsp::OutArgs result)
 			static_cast<int>((c >> 8) & 0xFF),
 			static_cast<int>(c & 0xFF)
 		};
+		QLOG_DEBUG() << "ColorSensor: cell[" << row << "][" << col << "] raw=0x"
+		             << Qt::hex << c << "rgb=" << ((c >> 16) & 0xFF) << ','
+		             << ((c >> 8) & 0xFF) << ',' << (c & 0xFF);
 	}
 }
 

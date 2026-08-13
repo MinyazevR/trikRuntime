@@ -26,7 +26,6 @@
 #include "mainMenuManager.h"
 #include "modeManager.h"
 #include "trikGuiApplication.h"
-#include "videoDisplayProvider.h"
 #include <QFont>
 #include <QObject>
 #include <QQmlApplicationEngine>
@@ -80,9 +79,6 @@ int main(int argc, char *argv[])
 	QLOG_INFO() << "TrikGui started";
 
 	MainMenuManager mainMenuManager(initHelper.configPath(), engine, &app);
-
-	auto *dspVideoProvider = new VideoDisplayProvider(mainMenuManager.brick());
-	engine->rootContext()->setContextProperty("videoDisplayProvider", dspVideoProvider);
 
 	const QUrl url(QStringLiteral("qrc:/qml/main.qml"));
 	QObject::connect(

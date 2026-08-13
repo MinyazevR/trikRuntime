@@ -171,9 +171,12 @@ bool TrikHardwareAbstraction::initVideoSensor(const QString &deviceFile, int i2c
 		QScopedPointer<OutputDeviceFileInterface> reinit(createOutputDeviceFile(reinitFile));
 		if (reinit->open()) {
 			reinit->write(QStringLiteral("1\n"));
-			QLOG_INFO() << "TrikHardwareAbstraction: reinitialized sensor on bus" << i2cBus;
+			QLOG_INFO() << "TrikHardwareAbstraction: reinitialized sensor on bus" << i2cBus
+			            << "address" << Qt::hex << i2cAddress;
 			return true;
 		}
+		QLOG_DEBUG() << "TrikHardwareAbstraction: no reinit node at" << reinitFile
+		             << "- falling back to GPIO+I2C register programming";
 	}
 
 	// Fallback for kernels without the `reinit` node: pulse the reset GPIO, then
@@ -205,6 +208,9 @@ bool TrikHardwareAbstraction::initVideoSensor(const QString &deviceFile, int i2c
 			            << Qt::hex << reg.reg << "value" << reg.value;
 		}
 	}
+	QLOG_DEBUG() << "TrikHardwareAbstraction: programmed"
+	             << sizeof(ov7670RegisterDefaults) / sizeof(ov7670RegisterDefaults[0])
+	             << "ov7670 registers on bus" << i2cBus;
 
 	// fix_ov7670(): let the auto-exposure stabilize (0x13 0x87 is on), then
 	// lock it (0x13 0x85).

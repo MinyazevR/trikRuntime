@@ -65,7 +65,6 @@ bool TrikFbOutput::open()
 	}
 
 	mOpen = true;
-	emit started();
 	return true;
 }
 
@@ -83,8 +82,6 @@ void TrikFbOutput::close()
 		::close(mFd);
 		mFd = -1;
 	}
-
-	emit finished();
 }
 
 bool TrikFbOutput::isOpen() const

@@ -45,20 +45,23 @@ CameraManager::CameraManager(const trikKernel::Configurer &configurer,
 		const auto fmt = configurer.attributeByPort(port, "format", &fmtStr);
 
 		// The ov7670 analog ports (named "video*") carry the I2C bus/address and
-		// reset GPIO used for sensor initialization. They are optional: the USB
-		// webcam port does not have them, and a missing value is simply 0.
-		const auto optInt = [&configurer, &port](const QString &name) {
-			try {
-				bool ok = false;
-				const int v = configurer.attributeByPort(port, name).toInt(&ok, 0);
-				return ok ? v : 0;
-			} catch (const trikKernel::MalformedConfigException &) {
-				return 0;
-			}
-		};
-		entry.i2cBus = optInt(QStringLiteral("i2cBus"));
-		entry.i2cAddress = optInt(QStringLiteral("i2cAddress"));
-		entry.gpioNumber = optInt(QStringLiteral("gpioNumber"));
+		// reset GPIO used for sensor initialization. Only those ports have them:
+		// reading them from any other port (the USB webcam) would trip the
+		// Configurer's malformed-attribute check. For non-video ports they stay 0.
+		if (port.startsWith(QStringLiteral("video"))) {
+			const auto optInt = [&configurer, &port](const QString &name) {
+				try {
+					bool ok = false;
+					const int v = configurer.attributeByPort(port, name).toInt(&ok, 0);
+					return ok ? v : 0;
+				} catch (const trikKernel::MalformedConfigException &) {
+					return 0;
+				}
+			};
+			entry.i2cBus = optInt(QStringLiteral("i2cBus"));
+			entry.i2cAddress = optInt(QStringLiteral("i2cAddress"));
+			entry.gpioNumber = optInt(QStringLiteral("gpioNumber"));
+		}
 
 		entry.devFile = devFile;
 		entry.ready = !state.isFailed() && !devFile.isEmpty() && !fmt.isEmpty();
@@ -158,6 +161,8 @@ bool CameraManager::openDeviceLocked(const QString &port, Entry &entry)
 		// the bytes-per-line for the DSP descriptor.
 		entry.format = trikKernel::fromV4l2Fourcc(dev->actualFourcc());
 		entry.lineLength = dev->bytesPerLine();
+		QLOG_DEBUG() << "CameraManager: port" << port << "opened, actualFourcc=0x"
+		             << Qt::hex << dev->actualFourcc() << "lineLength" << entry.lineLength;
 
 		// Fan out frames from the device to all subscribers of this port.
 		connect(dev, &trikHal::VideoDeviceFileInterface::frameReady, this,
@@ -213,10 +218,12 @@ void CameraManager::release(const QString &port)
 
 void CameraManager::stop()
 {
+	QLOG_INFO() << "CameraManager::stop: force-stopping all cameras";
 	runInManagerThread([this]() {
 		QWriteLocker lock(&mLock);
 		tearDownLocked();
 	});
+	QLOG_INFO() << "CameraManager::stop: done";
 }
 
 void CameraManager::tearDownLocked()

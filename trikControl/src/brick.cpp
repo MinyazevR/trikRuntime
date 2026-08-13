@@ -127,10 +127,10 @@ Brick::Brick(const trikKernel::DifferentOwnerPointer<trikHal::HardwareAbstractio
 		mVideoSensorManager.reset(
 			new VideoSensorManager(mConfigurer, *mHardwareAbstraction, mCameraManager.data()));
 
-		connect(mVideoSensorManager.data(), &VideoSensorManager::videoDisplayStarted,
-			this, &Brick::videoDisplayStarted);
-		connect(mVideoSensorManager.data(), &VideoSensorManager::videoDisplayFinished,
-			this, &Brick::videoDisplayFinished);
+		// Repaint the display whenever a video sensor stops (deinit or not), so
+		// its last frame is cleared before the next sensor initializes.
+		connect(mVideoSensorManager.data(), &VideoSensorManager::sensorStopped,
+		        this, &Brick::stopped);
 	}
 
 	// Accelerometer must be created before gyroscope — gyro depends on it for calibration.
@@ -313,12 +313,20 @@ void Brick::stop()
 	}
 
 	if (mVideoSensorManager) {
+		QLOG_INFO() << "Brick::stop: stopping video sensor manager";
 		mVideoSensorManager->stop();
 	}
 
 	if (mCameraManager) {
+		QLOG_INFO() << "Brick::stop: stopping camera manager";
 		mCameraManager->stop();
 	}
+
+	// All video sensors (and the cameras backing them) are now stopped and the
+	// framebuffer is closed. Notify the GUI so it can repaint the screen and
+	// clear any leftover video frames.
+	Q_EMIT stopped();
+	QLOG_INFO() << "Brick::stop: emitted stopped()";
 
 	for (auto &&soundSensor : mSoundSensors) {
 		if (soundSensor->status() == DeviceInterface::Status::ready) {
@@ -632,7 +640,6 @@ void Brick::createDevice(const QString &port)
 			mSoundSensors.insert(port, new SoundSensor(port, mConfigurer, *mHardwareAbstraction));
 
 			/// @todo This will work only in case when there can be only one sound sensor launched at a time.
-			connect(mSoundSensors[port], &SoundSensor::stopped, this, &Brick::stopped);
 		} else if (deviceClass == "fifo") {
 			mFifos.insert(port, new Fifo(port, mConfigurer, *mHardwareAbstraction));
 		} else if (deviceClass == "lidar") {

@@ -54,7 +54,6 @@ HEADERS += \
 	$$PWD/mainMenuManager.h \
 	$$PWD/managers.h \
 	$$PWD/testingManager.h \
-	$$PWD/videoDisplayProvider.h \
 	$$PWD/accelerometerMock.h \
 	$$PWD/encoderMock.h \
 	$$PWD/gyroscopeMock.h \
@@ -95,7 +94,6 @@ SOURCES += \
 	$$PWD/pwmCaptureIndicator.cpp \
 	$$PWD/mainMenuManager.cpp \
 	$$PWD/testingManager.cpp \
-	$$PWD/videoDisplayProvider.cpp \
 	$$PWD/accelerometerMock.cpp \
 	$$PWD/encoderMock.cpp \
 	$$PWD/gyroscopeMock.cpp \

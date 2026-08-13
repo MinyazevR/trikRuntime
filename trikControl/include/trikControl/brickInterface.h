@@ -176,18 +176,13 @@ public:
 
 
 	Q_SIGNALS:
-	/// Emitted when all deferred deinitialization is completed and brick completely stopped. Note that if there is no
-	/// deferred deinitialization (no video sensors are on, for example), signal will NOT be emitted.
+	/// Emitted when brick is fully stopped (all devices, including video sensors
+	/// and their cameras, are down and the framebuffer is closed). Connected by
+	/// the GUI to repaint the screen and clear leftover video frames.
 	void stopped();
 
 	/// Emitted when brick finished resetting to default stopped state
 	void resetCompleted();
-
-	/// Emitted when a video sensor with videoOut=true is activated.
-	void videoDisplayStarted();
-
-	/// Emitted when a video sensor with videoOut=true is deactivated.
-	void videoDisplayFinished();
 };
 
 }

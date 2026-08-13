@@ -170,12 +170,6 @@ void DspServer::init()
 void DspServer::setFbOutput(trikHal::FbOutputInterface *fb)
 {
 	d->mFbOutput = fb;
-	if (fb) {
-		connect(fb, &trikHal::FbOutputInterface::started,
-		        this, &DspServer::videoDisplayStarted);
-		connect(fb, &trikHal::FbOutputInterface::finished,
-		        this, &DspServer::videoDisplayFinished);
-	}
 }
 
 }

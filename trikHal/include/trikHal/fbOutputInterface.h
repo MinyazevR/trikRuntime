@@ -52,13 +52,6 @@ public:
 	/// Logical dimensions of the written frame (hardcoded 240x240 for DSP output).
 	virtual uint32_t frameWidth() const = 0;
 	virtual uint32_t frameHeight() const = 0;
-
-Q_SIGNALS:
-	/// Emitted after successful open().
-	void started();
-
-	/// Emitted after close().
-	void finished();
 };
 
 } // namespace trikHal

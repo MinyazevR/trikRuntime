@@ -36,12 +36,11 @@ namespace trikDsp {
 /// When a new channel is activated the old one is silently replaced.
 /// Frames from non-active sources are dropped.
 ///
-/// ## Signal contract for video display
+/// ## Video display
 ///
-/// activate() emits videoDisplayFinished() for the previous channel if it had
-/// videoOut=true, then emits videoDisplayStarted() if the new channel has
-/// videoOut=true.  deactivate() emits videoDisplayFinished() once.
-/// Video output goes through HAL FbOutputInterface (no Qt signals in hot path).
+/// Video output goes through HAL FbOutputInterface (no Qt signals in hot path):
+/// activate() opens the fb when the channel has videoOut=true, deactivate()
+/// closes it.
 ///
 /// ## Concurrency
 ///
@@ -81,17 +80,17 @@ public:
 
 	/// Activate a DSP channel.  Non-blocking (QueuedConnection).
 	///
-	/// Replaces the current active channel.  If the previous channel had
-	/// videoOut=true, emits videoDisplayFinished() first.  If the new channel
-	/// has videoOut=true, emits videoDisplayStarted().
+	/// Replaces the current active channel.  Opens the framebuffer when the
+	/// new channel has videoOut=true (closes it first if a previous channel
+	/// had it open with a different algorithm).
 	///
 	/// Thread-safe — can be called from any thread.
 	void activate(const DspChannel &channel);
 
 	/// Deactivate the current channel.  Non-blocking (QueuedConnection).
 	///
-	/// Clears the active channel.  If it had videoOut=true, emits
-	/// videoDisplayFinished().  Idempotent.
+	/// Clears the active channel and closes the framebuffer if it was open.
+	/// Idempotent.
 	///
 	/// Thread-safe — can be called from any thread.
 	void deactivate();
@@ -125,12 +124,6 @@ Q_SIGNALS:
 	void resultReady(const QString &sourceId,
 			 trikDsp::Algorithm algorithm,
 			 trikDsp::OutArgs result);
-
-	/// Emitted when a channel with videoOut=true is deactivated or replaced.
-	void videoDisplayFinished();
-
-	/// Emitted when a channel with videoOut=true is activated.
-	void videoDisplayStarted();
 
 	/// @}
 

@@ -232,7 +232,7 @@ equal to its class name.
 	<videoDevice>
 			<lineSensor/>
 			<objectSensor/>
-			<colorSensor/>
+			<colorSensor3x3/>
 			<photo/>
 		</videoDevice>
 	</deviceGroups>

@@ -36,8 +36,6 @@ VideoSensorManager::VideoSensorManager(const trikKernel::Configurer &configurer,
 	});
 	connect(mDspServer.data(), &trikDsp::DspServer::successfullyInited, this, [this]() { mState.ready(); });
 	connect(mDspServer.data(), &trikDsp::DspServer::resultReady, this, &VideoSensorManager::onResult);
-	connect(mDspServer.data(), &trikDsp::DspServer::videoDisplayStarted, this, &VideoSensorManager::videoDisplayStarted);
-	connect(mDspServer.data(), &trikDsp::DspServer::videoDisplayFinished, this, &VideoSensorManager::videoDisplayFinished);
 
 	// The camera manager lives on its own thread, so its acquire() is async and
 	// reports completion via this queued signal.
@@ -205,6 +203,10 @@ void VideoSensorManager::handleStopRequested(const QString &port, bool deinit)
 		mCameraManager->release(port);
 		mActivePorts.remove(port);
 	}
+
+	// The sensor finished stopping (deinit or not). Repaint the display so its
+	// last frame is cleared before the next sensor initializes.
+	Q_EMIT sensorStopped();
 }
 
 void VideoSensorManager::create(const QString &port, const QString &deviceClass)
@@ -215,11 +217,15 @@ void VideoSensorManager::create(const QString &port, const QString &deviceClass)
 
 void VideoSensorManager::stop()
 {
+	QLOG_INFO() << "VideoSensorManager::stop: called, activePorts=" << mActivePorts.size()
+	            << "pendingActivations=" << mPendingActivations.size();
 	if (!checkManagerState("stop")) return;
 
 	mDspServer->deactivate();
+	QLOG_INFO() << "VideoSensorManager::stop: DSP deactivated";
 	mPendingActivations.clear();
 	mActivePorts.clear();
+	QLOG_INFO() << "VideoSensorManager::stop: active ports cleared";
 }
 
 bool VideoSensorManager::isVideoSensor(const QString &deviceClass)

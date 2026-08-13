@@ -65,8 +65,10 @@ public:
 	static bool isVideoSensor(const QString &deviceClass);
 
 Q_SIGNALS:
-	void videoDisplayStarted();
-	void videoDisplayFinished();
+	/// Emitted whenever any video sensor finishes stopping (both deinit and
+	/// plain stop). Used to repaint the display so a sensor's last frame is
+	/// cleared before the next sensor initializes.
+	void sensorStopped();
 
 private Q_SLOTS:
 	void onResult(const QString &sourceId,
