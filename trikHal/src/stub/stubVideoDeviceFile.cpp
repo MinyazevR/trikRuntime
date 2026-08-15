@@ -31,8 +31,9 @@ bool StubVideoDeviceFile::open()
 	return true;
 }
 
-bool StubVideoDeviceFile::startStreaming()
+bool StubVideoDeviceFile::startStreaming(bool forDsp)
 {
+	Q_UNUSED(forDsp);
 	QLOG_INFO() << "StubVideoDeviceFile: startStreaming" << mFileName;
 	return true;
 }

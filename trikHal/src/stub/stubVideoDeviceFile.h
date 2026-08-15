@@ -29,7 +29,7 @@ public:
 	explicit StubVideoDeviceFile(const QString &fileName);
 
 	bool open() override;
-	bool startStreaming() override;
+	bool startStreaming(bool forDsp = false) override;
 	void stopStreaming() override;
 	void close() override;
 	bool capture(const uint8_t *&data, size_t &size) override;

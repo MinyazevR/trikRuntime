@@ -39,7 +39,7 @@ public:
 	~VideoDeviceFileBase() override;
 
 	bool open() override;
-	bool startStreaming() override;
+	bool startStreaming(bool forDsp = false) override;
 	void stopStreaming() override;
 	void close() override;
 	bool capture(const uint8_t *&data, size_t &size) override;
@@ -64,7 +64,8 @@ protected:
 
 	/// Lock the exposure to manual after the auto-exposure has stabilized while
 	/// streaming. Mirrors the fix_webcam() (exposure_auto=1) step, which ran
-	/// after a 1s stabilization sleep in the init script.
+	/// after a 1s stabilization sleep in the init script. Non-blocking: the lock
+	/// is applied by a single-shot timer so startStreaming() returns immediately.
 	void fixWebcamExposure();
 
 	/// Set a single V4L2 control on the device.
@@ -81,6 +82,7 @@ protected:
 	uint32_t mLineLen = 0;
 	uint32_t mBufferCount;
 	bool mIsWebcam = false;
+	bool mExposureFixed = false;
 	int mFd = -1;
 	bool mStreaming = false;
 

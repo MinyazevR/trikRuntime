@@ -23,6 +23,7 @@
 #include <unistd.h>
 
 #include <QtCore/QSocketNotifier>
+#include <QtCore/QTimer>
 #include <QsLog.h>
 
 using namespace trikHal;
@@ -110,8 +111,22 @@ void VideoDeviceFileBase::fixWebcamExposure()
 	// auto-exposure to stabilize while the camera is streaming, then lock it
 	// (exposure_auto=1 => V4L2_EXPOSURE_MANUAL) so the brightness no longer
 	// drifts with the scene.
-	usleep(1000000);
-	setControl(V4L2_CID_EXPOSURE_AUTO, V4L2_EXPOSURE_MANUAL);
+	//
+	// The 1s stabilization wait must not block the caller: this runs inside
+	// startStreaming() while the CameraManager holds its device lock, so a
+	// blocking sleep would stall every other video port. The exposure lock is
+	// therefore deferred to the worker-thread event loop and skipped if the
+	// stream was stopped before the timer fired. Performed once per device
+	// lifetime (the controls persist while the device stays open).
+	if (mExposureFixed)
+		return;
+
+	QTimer::singleShot(1000, this, [this]() {
+		if (!mStreaming || mFd < 0 || mExposureFixed)
+			return;
+		setControl(V4L2_CID_EXPOSURE_AUTO, V4L2_EXPOSURE_MANUAL);
+		mExposureFixed = true;
+	});
 }
 
 bool VideoDeviceFileBase::setControl(uint32_t id, int32_t value)
@@ -211,6 +226,13 @@ bool VideoDeviceFileBase::capture(const uint8_t *&data, size_t &size)
 
 void VideoDeviceFileBase::release()
 {
+	// A release() deferred past a stopStreaming()/startStreaming() cycle (e.g. a
+	// frame that was in flight when the sensor was stopped) would otherwise
+	// re-QBUF a buffer that startStreaming() has already queued, corrupting the
+	// driver's buffer queue and stalling capture. Drop it when not streaming.
+	if (!mStreaming)
+		return;
+
 	if (mCurrentBufIdx < 0 || mCurrentBufIdx >= static_cast<int>(mMmapBufs.size()))
 		return;
 
@@ -323,7 +345,7 @@ void VideoDeviceFileBase::freeBuffers()
 	mMmapBufs.clear();
 }
 
-bool VideoDeviceFileBase::startStreaming()
+bool VideoDeviceFileBase::startStreaming(bool forDsp)
 {
 	for (uint32_t i = 0; i < static_cast<uint32_t>(mMmapBufs.size()); ++i) {
 		v4l2_buffer buf = {};
@@ -349,10 +371,11 @@ bool VideoDeviceFileBase::startStreaming()
 	connect(mNotifier.data(), &QSocketNotifier::activated,
 	        this, &VideoDeviceFileBase::onActivated);
 
-	// The camera is now streaming with auto-exposure. Let it stabilize for a
-	// second and then lock the exposure, so the first frames delivered to the
-	// consumer are properly exposed rather than underexposed.
-	if (mIsWebcam)
+	// The camera is now streaming with auto-exposure. The exposure lock is a
+	// DSP-streaming concern only (stable brightness for the CV algorithms), so
+	// it is applied when this stream feeds a video sensor, and skipped for a
+	// plain camera (getPhoto) where auto-exposure is preferable.
+	if (mIsWebcam && forDsp)
 		fixWebcamExposure();
 
 	return true;
@@ -370,4 +393,12 @@ void VideoDeviceFileBase::stopStreaming()
 		QLOG_ERROR() << "VideoDeviceFileBase: STREAMOFF failed:" << strerror(errno);
 	}
 	mStreaming = false;
+
+	// STREAMOFF hands all buffers back to the driver, so the "dequeued frame in
+	// flight" state is gone. Clear it so a stale release() (a frame queued for
+	// processing before the stop) becomes a no-op instead of double-QBUF'ing a
+	// buffer that the next startStreaming() already re-queued.
+	mCurrentData = nullptr;
+	mCurrentSize = 0;
+	mCurrentBufIdx = -1;
 }

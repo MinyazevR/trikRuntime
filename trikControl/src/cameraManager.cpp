@@ -388,7 +388,7 @@ void CameraManager::updateStreaming(const QString &port)
 
 	if (hasStreaming || hasPull) {
 		if (!it->streaming) {
-			it->dev->startStreaming();
+			it->dev->startStreaming(hasStreaming);
 			it->streaming = true;
 		}
 	} else if (it->streaming) {

@@ -29,7 +29,10 @@ public:
 	~VideoDeviceFileInterface() override = default;
 
 	virtual bool open() = 0;
-	virtual bool startStreaming() = 0;
+	/// Start capturing. @p forDsp marks the stream as feeding the DSP video
+	/// sensors (push consumer); a plain camera (pull/getPhoto) stream passes
+	/// false so DSP-only tuning (e.g. the webcam exposure lock) is skipped.
+	virtual bool startStreaming(bool forDsp = false) = 0;
 	virtual void stopStreaming() = 0;
 	virtual void close() = 0;
 	virtual bool capture(const uint8_t *&data, size_t &size) = 0;
