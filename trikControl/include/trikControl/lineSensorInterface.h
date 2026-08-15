@@ -46,7 +46,7 @@ public Q_SLOTS:
 	/// Stops detection until init() will be called again.
 	/// @param flags - how far to tear the camera down (StopAll by default), OR-ed
 	///                from VideoSensorStopFlag.
-	virtual void stop(int flags = StopAll) = 0;
+	virtual void stop(int flags = trikControl::StopAll) = 0;
 
 public:
 	/// Returns current raw x coordinate of detected object. Sensor returns 0 if detect() was not called.

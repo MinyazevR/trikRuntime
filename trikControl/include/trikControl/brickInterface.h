@@ -15,7 +15,7 @@
 #pragma once
 
 #include <QtCore/QStringList>
-#include <QtCore/QVariantMap>
+#include <QtCore/QVariant>
 
 #include "batteryInterface.h"
 #include "colorSensorInterface.h"
@@ -93,11 +93,12 @@ public Q_SLOTS:
 	/// directly over UVC.
 	///
 	/// @param port  camera port (video1/video2 or usb-camera).
-	/// @param params  optional named parameters:
+	/// @param params  optional named parameters as a map/dict (Python dict or JS
+	///   object), passed as a QVariant:
 	///   - "jpeg-qual"   (int)  JPEG quality 1..100 (ov7670 ports only, default 40)
 	///   - "white-black" (bool) grayscale JPEG (ov7670 ports only, default false)
 	///   - "detached"    (bool) keep the stream alive after stop()/script end (default false)
-	virtual void startTranslation(const QString &port, const QVariantMap &params = QVariantMap()) = 0;
+	virtual void startTranslation(const QString &port, const QVariant &params = QVariant()) = 0;
 
 	/// Stops a video translation previously started on @p port, regardless of
 	/// whether it was started with "detached". Symmetric to startTranslation():
@@ -160,7 +161,7 @@ public:
 	/// Returns QVector<uint8_t> with image using camera on given port (video1 or video2).
 	// TODO: The default parameter is part of the public API. Consider backward compatibility
 	// NOLINTNEXTLINE(google-default-arguments)
-	Q_INVOKABLE virtual QVector<uint8_t> getStillImage(const QString &port = QStringLiteral("video1")) = 0;
+	Q_INVOKABLE virtual QVector<uint8_t> getStillImage(const QString &port = "video1") = 0;
 
 	/// Returns high-level sound detector sensor using microphones.
 	Q_INVOKABLE virtual trikControl::SoundSensorInterface *soundSensor(const QString &port) = 0;

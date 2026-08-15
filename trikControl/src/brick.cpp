@@ -269,9 +269,11 @@ void Brick::reset()
 	Q_EMIT resetCompleted();
 }
 
-void Brick::startTranslation(const QString &port, const QVariantMap &params)
+void Brick::startTranslation(const QString &port, const QVariant &params)
 {
 	QLOG_INFO() << "Brick::startTranslation: port" << port;
+
+	const QVariantMap paramsMap = params.toMap();
 
 	const bool isUsb = port.startsWith(QStringLiteral("usb-camera"));
 
@@ -302,7 +304,7 @@ void Brick::startTranslation(const QString &port, const QVariantMap &params)
 		mVideoSensorManager->releasePort(port);
 	}
 
-	const bool detached = params.value(QStringLiteral("detached"), false).toBool();
+	const bool detached = paramsMap.value(QStringLiteral("detached"), false).toBool();
 
 	if (isUsb) {
 		// USB webcam: mjpg-streamer opens the device directly over UVC, so the
@@ -315,8 +317,8 @@ void Brick::startTranslation(const QString &port, const QVariantMap &params)
 		// streamed into the FIFO that mjpg-streamer's input_fifo.so reads.
 		if (mVideoSensorManager) {
 			if (auto *encoder = mVideoSensorManager->jpegEncoderSensor(port)) {
-				const int jpegQuality = params.value(QStringLiteral("jpeg-qual"), 40).toInt();
-				const bool whiteBlack = params.value(QStringLiteral("white-black"), false).toBool();
+				const int jpegQuality = paramsMap.value(QStringLiteral("jpeg-qual"), 40).toInt();
+				const bool whiteBlack = paramsMap.value(QStringLiteral("white-black"), false).toBool();
 				encoder->init(static_cast<uint8_t>(jpegQuality), whiteBlack, false);
 			}
 		}

@@ -100,7 +100,7 @@ public Q_SLOTS:
 
 	void stop() override;
 
-	void startTranslation(const QString &port, const QVariantMap &params = QVariantMap()) override;
+	void startTranslation(const QString &port, const QVariant &params = QVariant()) override;
 
 	void stopTranslation(const QString &port) override;
 
