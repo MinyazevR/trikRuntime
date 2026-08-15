@@ -1,5 +1,6 @@
 #pragma once
 
+#include <QtCore/QObject>
 #include <QtCore/QScopedPointer>
 
 #include <trikControl/videoSensorStopFlags.h>
