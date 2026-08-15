@@ -100,6 +100,10 @@ public Q_SLOTS:
 
 	void stop() override;
 
+	void startTranslation(const QString &port, const QVariantMap &params = QVariantMap()) override;
+
+	void stopTranslation(const QString &port) override;
+
 	MotorInterface *motor(const QString &port) override;
 
 	PwmCaptureInterface *pwmCapture(const QString &port) override;
@@ -162,6 +166,11 @@ private:
 			, const QString &modelConfig
 			, const QString &mediaPath);
 
+	/// Stops the translation on @p port. If @p keepCamera is true the camera is
+	/// only streamed off (kept acquired) so a subsequent sensor init can switch
+	/// the DSP algorithm without a slow camera reopen; otherwise it is released.
+	void stopTranslationInternal(const QString &port, bool keepCamera);
+
 	/// Deinitializes and properly shuts down device on a given port.
 	void shutdownDevice(const QString &port);
 
@@ -206,6 +215,16 @@ private:
 	QString mPlayWavFileCommand;
 	QString mPlayMp3FileCommand;
 	QString mMediaPath;
+
+	/// State of an active translation.
+	struct Translation {
+		QString streamerScript;
+		bool detached = false;
+		bool isUsb = false;
+	};
+
+	/// Active translations keyed by port.
+	QHash<QString, Translation> mTranslations;
 
 	trikKernel::Configurer mConfigurer;
 };

@@ -20,6 +20,7 @@
 #include "deviceInterface.h"
 
 #include <trikControl/trikControlDeclSpec.h>
+#include <trikControl/videoSensorStopFlags.h>
 
 namespace trikControl {
 
@@ -41,8 +42,9 @@ public Q_SLOTS:
 	virtual QVector<int> read(int m, int n) = 0;
 
 	/// Stops detection until init() will be called again.
-	/// @param deinit - if true (default), removes camera from daemon. If false, only disables sensor.
-	virtual void stop(bool deinit = true) = 0;
+	/// @param flags - how far to tear the camera down (StopAll by default), OR-ed
+	///                from VideoSensorStopFlag.
+	virtual void stop(int flags = StopAll) = 0;
 };
 
 }

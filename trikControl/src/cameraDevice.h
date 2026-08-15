@@ -22,6 +22,9 @@
 #include "cameraImplementationInterface.h"
 #include <trikControl/trikControlDeclSpec.h>
 
+class QObject;
+class QThread;
+
 namespace trikKernel { class Configurer; }
 namespace trikControl { class CameraManager; }
 
@@ -36,11 +39,18 @@ public:
 
 	QVector<uint8_t> getPhoto() override;
 	Status status() const override;
-	~CameraDevice() override = default;
+	~CameraDevice() override;
 
 private:
 	QMutex mCameraMutex;
 	QScopedPointer<CameraImplementationInterface> mCameraImpl;
+	/// Persistent worker thread the photo capture runs on. Created lazily on the
+	/// first getPhoto() and reused afterwards, so a thread is not spawned per
+	/// photo.
+	QScopedPointer<QThread> mCameraThread;
+	/// Context QObject living on mCameraThread, used as the target for queued
+	/// functor invocations (a plain QObject is enough).
+	QScopedPointer<QObject> mCameraWorker;
 };
 
 }

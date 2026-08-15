@@ -48,10 +48,10 @@ QVector<int> ObjectSensor::read()
 	return mReading;
 }
 
-void ObjectSensor::stop(bool deinit)
+void ObjectSensor::stop(int flags)
 {
 	m.doStop();
-	Q_EMIT stopRequested(deinit);
+	Q_EMIT stopRequested(flags);
 	Q_EMIT stopped();
 }
 
@@ -65,7 +65,13 @@ void ObjectSensor::onResult(trikDsp::OutArgs result)
 {
 	bool hsvUpdated = false;
 
-	if (m.inArgs().autoDetect) {
+	if (result.autoDetect) {
+		// The DSP tagged this frame as the one-shot detect result. Consume it:
+		// clear the pending host flag and feed the detected range back to the
+		// DSP, widening it by the config toleranceFactor (as the old worker did
+		// before re-sending). A plain local flag can't be used here: frames that
+		// were already in flight before detect() reached the DSP would race with
+		// the real detect frame.
 		m.inArgs().autoDetect = false;
 		m.inArgs().params = result.detected;
 		applyToleranceFactor(m.inArgs().params, mToleranceFactor);

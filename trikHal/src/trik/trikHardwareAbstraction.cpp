@@ -150,9 +150,9 @@ OutputDeviceFileInterface *TrikHardwareAbstraction::createOutputDeviceFile(const
 
 VideoDeviceFileInterface *TrikHardwareAbstraction::createVideoDeviceFile(
 		const QString &devicePath, uint32_t width, uint32_t height,
-		uint32_t fourcc, bool needPalStandard) const
+		uint32_t fourcc, bool isWebcam) const
 {
-	return new TrikVideoDevice(devicePath, width, height, fourcc, 3, needPalStandard);
+	return new TrikVideoDevice(devicePath, width, height, fourcc, 3, isWebcam);
 }
 
 bool TrikHardwareAbstraction::initVideoSensor(const QString &deviceFile, int i2cBus,

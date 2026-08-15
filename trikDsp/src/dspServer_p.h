@@ -155,6 +155,12 @@ public:
 	/// Return the sourceId of the active channel, or empty string if inactive.
 	QString channelSourceId() const { return mActive.sourceId; }
 
+	/// Clear the auto-detect flag on the active channel. This makes the flag a
+	/// one-shot: the DSP detects on exactly the frame that carried
+	/// auto_detect_hsv=true, and the host learns the detected range via
+	/// resultReady() and feeds it back through a fresh activate().
+	void consumeAutoDetect() { mActive.inArgs.autoDetect = false; }
+
 	/// @}
 
 	/// 	TI remoteproc ID of the DSP core (0 for OMAP-L138).

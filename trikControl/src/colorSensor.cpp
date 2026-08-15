@@ -66,10 +66,10 @@ QVector<int> ColorSensor::read(int mIdx, int nIdx)
 	return mReading[mIdx - 1][nIdx - 1];
 }
 
-void ColorSensor::stop(bool deinit)
+void ColorSensor::stop(int flags)
 {
 	m.doStop();
-	Q_EMIT stopRequested(deinit);
+	Q_EMIT stopRequested(flags);
 	Q_EMIT stopped();
 }
 
@@ -86,9 +86,6 @@ void ColorSensor::onResult(trikDsp::OutArgs result)
 			static_cast<int>((c >> 8) & 0xFF),
 			static_cast<int>(c & 0xFF)
 		};
-		QLOG_DEBUG() << "ColorSensor: cell[" << row << "][" << col << "] raw=0x"
-		             << Qt::hex << c << "rgb=" << ((c >> 16) & 0xFF) << ','
-		             << ((c >> 8) & 0xFF) << ',' << (c & 0xFF);
 	}
 }
 

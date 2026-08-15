@@ -92,12 +92,12 @@ OutputDeviceFileInterface *StubHardwareAbstraction::createOutputDeviceFile(const
 
 VideoDeviceFileInterface *StubHardwareAbstraction::createVideoDeviceFile(
 		const QString &devicePath, uint32_t width, uint32_t height,
-		uint32_t fourcc, bool needPalStandard) const
+		uint32_t fourcc, bool isWebcam) const
 {
 	Q_UNUSED(width);
 	Q_UNUSED(height);
 	Q_UNUSED(fourcc);
-	Q_UNUSED(needPalStandard);
+	Q_UNUSED(isWebcam);
 	return new StubVideoDeviceFile(devicePath);
 }
 

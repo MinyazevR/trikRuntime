@@ -30,14 +30,18 @@ public:
 	/// @param fileName - name of a device file .
 	TrikOutputDeviceFile(const QString &fileName);
 
-	bool open() override;
+	bool open(OpenMode mode = OpenMode::Text) override;
 	void close() override;
 	void write(const QString &data) override;
+	bool write(const QByteArray &data) override;
 	QString fileName() const override;
 
 private:
-	/// Underlying file.
+	/// Underlying file (text command path).
 	QFile mFile;
+
+	/// Raw descriptor used in NonBlockingBinary mode, -1 when not open.
+	int mFileDescriptor = -1;
 };
 
 }

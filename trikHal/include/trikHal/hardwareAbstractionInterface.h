@@ -78,7 +78,7 @@ public:
 
 	virtual VideoDeviceFileInterface *createVideoDeviceFile(
 			const QString &devicePath, uint32_t width, uint32_t height,
-			uint32_t fourcc, bool needPalStandard = false) const = 0;
+			uint32_t fourcc, bool isWebcam = false) const = 0;
 
 	/// Initialize an analog video sensor (ov7670) before it is opened. Mirrors
 	/// the media-sensor init-ov7670 script: prefer the kernel driver's `reinit`

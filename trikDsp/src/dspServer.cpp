@@ -93,6 +93,16 @@ void DspServer::processFrameData(const QString &sourceId)
 		const auto &channel = d->channel();
 		const bool ok = d->processFrame(channel, out, needVideo ? &videoFrame : nullptr);
 
+		// autoDetect is one-shot: consume it on the DSP side so the detection
+		// runs on exactly one frame (like the old runtime, which cleared the
+		// command flag right after reading it). Tag the result so the consumer
+		// can tell this frame apart from the others without relying on its own
+		// local flag (which races with frames already in flight).
+		if (channel.inArgs.autoDetect) {
+			out.autoDetect = true;
+			d->consumeAutoDetect();
+		}
+
 		if (ok && needVideo && videoFrame.data && d->mFbOutput && d->mFbOutput->isOpen()) {
 			d->mFbOutput->writeFrame(static_cast<const uint8_t *>(videoFrame.data));
 		}

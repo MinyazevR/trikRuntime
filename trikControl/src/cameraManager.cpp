@@ -40,9 +40,11 @@ CameraManager::CameraManager(const trikKernel::Configurer &configurer,
 		entry.h = static_cast<uint32_t>(
 			ConfigurerHelper::configureInt(configurer, state, port, "height"));
 
-		QString defaultDevFile, fmtStr;
+		QString defaultDevFile, fmtStr, defaultStreamerScript;
 		const auto devFile = configurer.attributeByPort(port, "device", &defaultDevFile);
 		const auto fmt = configurer.attributeByPort(port, "format", &fmtStr);
+		const auto streamerScript =
+			configurer.attributeByPort(port, "mjpgStreamerScript", &defaultStreamerScript);
 
 		// The ov7670 analog ports (named "video*") carry the I2C bus/address and
 		// reset GPIO used for sensor initialization. Only those ports have them:
@@ -64,6 +66,7 @@ CameraManager::CameraManager(const trikKernel::Configurer &configurer,
 		}
 
 		entry.devFile = devFile;
+		entry.mjpgStreamerScript = streamerScript;
 		entry.ready = !state.isFailed() && !devFile.isEmpty() && !fmt.isEmpty();
 		if (entry.ready) {
 			entry.fmt = static_cast<uint32_t>(
@@ -134,9 +137,9 @@ bool CameraManager::openDeviceLocked(const QString &port, Entry &entry)
 	// refcount, so the physical device is never opened twice and the format
 	// of an already-open device stays intact.
 	if (!entry.dev) {
-		// The analog ov7670 cameras (ports named "video*") need the PAL video
-		// standard to be negotiated; the USB camera does not.
-		const bool needPalStandard = port.startsWith(QStringLiteral("video"));
+		// The analog ov7670 cameras (ports named "video*") are initialized over
+		// I2C by the kernel driver's reinit node; the USB webcam is not.
+		const bool isVideoPort = port.startsWith(QStringLiteral("video"));
 
 		// Initialize the analog ov7670 sensor (reinit via kernel driver, or a
 		// full I2C register programming as a fallback) before opening the device.
@@ -144,13 +147,13 @@ bool CameraManager::openDeviceLocked(const QString &port, Entry &entry)
 		// configuration across close/reopen, so a hot-plug re-open must not
 		// re-run the slow init (the 1s exposure-stabilization sleep in the
 		// fallback path) on an already-initialized sensor.
-		if (needPalStandard && !entry.sensorInitialized) {
+		if (isVideoPort && !entry.sensorInitialized) {
 			entry.sensorInitialized = mHal.initVideoSensor(entry.devFile, entry.i2cBus,
 			                                               entry.i2cAddress, entry.gpioNumber);
 		}
 
 		auto *dev = mHal.createVideoDeviceFile(entry.devFile, entry.w, entry.h,
-		                                       entry.fmt, needPalStandard);
+		                                       entry.fmt, !isVideoPort);
 		if (!dev->open() || !dev->startStreaming()) {
 			QLOG_ERROR() << "CameraManager: failed to open" << entry.devFile;
 			delete dev;
@@ -226,22 +229,38 @@ void CameraManager::stop()
 	QLOG_INFO() << "CameraManager::stop: done";
 }
 
+void CameraManager::stop(const QString &port)
+{
+	QLOG_INFO() << "CameraManager::stop: force-stopping camera on port" << port;
+	runInManagerThread([this, port]() {
+		QWriteLocker lock(&mLock);
+		auto it = mDevices.find(port);
+		if (it != mDevices.end())
+			tearDownPortLocked(port, it.value());
+	});
+	QLOG_INFO() << "CameraManager::stop: port" << port << "done";
+}
+
+void CameraManager::tearDownPortLocked(const QString &port, Entry &entry)
+{
+	if (entry.dev) {
+		entry.dev->disconnect();
+		entry.dev->stopStreaming();
+		entry.dev->close();
+		delete entry.dev;
+		entry.dev = nullptr;
+	}
+	entry.refCount = 0;
+	entry.streaming = false;
+	mStreamingSubs.remove(port);
+	mPullSubs.remove(port);
+	mLatest.remove(port);
+}
+
 void CameraManager::tearDownLocked()
 {
-	for (auto &entry : mDevices) {
-		if (entry.dev) {
-			entry.dev->disconnect();
-			entry.dev->stopStreaming();
-			entry.dev->close();
-			delete entry.dev;
-			entry.dev = nullptr;
-		}
-		entry.refCount = 0;
-		entry.streaming = false;
-	}
-	mStreamingSubs.clear();
-	mPullSubs.clear();
-	mLatest.clear();
+	for (auto it = mDevices.begin(); it != mDevices.end(); ++it)
+		tearDownPortLocked(it.key(), it.value());
 }
 
 void CameraManager::initSensors()
@@ -280,6 +299,7 @@ void CameraManager::subscribe(const QString &port, QObject *receiver,
 		}
 
 		mStreamingSubs[port] = StreamingSub{receiver, std::move(callback)};
+		updateStreaming(port);
 	});
 }
 
@@ -289,6 +309,7 @@ void CameraManager::unsubscribe(const QString &port, QObject *receiver)
 		auto it = mStreamingSubs.find(port);
 		if (it != mStreamingSubs.end() && it->receiver == receiver)
 			mStreamingSubs.erase(it);
+		updateStreaming(port);
 	});
 }
 
@@ -303,6 +324,7 @@ void CameraManager::subscribeLatest(const QString &port, QObject *receiver)
 		}
 
 		mPullSubs[port].append(receiver);
+		updateStreaming(port);
 
 		// Auto-unsubscribe when the receiver dies, so a forgotten unsubscribe
 		// cannot keep latching on forever. The handler runs in the manager's
@@ -326,6 +348,7 @@ void CameraManager::prunePullSubs(const QString &port)
 	}
 	if (pull.isEmpty())
 		mPullSubs.erase(it);
+	updateStreaming(port);
 }
 
 void CameraManager::unsubscribeLatest(const QString &port, QObject *receiver)
@@ -342,7 +365,36 @@ void CameraManager::unsubscribeLatest(const QString &port, QObject *receiver)
 		}
 		if (pull.isEmpty())
 			mPullSubs.erase(it);
+		updateStreaming(port);
 	});
+}
+
+void CameraManager::updateStreaming(const QString &port)
+{
+	// Runs in the manager's thread (called from subscribe*/unsubscribe*).
+	// The device must stream iff at least one push or pull subscriber wants
+	// frames. This parks the camera when the last video-sensor push client
+	// unsubscribes (StopStream) and transparently resumes it when a pull client
+	// (getPhoto) subscribes — no client races over a shared flag.
+	QWriteLocker lock(&mLock);
+	auto it = mDevices.find(port);
+	if (it == mDevices.end() || !it->ready || !it->dev)
+		return;
+
+	const auto streamingIt = mStreamingSubs.constFind(port);
+	const bool hasStreaming = streamingIt != mStreamingSubs.constEnd() && streamingIt->receiver;
+	const auto pullIt = mPullSubs.constFind(port);
+	const bool hasPull = pullIt != mPullSubs.constEnd() && !pullIt->isEmpty();
+
+	if (hasStreaming || hasPull) {
+		if (!it->streaming) {
+			it->dev->startStreaming();
+			it->streaming = true;
+		}
+	} else if (it->streaming) {
+		it->dev->stopStreaming();
+		it->streaming = false;
+	}
 }
 
 QSharedPointer<QByteArray> CameraManager::grabLatestFrame(const QString &port) const
@@ -394,32 +446,8 @@ void CameraManager::onFrameReady(const QString &port, const uint8_t *data, size_
 }
 
 // ---------------------------------------------------------------------------
-// Streaming control / frame release
+// Frame release
 // ---------------------------------------------------------------------------
-
-void CameraManager::stopStreaming(const QString &port)
-{
-	runAsync([this, port]() {
-		QWriteLocker lock(&mLock);
-		auto it = mDevices.find(port);
-		if (it != mDevices.end() && it->ready && it->dev && it->streaming) {
-			it->dev->stopStreaming();
-			it->streaming = false;
-		}
-	});
-}
-
-void CameraManager::startStreaming(const QString &port)
-{
-	runAsync([this, port]() {
-		QWriteLocker lock(&mLock);
-		auto it = mDevices.find(port);
-		if (it != mDevices.end() && it->ready && it->dev && !it->streaming) {
-			it->dev->startStreaming();
-			it->streaming = true;
-		}
-	});
-}
 
 void CameraManager::releaseFrame(const QString &port)
 {
@@ -486,6 +514,13 @@ QString CameraManager::deviceFile(const QString &port) const
 	QReadLocker lock(&mLock);
 	auto it = mDevices.constFind(port);
 	return (it != mDevices.constEnd() && it->ready) ? it->devFile : QString();
+}
+
+QString CameraManager::streamerScript(const QString &port) const
+{
+	QReadLocker lock(&mLock);
+	auto it = mDevices.constFind(port);
+	return it != mDevices.constEnd() ? it->mjpgStreamerScript : QString();
 }
 
 } // namespace trikControl

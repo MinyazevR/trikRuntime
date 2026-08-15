@@ -40,7 +40,7 @@ public:
 	InputDeviceFileInterface *createInputDeviceFile(const QString &fileName) const override;
 	OutputDeviceFileInterface *createOutputDeviceFile(const QString &fileName) const override;
 	VideoDeviceFileInterface *createVideoDeviceFile(const QString &devicePath, uint32_t width, uint32_t height,
-	                                                uint32_t fourcc, bool needPalStandard = false) const override;
+	                                                uint32_t fourcc, bool isWebcam = false) const override;
 	bool initVideoSensor(const QString &deviceFile, int i2cBus, int i2cAddress,
 	                     int gpioNumber) const override;
 	OutputDeviceFileInterface *createDspCommunicator() const override;

@@ -60,6 +60,7 @@ VideoSensorManager::~VideoSensorManager()
 	qDeleteAll(mLineSensors); mLineSensors.clear();
 	qDeleteAll(mColorSensors); mColorSensors.clear();
 	qDeleteAll(mObjectSensors); mObjectSensors.clear();
+	qDeleteAll(mJpegEncoders); mJpegEncoders.clear();
 }
 
 bool VideoSensorManager::checkManagerState(const QString &message) const
@@ -87,7 +88,7 @@ void VideoSensorManager::createSensor(const QString &port, const QString &device
 			activateForPort(port, trikDsp::Algorithm::Line, args, videoOut, canOpen);
 		}, Qt::QueuedConnection);
 		connect(s, &LineSensor::stopRequested, this,
-		        [this, port](bool deinit) { handleStopRequested(port, deinit); }, Qt::QueuedConnection);
+		        [this, port](int flags) { handleStopRequested(port, flags); }, Qt::QueuedConnection);
 		mLineSensors.insert(port, s);
 	} else if (deviceClass == QStringLiteral("objectSensor")) {
 		if (mObjectSensors.contains(port)) {
@@ -100,7 +101,7 @@ void VideoSensorManager::createSensor(const QString &port, const QString &device
 			activateForPort(port, trikDsp::Algorithm::Object, args, videoOut, canOpen);
 		}, Qt::QueuedConnection);
 		connect(s, &ObjectSensor::stopRequested, this,
-		        [this, port](bool deinit) { handleStopRequested(port, deinit); }, Qt::QueuedConnection);
+		        [this, port](int flags) { handleStopRequested(port, flags); }, Qt::QueuedConnection);
 		mObjectSensors.insert(port, s);
 	} else if (deviceClass == QStringLiteral("colorSensor")) {
 		if (mColorSensors.contains(port)) {
@@ -113,8 +114,21 @@ void VideoSensorManager::createSensor(const QString &port, const QString &device
 			activateForPort(port, trikDsp::Algorithm::Mxn, args, videoOut, canOpen);
 		}, Qt::QueuedConnection);
 		connect(s, &ColorSensor::stopRequested, this,
-		        [this, port](bool deinit) { handleStopRequested(port, deinit); }, Qt::QueuedConnection);
+		        [this, port](int flags) { handleStopRequested(port, flags); }, Qt::QueuedConnection);
 		mColorSensors.insert(port, s);
+	} else if (deviceClass == QStringLiteral("jpegEncoderSensor")) {
+		if (mJpegEncoders.contains(port)) {
+			QLOG_INFO() << "VideoSensorManager: jpegEncoderSensor on port" << port << "already created";
+			return;
+		}
+		auto *s = new JpegEncoderSensor(port, mConfigurer, mHardwareAbstractionInterface);
+		connect(s, &JpegEncoderSensor::activateRequested, this,
+		        [this, port](trikDsp::InArgs args, bool videoOut, bool canOpen) {
+			activateForPort(port, trikDsp::Algorithm::Jpeg, args, videoOut, canOpen);
+		}, Qt::QueuedConnection);
+		connect(s, &JpegEncoderSensor::stopRequested, this,
+		        [this, port](int flags) { handleStopRequested(port, flags); }, Qt::QueuedConnection);
+		mJpegEncoders.insert(port, s);
 	}
 }
 
@@ -139,6 +153,10 @@ void VideoSensorManager::activateForPort(const QString &port, trikDsp::Algorithm
 		return;
 	}
 
+	// The camera is already held (possibly parked by a StopStream, which
+	// dropped the push subscription). Re-subscribe so frames flow again, then
+	// (re)activate the DSP.
+	subscribeFrames(port);
 	activateDsp(port, algo, args, videoOut);
 }
 
@@ -157,6 +175,16 @@ void VideoSensorManager::onAcquired(const QString &port, bool ok)
 	}
 
 	// The camera is open and streaming. Subscribe to frames and activate the DSP.
+	subscribeFrames(port);
+
+	mActivePorts.insert(port);
+	QLOG_INFO() << "VideoSensorManager: camera acquired for port" << port;
+
+	activateDsp(port, activation.algo, activation.args, activation.videoOut);
+}
+
+void VideoSensorManager::subscribeFrames(const QString &port)
+{
 	mCameraManager->subscribe(port, this, [this, port](const uint8_t *data, size_t size) {
 		mCameraFrameCount++;
 		if (mCameraFpsTimer.hasExpired(1000) || !mCameraFpsTimer.isValid()) {
@@ -171,11 +199,6 @@ void VideoSensorManager::onAcquired(const QString &port, bool ok)
 			mDspServer->processFrameData(port);
 		}, Qt::QueuedConnection);
 	});
-
-	mActivePorts.insert(port);
-	QLOG_INFO() << "VideoSensorManager: camera acquired for port" << port;
-
-	activateDsp(port, activation.algo, activation.args, activation.videoOut);
 }
 
 void VideoSensorManager::activateDsp(const QString &port, trikDsp::Algorithm algo,
@@ -187,25 +210,36 @@ void VideoSensorManager::activateDsp(const QString &port, trikDsp::Algorithm alg
 	mDspServer->activate({port, algo, args, videoOut,
 	                      mCameraManager->width(port), mCameraManager->height(port),
 	                      mCameraManager->format(port), mCameraManager->lineLength(port)});
+	mActiveDspPort = port;
 }
 
-void VideoSensorManager::handleStopRequested(const QString &port, bool deinit)
+void VideoSensorManager::handleStopRequested(const QString &port, int flags)
 {
 	mDspServer->deactivate();
+	if (mActiveDspPort == port) {
+		mActiveDspPort.clear();
+	}
 
 	// A stop cancels any acquire still in flight for this port; the released
 	// camera is closed by the manager's queued release() even if the acquire
 	// later completes (refcount is preserved by the manager's event order).
 	mPendingActivations.remove(port);
 
-	if (deinit) {
+	if (flags & StopStream) {
+		// Drop the push subscription but keep the camera acquired (open). The
+		// CameraManager parks the stream (streamoff) once the last subscriber
+		// is gone, and another pull client can transparently resume it.
+		mCameraManager->unsubscribe(port, this);
+		// The port stays in mActivePorts: we still hold the camera.
+	} else if (flags & StopAll) {
 		mCameraManager->unsubscribe(port, this);
 		mCameraManager->release(port);
 		mActivePorts.remove(port);
 	}
+	// StopNone: only the DSP is deactivated; streaming and the camera are kept.
 
-	// The sensor finished stopping (deinit or not). Repaint the display so its
-	// last frame is cleared before the next sensor initializes.
+	// The sensor finished stopping. Repaint the display so its last frame is
+	// cleared before the next sensor initializes.
 	Q_EMIT sensorStopped();
 }
 
@@ -215,17 +249,97 @@ void VideoSensorManager::create(const QString &port, const QString &deviceClass)
 	createSensor(port, deviceClass);
 }
 
-void VideoSensorManager::stop()
+void VideoSensorManager::stop(int flags)
 {
 	QLOG_INFO() << "VideoSensorManager::stop: called, activePorts=" << mActivePorts.size()
 	            << "pendingActivations=" << mPendingActivations.size();
 	if (!checkManagerState("stop")) return;
 
-	mDspServer->deactivate();
-	QLOG_INFO() << "VideoSensorManager::stop: DSP deactivated";
+	// The DSP is single-channel: if the detached encoder is the active channel
+	// it must keep streaming, so skip the deactivation.
+	if (!mActiveDspPort.isEmpty() && mDetachedPorts.contains(mActiveDspPort)) {
+		QLOG_INFO() << "VideoSensorManager::stop: keeping detached channel" << mActiveDspPort << "active";
+	} else {
+		mDspServer->deactivate();
+		mActiveDspPort.clear();
+		QLOG_INFO() << "VideoSensorManager::stop: DSP deactivated";
+	}
 	mPendingActivations.clear();
-	mActivePorts.clear();
-	QLOG_INFO() << "VideoSensorManager::stop: active ports cleared";
+
+	if (flags & StopStream) {
+		// Drop the push subscription on every held camera but keep it acquired;
+		// the CameraManager parks the stream and pull subscribers can still use
+		// the device.
+		for (const auto &port : mActivePorts) {
+			if (mDetachedPorts.contains(port)) continue;
+			mCameraManager->unsubscribe(port, this);
+		}
+		QLOG_INFO() << "VideoSensorManager::stop: streamed off (cameras kept)";
+	} else if (flags & StopAll) {
+		for (auto it = mActivePorts.begin(); it != mActivePorts.end();) {
+			if (mDetachedPorts.contains(*it)) {
+				++it;
+				continue;
+			}
+			mCameraManager->unsubscribe(*it, this);
+			mCameraManager->release(*it);
+			it = mActivePorts.erase(it);
+		}
+		QLOG_INFO() << "VideoSensorManager::stop: active ports released";
+	}
+}
+
+void VideoSensorManager::releasePort(const QString &port)
+{
+	mDspServer->deactivate();
+	if (mActiveDspPort == port) {
+		mActiveDspPort.clear();
+	}
+	mPendingActivations.remove(port);
+	mDetachedPorts.remove(port);
+	// The caller force-closes the camera device (CameraManager::stop(port)),
+	// which drops the push subscription and resets the refcount; here we only
+	// stop being the DSP consumer and forget the port.
+	mActivePorts.remove(port);
+}
+
+void VideoSensorManager::setPortDetached(const QString &port, bool detached)
+{
+	if (detached) {
+		mDetachedPorts.insert(port);
+	} else {
+		mDetachedPorts.remove(port);
+	}
+}
+
+void VideoSensorManager::stopTranslation(const QString &port, bool keepCamera)
+{
+	mDetachedPorts.remove(port);
+
+	auto it = mJpegEncoders.find(port);
+	if (it == mJpegEncoders.end()) {
+		return;
+	}
+
+	it.value()->stop(keepCamera ? StopStream : StopAll);
+}
+
+void VideoSensorManager::clear()
+{
+	const auto eraseNonDetached = [this](auto &map) {
+		for (auto it = map.begin(); it != map.end();) {
+			if (mDetachedPorts.contains(it.key())) {
+				++it;
+			} else {
+				delete it.value();
+				it = map.erase(it);
+			}
+		}
+	};
+	eraseNonDetached(mLineSensors);
+	eraseNonDetached(mColorSensors);
+	eraseNonDetached(mObjectSensors);
+	eraseNonDetached(mJpegEncoders);
 }
 
 bool VideoSensorManager::isVideoSensor(const QString &deviceClass)
@@ -243,6 +357,14 @@ ColorSensorInterface *VideoSensorManager::colorSensor(const QString &port) {
 }
 ObjectSensorInterface *VideoSensorManager::objectSensor(const QString &port) {
 	auto it = mObjectSensors.find(port); return it == mObjectSensors.end() ? nullptr : *it;
+}
+
+JpegEncoderSensor *VideoSensorManager::jpegEncoderSensor(const QString &port)
+{
+	if (!checkManagerState("jpegEncoderSensor")) return nullptr;
+	createSensor(port, QStringLiteral("jpegEncoderSensor"));
+	auto it = mJpegEncoders.find(port);
+	return it == mJpegEncoders.end() ? nullptr : *it;
 }
 
 void VideoSensorManager::onResult(const QString &sourceId, trikDsp::Algorithm algorithm, trikDsp::OutArgs result)
@@ -264,6 +386,11 @@ void VideoSensorManager::onResult(const QString &sourceId, trikDsp::Algorithm al
 	case trikDsp::Algorithm::Mxn: {
 		auto it = mColorSensors.find(sourceId);
 		if (it != mColorSensors.end()) it.value()->onResult(result);
+		break;
+	}
+	case trikDsp::Algorithm::Jpeg: {
+		auto it = mJpegEncoders.find(sourceId);
+		if (it != mJpegEncoders.end()) it.value()->onResult(result);
 		break;
 	}
 	default: break;

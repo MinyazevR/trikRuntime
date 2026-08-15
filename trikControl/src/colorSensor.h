@@ -27,11 +27,11 @@ public:
 
 Q_SIGNALS:
 	void activateRequested(trikDsp::InArgs args, bool videoOut, bool canOpen);
-	void stopRequested(bool deinit);
+	void stopRequested(int flags);
 
 public Q_SLOTS:
 	void init(bool showOnDisplay) override;
-	void stop(bool deinit = true) override;
+	void stop(int flags = StopAll) override;
 
 private:
 	DspSensorHelper m;

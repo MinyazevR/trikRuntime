@@ -40,6 +40,7 @@ PUBLIC_HEADERS += \
 	$$PWD/include/trikControl/sensorInterface.h \
 	$$PWD/include/trikControl/soundSensorInterface.h \
 	$$PWD/include/trikControl/vectorSensorInterface.h \
+	$$PWD/include/trikControl/videoSensorStopFlags.h \
 	$$PWD/include/trikControl/gyroSensorInterface.h \
 	$$PWD/include/trikControl/markerInterface.h \
 	$$PWD/include/trikControl/i2cDeviceInterface.h \
@@ -114,7 +115,8 @@ HEADERS += \
 	$$PWD/src/lidarWorker.h \
 	$$PWD/src/irCamera.h \
 	$$PWD/src/irCameraWorker.h \
-	$$PWD/src/i2cCommunicatorInterface.h
+	$$PWD/src/i2cCommunicatorInterface.h \
+	$$PWD/src/jpegEncoderSensor.h
 
 SOURCES += \
 	$$PWD/src/abstractVirtualSensorWorker.cpp \
@@ -178,6 +180,7 @@ SOURCES += \
 	$$PWD/src/lidarWorker.cpp \
 	$$PWD/src/irCamera.cpp \
 	$$PWD/src/irCameraWorker.cpp \
+	$$PWD/src/jpegEncoderSensor.cpp \
 
 CONFIGS += \
 	$$PWD/configs

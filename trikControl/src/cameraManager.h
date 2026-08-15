@@ -134,12 +134,6 @@ public:
 	/// after this call, so it may be used from any thread.
 	QSharedPointer<QByteArray> grabLatestFrame(const QString &port) const;
 
-	/// Pause streaming on @p port without releasing the device.
-	void stopStreaming(const QString &port);
-
-	/// Resume streaming after stopStreaming().
-	void startStreaming(const QString &port);
-
 	/// Decrement the refcount of @p port. When it reaches zero the device is
 	/// stopped, closed, destroyed and every subscription is dropped.
 	void release(const QString &port);
@@ -152,6 +146,14 @@ public:
 	/// stops, even if a client leaked a release(). A subsequent acquire() opens
 	/// the device again from its static config.
 	void stop();
+
+	/// Forcibly tear down the camera on @p port only, regardless of its
+	/// refcount: the device is stopped, closed, destroyed and every subscription
+	/// and latched frame for that port is dropped. Blocks until done, so after
+	/// this call the device is guaranteed free (e.g. for another process to grab
+	/// it). The static per-port config is preserved, so a later acquire() reopens
+	/// it. Used by Brick::startTranslation() to kick any other client off a port.
+	void stop(const QString &port);
 
 	/// Return the currently held V4L2 buffer back to the driver (QBUF), so the
 	/// next frame can be captured. Called by the streaming consumer once per
@@ -177,6 +179,10 @@ public:
 	/// the port is unknown or its stored state is not `ready`.
 	QString deviceFile(const QString &port) const;
 
+	/// mjpg-streamer launcher script path recorded for @p port (empty if the
+	/// port is unknown or has no "mjpgStreamerScript" configured).
+	QString streamerScript(const QString &port) const;
+
 Q_SIGNALS:
 	/// Emitted after a new frame has been latched for @p port (see
 	/// subscribeLatest()). The buffer is available via grabLatestFrame().
@@ -192,6 +198,7 @@ private:
 	struct Entry {
 		trikHal::VideoDeviceFileInterface *dev = nullptr;
 		QString devFile;                 ///< Path to /dev/videoN.
+		QString mjpgStreamerScript;      ///< mjpg-streamer launcher script path.
 		uint32_t w = 0, h = 0, fmt = 0;  ///< Format from the config.
 		trikKernel::PixelFormat format = trikKernel::PixelFormat::Unknown;
 		uint32_t lineLength = 0;
@@ -225,6 +232,20 @@ private:
 	/// by each pull receiver's destroyed() handler (see subscribeLatest), so the
 	/// capture hot path never traverses the pull list.
 	void prunePullSubs(const QString &port);
+
+	/// Reconcile the V4L2 stream state of @p port with its current subscribers.
+	/// Runs in the manager's thread: the device streams iff at least one push or
+	/// pull subscriber wants frames. This is what "parks" the camera on a
+	/// video-sensor stop (push unsubscribe) and what lets a pull client
+	/// (getPhoto) transparently resume it without racing the DSP.
+	void updateStreaming(const QString &port);
+
+	/// Stop, close and destroy the open device of a single @p port, reset its
+	/// refcount/streaming flags and clear that port's subscriptions and latched
+	/// frame. Assumes the write lock is already held and the call is running in
+	/// the manager's thread. The static per-port config (devFile/w/h/fmt/ready)
+	/// is left intact so a later acquire() can re-open the device.
+	void tearDownPortLocked(const QString &port, Entry &entry);
 
 	/// Stop, close and destroy every open device, reset its refcount/streaming
 	/// flags and clear all subscriptions and latched frames. Assumes the write

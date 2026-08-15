@@ -1,5 +1,7 @@
 #include "lineSensor.h"
 
+#include <QsLog.h>
+
 #include <trikKernel/configurer.h>
 
 #include "configurerHelper.h"
@@ -48,10 +50,10 @@ QVector<int> LineSensor::read()
 	return mReading;
 }
 
-void LineSensor::stop(bool deinit)
+void LineSensor::stop(int flags)
 {
 	m.doStop();
-	Q_EMIT stopRequested(deinit);
+	Q_EMIT stopRequested(flags);
 	Q_EMIT stopped();
 }
 
@@ -65,10 +67,14 @@ void LineSensor::onResult(trikDsp::OutArgs result)
 {
 	bool hsvUpdated = false;
 
-	if (m.inArgs().autoDetect) {
+	if (result.autoDetect) {
+		// The DSP tagged this frame as the one-shot detect result. Consume it:
+		// clear the pending host flag and feed the detected range back to the
+		// DSP, widening it by the config toleranceFactor (as the old worker did
+		// before re-sending). A plain local flag can't be used here: frames that
+		// were already in flight before detect() reached the DSP would race with
+		// the real detect frame.
 		m.inArgs().autoDetect = false;
-		// Feed the detected range back to the DSP, widening it by the config
-		// toleranceFactor (as the old worker did before re-sending).
 		m.inArgs().params = result.detected;
 		applyToleranceFactor(m.inArgs().params, mToleranceFactor);
 		hsvUpdated = true;
@@ -87,6 +93,12 @@ void LineSensor::onResult(trikDsp::OutArgs result)
 			QWriteLocker locker(&mDetectParametersLock);
 			mDetectParameters = toDetectParameters(result.detected);
 		}
+		QLOG_DEBUG() << "LineSensor::onResult: re-activating with params hue["
+		             << m.inArgs().params.hue.from << "," << m.inArgs().params.hue.to
+		             << "] sat[" << m.inArgs().params.saturation.from << ","
+		             << m.inArgs().params.saturation.to << "] val["
+		             << m.inArgs().params.value.from << ","
+		             << m.inArgs().params.value.to << "]";
 		Q_EMIT activateRequested(m.inArgs(), m.videoOut(), false);
 	}
 }

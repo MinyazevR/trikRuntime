@@ -38,6 +38,7 @@ enum trik_cmd algoToDspCmd(enum trik_cv_algorithm algo)
 	case TRIK_CV_ALGORITHM_LINE_SENSOR:     return TRIK_CMD_LINE_SENSOR;
 	case TRIK_CV_ALGORITHM_OBJECT_SENSOR:   return TRIK_CMD_OBJECT_SENSOR;
 	case TRIK_CV_ALGORITHM_MXN_SENSOR:      return TRIK_CMD_MXN_SENSOR;
+	case TRIK_CV_ALGORITHM_JPEG_ENCODER:    return TRIK_CMD_JPEG_ENCODER;
 	default:                                 return TRIK_CMD_NOP;
 	}
 }
@@ -296,6 +297,14 @@ bool DspServer::Impl::step(const InArgs &in, OutArgs &out)
 
 	out = fromDspOutArgs(reinterpret_cast<struct trik_res_step_msg *>(res)->out_args);
 
+	if (in.autoDetect) {
+		QLOG_DEBUG() << "DspServer::step: autoDetect result hue[" << out.detected.hue.from
+		             << "," << out.detected.hue.to << "] sat["
+		             << out.detected.saturation.from << ","
+		             << out.detected.saturation.to << "] val["
+		             << out.detected.value.from << "," << out.detected.value.to << "]";
+	}
+
 	freeMessage(res);
 	return true;
 }
@@ -313,6 +322,15 @@ bool DspServer::Impl::processFrame(const DspChannel &channel,
 	}
 
 	const bool ok = step(channel.inArgs, out);
+
+	if (ok && dspAlgo == TRIK_CV_ALGORITHM_JPEG_ENCODER) {
+		// Capture the encoded JPEG synchronously on the DSP thread, before the
+		// next frame overwrites the shared output buffer. The copy travels with
+		// resultReady() so a consumer in another thread never reads a stale
+		// zero-copy view.
+		out.jpegData = QByteArray(static_cast<const char *>(mDspOut.start),
+		                          static_cast<int>(out.jpegSize));
+	}
 
 	if (channel.videoOut) {
 		videoFrame->data = static_cast<const uint8_t *>(mDspOut.start);

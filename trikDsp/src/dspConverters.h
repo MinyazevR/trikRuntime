@@ -20,6 +20,7 @@ inline Algorithm fromDspAlgo(enum trik_cv_algorithm a)
 	case TRIK_CV_ALGORITHM_LINE_SENSOR:       return Algorithm::Line;
 	case TRIK_CV_ALGORITHM_OBJECT_SENSOR:     return Algorithm::Object;
 	case TRIK_CV_ALGORITHM_MXN_SENSOR:        return Algorithm::Mxn;
+	case TRIK_CV_ALGORITHM_JPEG_ENCODER:      return Algorithm::Jpeg;
 	default:                                  return Algorithm::None;
 	}
 }
@@ -32,6 +33,7 @@ inline enum trik_cv_algorithm toDspAlgo(Algorithm a)
 	case Algorithm::Line:     return TRIK_CV_ALGORITHM_LINE_SENSOR;
 	case Algorithm::Object:   return TRIK_CV_ALGORITHM_OBJECT_SENSOR;
 	case Algorithm::Mxn:      return TRIK_CV_ALGORITHM_MXN_SENSOR;
+	case Algorithm::Jpeg:     return TRIK_CV_ALGORITHM_JPEG_ENCODER;
 	default:                  return TRIK_CV_ALGORITHM_NONE;
 	}
 }
@@ -59,6 +61,8 @@ inline InArgs fromDspInArgs(const struct trik_cv_algorithm_in_args &src)
 	dst.params.value.to = src.detect_val_to;
 	dst.m = src.extra_inArgs.mxnParams.m_m;
 	dst.n = src.extra_inArgs.mxnParams.m_n;
+	dst.jpegQuality = src.jpeg_image_quality;
+	dst.ifBlackAndWhite = src.if_black_and_white;
 	return dst;
 }
 
@@ -74,6 +78,8 @@ inline struct trik_cv_algorithm_in_args toDspInArgs(const InArgs &src)
 	dst.detect_val_to = src.params.value.to;
 	dst.extra_inArgs.mxnParams.m_m = src.m;
 	dst.extra_inArgs.mxnParams.m_n = src.n;
+	dst.jpeg_image_quality = src.jpegQuality;
+	dst.if_black_and_white = src.ifBlackAndWhite;
 	return dst;
 }
 
@@ -91,6 +97,7 @@ inline OutArgs fromDspOutArgs(const struct trik_cv_algorithm_out_args &src)
 	dst.detected.value.to = src.detect_val_to;
 	for (int i = 0; i < 9; ++i)
 		dst.colors[i] = src.targets[0].out_target.targetColors.m_colors[i];
+	dst.jpegSize = src.jpeg_size;
 	return dst;
 }
 

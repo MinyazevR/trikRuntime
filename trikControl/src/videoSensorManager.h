@@ -16,8 +16,11 @@
 #include "lineSensor.h"
 #include "objectSensor.h"
 #include "colorSensor.h"
+#include "jpegEncoderSensor.h"
 #include "deviceState.h"
 #include "cameraManager.h"
+
+#include <trikControl/videoSensorStopFlags.h>
 
 namespace trikHal {
 class HardwareAbstractionInterface;
@@ -37,9 +40,9 @@ namespace trikControl {
 ///
 /// ## Algorithm switching
 ///
-/// stop(deinit=false): disconnect DSP signals, camera stays streaming.
-/// Next init() skips open and reconnects — near-instant.
-/// stop(deinit=true): disconnect + release camera via CameraManager.
+/// stop(StopNone): deactivate the DSP, camera keeps streaming.
+/// stop(StopStream): deactivate + streamoff the camera, but keep it acquired.
+/// stop(StopAll): deactivate + unsubscribe + release the camera (default).
 ///
 /// ## Threading
 ///
@@ -59,8 +62,29 @@ public:
 	ObjectSensorInterface *objectSensor(const QString &port);
 	ColorSensorInterface *colorSensor(const QString &port);
 
-	void stop();
+	/// Internal (non-Brick) JPEG encoder sensor. Creates it on first use.
+	/// The caller drives it through init(jpegQuality, ifBlackAndWhite, ...).
+	JpegEncoderSensor *jpegEncoderSensor(const QString &port);
+
+	void stop(int flags = StopAll);
+	void clear();
 	void create(const QString &port, const QString &deviceClass);
+
+	/// Forcibly release our hold on @p port: deactivate the DSP and forget the
+	/// port (drop it from the active/pending bookkeeping) so a subsequent
+	/// CameraManager::stop(port) — the caller's job — can close the device
+	/// regardless of refcount. Used by Brick::startTranslation().
+	void releasePort(const QString &port);
+
+	/// Mark @p port as detached: its sensor/encoder and camera are kept alive
+	/// across stop()/clear() until explicitly stopped via stopTranslation().
+	void setPortDetached(const QString &port, bool detached);
+
+	/// Stop the JPEG encoder translation on @p port (if any) and clear its
+	/// detached flag. If @p keepCamera is true the camera is only streamed off
+	/// (kept acquired) so a subsequent sensor init switches the DSP algorithm
+	/// without reopening the device; otherwise the camera is released too.
+	void stopTranslation(const QString &port, bool keepCamera);
 
 	static bool isVideoSensor(const QString &deviceClass);
 
@@ -84,7 +108,11 @@ private:
 	                     trikDsp::InArgs args, bool videoOut, bool canOpen);
 	void activateDsp(const QString &port, trikDsp::Algorithm algo,
 	                 trikDsp::InArgs args, bool videoOut);
-	void handleStopRequested(const QString &port, bool deinit);
+	/// (Re)subscribe as the camera's streaming (push) consumer. Idempotent: a
+	/// StopStream may have dropped the subscription, so re-initing a parked
+	/// sensor must re-subscribe before (re)activating the DSP.
+	void subscribeFrames(const QString &port);
+	void handleStopRequested(const QString &port, int flags);
 	void createSensor(const QString &port, const QString &deviceClass);
 	bool checkManagerState(const QString &message) const;
 	void destroyDsp();
@@ -107,6 +135,12 @@ private:
 		bool videoOut;
 	};
 
+	/// Ports whose translation/sensor is detached and must survive stop()/clear().
+	QSet<QString> mDetachedPorts;
+
+	/// Port currently driving the single DSP channel (empty when inactive).
+	QString mActiveDspPort;
+
 	/// Active camera ports (acquired via CameraManager).
 	QSet<QString> mActivePorts;
 
@@ -119,6 +153,7 @@ private:
 	QHash<QString, LineSensor*> mLineSensors;
 	QHash<QString, ColorSensor*> mColorSensors;
 	QHash<QString, ObjectSensor*> mObjectSensors;
+	QHash<QString, JpegEncoderSensor*> mJpegEncoders;
 
 	QElapsedTimer mCameraFpsTimer;
 	int mCameraFrameCount = 0;

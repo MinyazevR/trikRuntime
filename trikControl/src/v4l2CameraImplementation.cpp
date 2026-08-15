@@ -19,14 +19,14 @@
 
 #include <QtCore/QEventLoop>
 #include <QtCore/QSharedPointer>
+#include <QtCore/QTimer>
 #include <QtGui/QImage>
 #include <QsLog.h>
 #include <linux/videodev2.h>
 
 using namespace trikControl;
 
-V4l2CameraImplementation::V4l2CameraImplementation(const QString &port,
-                                                   CameraManager &cameraManager)
+V4l2CameraImplementation::V4l2CameraImplementation(const QString &port, CameraManager &cameraManager)
 	: mPort(port)
 	, mCameraManager(cameraManager)
 {
@@ -54,6 +54,10 @@ QVector<uint8_t> V4l2CameraImplementation::getPhoto()
 	if (!acquired)
 		return {};
 
+	// subscribeLatest() below makes the CameraManager (re)start the stream for
+	// us if a video sensor had parked it (StopStream), so no explicit
+	// startStreaming() is needed here.
+
 	// The device is not touched here — only the port's static format from the
 	// CameraManager is used to decode the frame.
 	const uint32_t fourcc = mCameraManager.fourcc(mPort);
@@ -64,7 +68,18 @@ QVector<uint8_t> V4l2CameraImplementation::getPhoto()
 	// CameraManager latches every frame into a private copy and notifies via
 	// latestFrameReady(); the latched buffer is ref-counted, so the raw V4L2
 	// mmap buffer is never held by this thread.
+	//
+	// A watchdog bounds the wait. Our acquire() keeps the refcount >= 1, so a
+	// polite StopAll/release() cannot close the device underneath us — but
+	// Brick::stop() -> CameraManager::stop() (tearDownLocked) force-closes it
+	// regardless of refcount, and a stuck camera also never latches a frame. In
+	// both cases latestFrameReady() never fires and, without the timeout, this
+	// loop would block forever.
 	QEventLoop loop;
+	QTimer watchdog;
+	watchdog.setInterval(5000);
+	watchdog.setSingleShot(true);
+	QObject::connect(&watchdog, &QTimer::timeout, &loop, &QEventLoop::quit);
 
 	const QMetaObject::Connection conn = QObject::connect(&mCameraManager,
 		&CameraManager::latestFrameReady, &loop,
@@ -76,6 +91,7 @@ QVector<uint8_t> V4l2CameraImplementation::getPhoto()
 	mCameraManager.subscribeLatest(mPort, &loop);
 	loop.exec();
 
+	watchdog.stop();
 	QObject::disconnect(conn);
 	const QSharedPointer<QByteArray> frame = mCameraManager.grabLatestFrame(mPort);
 	mCameraManager.unsubscribeLatest(mPort, &loop);

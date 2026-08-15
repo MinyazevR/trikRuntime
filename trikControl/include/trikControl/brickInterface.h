@@ -15,6 +15,7 @@
 #pragma once
 
 #include <QtCore/QStringList>
+#include <QtCore/QVariantMap>
 
 #include "batteryInterface.h"
 #include "colorSensorInterface.h"
@@ -82,6 +83,28 @@ public Q_SLOTS:
 
 	/// Stops all motors and shuts down all current activity.
 	virtual void stop() = 0;
+
+	/// Starts video translation (streaming) of the camera on @p port.
+	///
+	/// Kicks every other client off the port first: the video sensor (if any)
+	/// is stopped. For an ov7670 camera port (video1/video2) the DSP JPEG
+	/// encoder is scheduled and mjpg-streamer is fed through its FIFO; for a
+	/// usb-camera port the device is released so mjpg-streamer can open it
+	/// directly over UVC.
+	///
+	/// @param port  camera port (video1/video2 or usb-camera).
+	/// @param params  optional named parameters:
+	///   - "jpeg-qual"   (int)  JPEG quality 1..100 (ov7670 ports only, default 40)
+	///   - "white-black" (bool) grayscale JPEG (ov7670 ports only, default false)
+	///   - "detached"    (bool) keep the stream alive after stop()/script end (default false)
+	virtual void startTranslation(const QString &port, const QVariantMap &params = QVariantMap()) = 0;
+
+	/// Stops a video translation previously started on @p port, regardless of
+	/// whether it was started with "detached". Symmetric to startTranslation():
+	/// runs the streamer stop script and stops the DSP JPEG encoder (video
+	/// ports) so the port can be reused. No-op if there is no translation on
+	/// @p port.
+	virtual void stopTranslation(const QString &port) = 0;
 
 	/// Returns reference to motor of a given type on a given port
 	virtual trikControl::MotorInterface *motor(const QString &port) = 0;

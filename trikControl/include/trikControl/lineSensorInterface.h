@@ -21,6 +21,7 @@
 #include "deviceInterface.h"
 
 #include <trikControl/trikControlDeclSpec.h>
+#include <trikControl/videoSensorStopFlags.h>
 
 namespace trikControl {
 
@@ -43,8 +44,9 @@ public Q_SLOTS:
 	virtual void detect() = 0;
 
 	/// Stops detection until init() will be called again.
-	/// @param deinit - if true (default), removes camera from daemon. If false, only disables sensor.
-	virtual void stop(bool deinit = true) = 0;
+	/// @param flags - how far to tear the camera down (StopAll by default), OR-ed
+	///                from VideoSensorStopFlag.
+	virtual void stop(int flags = StopAll) = 0;
 
 public:
 	/// Returns current raw x coordinate of detected object. Sensor returns 0 if detect() was not called.

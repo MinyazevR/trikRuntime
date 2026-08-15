@@ -22,8 +22,8 @@
 #include <trikKernel/configurer.h>
 #include "configurerHelper.h"
 #include <QEventLoop>
+#include <QObject>
 #include <QThread>
-#include <functional>
 
 namespace trikControl {
 
@@ -58,26 +58,42 @@ CameraDevice::CameraDevice(const QString & port, const QString & mediaPath,
 	}
 }
 
+CameraDevice::~CameraDevice()
+{
+	if (mCameraThread) {
+		mCameraThread->quit();
+		mCameraThread->wait();
+	}
+	mCameraWorker.reset();
+	mCameraThread.reset();
+}
+
 QVector<uint8_t> CameraDevice::getPhoto() {
 	if (!mCameraImpl) return {};
 	QMutexLocker lock(&mCameraMutex);
 
+	// The capture (blocking V4L2 read + YUV->RGB + JPEG encode, or the async
+	// QCamera flow) runs on a persistent worker thread so the caller's event
+	// loop stays responsive and no thread is spawned per photo.
+	if (!mCameraThread) {
+		mCameraThread.reset(new QThread);
+		mCameraThread->setObjectName("CameraDevice::getPhoto");
+		mCameraWorker.reset(new QObject);
+		mCameraWorker->setObjectName("CameraDevice::getPhotoWorker");
+		mCameraWorker->moveToThread(mCameraThread.data());
+		mCameraThread->start();
+	}
+
 	QVector<uint8_t> photo;
-	std::function<void()> runFunc = [this, &photo]{ mCameraImpl->getPhoto().swap(photo); };
-#if QT_VERSION_MAJOR>=5 && QT_VERSION_MINOR>=10
-	QScopedPointer<QThread> t(QThread::create(std::move(runFunc)));
-#else
-	struct CameraThread: public QThread {
-		explicit CameraThread(std::function<void()> &&f): mF(f) {}
-		void run() override { mF(); }
-		std::function<void()> mF;
-	};
-	QScopedPointer<QThread> t(new CameraThread(std::move(runFunc)));
-#endif
 	QEventLoop l;
-	QObject::connect(t.data(), &QThread::finished, &l, &QEventLoop::quit);
-	t->setObjectName("CameraDevice::getPhoto");
-	t->start();
+
+	// Queue the capture on the worker thread. loop.exit() is thread-safe and
+	// synchronizes the write to `photo` with the caller's exec() return.
+	QMetaObject::invokeMethod(mCameraWorker.data(), [this, &photo, &l]() {
+		mCameraImpl->getPhoto().swap(photo);
+		l.exit(0);
+	}, Qt::QueuedConnection);
+
 	l.exec();
 	return photo;
 }

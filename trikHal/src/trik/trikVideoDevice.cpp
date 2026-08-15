@@ -24,9 +24,9 @@ using namespace trikHal::trik;
 
 TrikVideoDevice::TrikVideoDevice(const QString &devicePath,
                                  uint32_t width, uint32_t height, uint32_t fourcc,
-                                 uint32_t bufferCount, bool needPalStandard)
+                                 uint32_t bufferCount, bool isWebcam)
 	: trikHal::VideoDeviceFileBase(devicePath, width, height, fourcc,
-	                               bufferCount, needPalStandard)
+	                               bufferCount, isWebcam)
 {
 }
 

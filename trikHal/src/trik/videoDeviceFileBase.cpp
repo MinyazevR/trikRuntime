@@ -31,7 +31,7 @@ VideoDeviceFileBase::VideoDeviceFileBase(const QString &devicePath,
                                          uint32_t width, uint32_t height,
                                          uint32_t preferredFourcc,
                                          uint32_t bufferCount,
-                                         bool needPalStandard,
+                                         bool isWebcam,
                                          QObject *parent)
 	: VideoDeviceFileInterface(parent)
 	, mPath(devicePath)
@@ -39,7 +39,7 @@ VideoDeviceFileBase::VideoDeviceFileBase(const QString &devicePath,
 	, mHeight(height)
 	, mRequestedFourcc(preferredFourcc)
 	, mBufferCount(bufferCount)
-	, mNeedPalStandard(needPalStandard)
+	, mIsWebcam(isWebcam)
 {
 }
 
@@ -76,15 +76,16 @@ bool VideoDeviceFileBase::open()
 		QLOG_WARN() << "VideoDeviceFileBase: QUERYCAP failed:" << strerror(errno);
 	}
 
-	if (!negotiateFormat() || !setFormat() || !allocateBuffers()) {
+	if (!setFormat() || !allocateBuffers()) {
 		close();
 		return false;
 	}
 
-	// The analog ov7670 cameras (needPalStandard) are initialized over I2C by the
-	// CameraManager; every other device (the USB webcam) gets its default V4L2
-	// controls applied here, on the very first open, before streaming starts.
-	if (!mNeedPalStandard) {
+	// The analog ov7670 cameras (ports named "video*") are initialized over I2C
+	// by the kernel driver's reinit node; every other device (the USB webcam)
+	// gets its default V4L2 controls applied here, on the very first open,
+	// before streaming starts.
+	if (mIsWebcam) {
 		applyWebcamDefaults();
 	}
 
@@ -94,12 +95,22 @@ bool VideoDeviceFileBase::open()
 
 void VideoDeviceFileBase::applyWebcamDefaults()
 {
-	// 50 Hz anti-flicker, then fix the white balance and gain, and leave the
-	// camera in manual exposure (the exposure_auto=1 step of fix_webcam()).
+	// 50 Hz anti-flicker, then fix the white balance and gain. Exposure is left
+	// on auto for now; it is locked to manual by fixWebcamExposure() only after
+	// the camera has streamed and the auto-exposure has had time to stabilize.
 	setControl(V4L2_CID_POWER_LINE_FREQUENCY, V4L2_CID_POWER_LINE_FREQUENCY_50HZ);
 	setControl(V4L2_CID_AUTO_WHITE_BALANCE, 0);
 	setControl(V4L2_CID_WHITE_BALANCE_TEMPERATURE, 4000);
 	setControl(V4L2_CID_GAIN, 0);
+}
+
+void VideoDeviceFileBase::fixWebcamExposure()
+{
+	// Mirrors the fix_webcam() step of the old init script: wait for the
+	// auto-exposure to stabilize while the camera is streaming, then lock it
+	// (exposure_auto=1 => V4L2_EXPOSURE_MANUAL) so the brightness no longer
+	// drifts with the scene.
+	usleep(1000000);
 	setControl(V4L2_CID_EXPOSURE_AUTO, V4L2_EXPOSURE_MANUAL);
 }
 
@@ -140,22 +151,8 @@ void VideoDeviceFileBase::close()
 }
 
 // ---------------------------------------------------------------------------
-// negotiateFormat / setFormat / onFrameReady
+// setFormat / onFrameReady
 // ---------------------------------------------------------------------------
-
-bool VideoDeviceFileBase::negotiateFormat()
-{
-	mActualFourcc = mRequestedFourcc;
-
-	if (mNeedPalStandard) {
-		v4l2_std_id stdid = V4L2_STD_625_50;
-		if (ioctl(mFd, VIDIOC_S_STD, &stdid) < 0) {
-			QLOG_INFO() << "VideoDeviceFileBase: VIDIOC_S_STD(PAL) failed for" << mPath
-			            << strerror(errno);
-		}
-	}
-	return true;
-}
 
 bool VideoDeviceFileBase::setFormat()
 {
@@ -165,6 +162,10 @@ bool VideoDeviceFileBase::setFormat()
 	fmt.fmt.pix.height = mHeight;
 	fmt.fmt.pix.pixelformat = mActualFourcc ? mActualFourcc : mRequestedFourcc;
 	fmt.fmt.pix.field = V4L2_FIELD_NONE;
+
+	QLOG_INFO() << "VideoDeviceFileBase:" << mPath << "requesting format" << Qt::hex
+	            << fmt.fmt.pix.pixelformat << Qt::dec << fmt.fmt.pix.width << 'x'
+	            << fmt.fmt.pix.height;
 
 	if (ioctl(mFd, VIDIOC_TRY_FMT, &fmt) < 0) {
 		QLOG_WARN() << "VideoDeviceFileBase: TRY_FMT failed:" << strerror(errno);
@@ -180,8 +181,9 @@ bool VideoDeviceFileBase::setFormat()
 	mHeight = fmt.fmt.pix.height;
 	mLineLen = fmt.fmt.pix.bytesperline;
 
-	QLOG_INFO() << "VideoDeviceFileBase: format" << Qt::hex << mActualFourcc
-	            << Qt::dec << mWidth << 'x' << mHeight;
+	QLOG_INFO() << "VideoDeviceFileBase:" << mPath << "negotiated format" << Qt::hex
+	            << mActualFourcc << Qt::dec << mWidth << 'x' << mHeight
+	            << "bytesperline" << mLineLen << "sizeimage" << fmt.fmt.pix.sizeimage;
 	return true;
 }
 
@@ -346,6 +348,12 @@ bool VideoDeviceFileBase::startStreaming()
 	mNotifier.reset(new QSocketNotifier(mFd, QSocketNotifier::Read, this));
 	connect(mNotifier.data(), &QSocketNotifier::activated,
 	        this, &VideoDeviceFileBase::onActivated);
+
+	// The camera is now streaming with auto-exposure. Let it stabilize for a
+	// second and then lock the exposure, so the first frames delivered to the
+	// consumer are properly exposed rather than underexposed.
+	if (mIsWebcam)
+		fixWebcamExposure();
 
 	return true;
 }
