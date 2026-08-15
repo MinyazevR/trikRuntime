@@ -8,7 +8,8 @@
 	branch = main
 [submodule "trikDsp/trik-media-sensors"]
 	path = trikDsp/trik-media-sensors
-	url = https://github.com/trikset/trik-media-sensors.git
+	url = https://github.com/MinyazevR/trik-media-sensors.git
+	branch = MinyazevR-add-jpeg-encoder
 [submodule "qslog/qslog"]
 	path = qslog/qslog
 	url = https://github.com/trikset/trik-qslog
