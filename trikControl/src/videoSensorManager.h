@@ -118,9 +118,10 @@ public:
 	static bool isVideoSensor(const QString &deviceClass);
 
 Q_SIGNALS:
-	/// Emitted whenever any video sensor finishes stopping (both deinit and
-	/// plain stop). Used to repaint the display so a sensor's last frame is
-	/// cleared before the next sensor initializes.
+	/// Emitted when a video sensor stops in a way that tears the camera down
+	/// (StopStream or StopAll), so a stale frame may be left on the framebuffer.
+	/// The GUI repaints on this signal. A pure algorithm switch (StopNone)
+	/// keeps the camera running and does not emit it.
 	void sensorStopped();
 
 private Q_SLOTS:

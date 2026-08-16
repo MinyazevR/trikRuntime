@@ -252,9 +252,13 @@ void VideoSensorManager::handleStopRequested(const QString &port, int flags)
 	}
 	// StopNone: only the DSP is deactivated; streaming and the camera are kept.
 
-	// The sensor finished stopping. Repaint the display so its last frame is
-	// cleared before the next sensor initializes.
-	Q_EMIT sensorStopped();
+	// Repaint the display only when the camera was actually stopped or streamed
+	// off, i.e. when the framebuffer may hold a stale frame. A pure algorithm
+	// switch (StopNone) keeps the camera running and just replaces the DSP
+	// channel, so there is nothing to clear.
+	if (flags & (StopStream | StopAll)) {
+		Q_EMIT sensorStopped();
+	}
 }
 
 void VideoSensorManager::create(const QString &port, const QString &deviceClass)
