@@ -56,6 +56,8 @@ class CameraDeviceInterface;
 class I2cCommunicator;
 class Lidar;
 class IrCameraInterface;
+class VideoSensorManager;
+class CameraManager;
 
 /// Class representing TRIK controller board and devices installed on it, also provides access
 /// to peripherals like motors and sensors.
@@ -98,6 +100,10 @@ public Q_SLOTS:
 
 	void stop() override;
 
+	void startVideoTranslation(const QString &port, const QVariant &params = QVariant()) override;
+
+	void stopVideoTranslation(const QString &port) override;
+
 	MotorInterface *motor(const QString &port) override;
 
 	PwmCaptureInterface *pwmCapture(const QString &port) override;
@@ -128,7 +134,7 @@ public Q_SLOTS:
 
 	I2cDeviceInterface *smBusI2c(int bus, int address) override;
 
-	QVector<uint8_t> getStillImage() override;
+	QVector<uint8_t> getStillImage(const QString &port) override;
 
 	SoundSensorInterface *soundSensor(const QString &port) override;
 
@@ -160,6 +166,11 @@ private:
 			, const QString &modelConfig
 			, const QString &mediaPath);
 
+	/// Stops the translation on @p port. If @p keepCamera is true the camera is
+	/// only streamed off (kept acquired) so a subsequent sensor init can switch
+	/// the DSP algorithm without a slow camera reopen; otherwise it is released.
+	void stopVideoTranslationInternal(const QString &port, bool keepCamera);
+
 	/// Deinitializes and properly shuts down device on a given port.
 	void shutdownDevice(const QString &port);
 
@@ -184,9 +195,10 @@ private:
 	QScopedPointer<Led> mLed;
 	QScopedPointer<Gamepad> mGamepad;
 	QScopedPointer<TonePlayer> mTonePlayer;
-	QScopedPointer<CameraDeviceInterface> mCamera;
+	QHash<QString, CameraDeviceInterface *> mCameras;  // Has ownership, keyed by port.
 	QScopedPointer<IrCameraInterface> mIrCamera;
-
+	QScopedPointer<VideoSensorManager> mVideoSensorManager;
+	QScopedPointer<CameraManager> mCameraManager;
 	QHash<QString, ServoMotor *> mServoMotors;  // Has ownership.
 	QHash<QString, PwmCapture *> mPwmCaptures;  // Has ownership.
 	QHash<QString, PowerMotor *> mPowerMotors;  // Has ownership.
@@ -194,9 +206,6 @@ private:
 	QHash<QString, Encoder *> mEncoders;  // Has ownership.
 	QHash<QString, DigitalSensor *> mDigitalSensors;  // Has ownership.
 	QHash<QString, RangeSensor *> mRangeSensors;  // Has ownership.
-	QHash<QString, LineSensor *> mLineSensors;  // Has ownership.
-	QHash<QString, ColorSensor *> mColorSensors;  // Has ownership.
-	QHash<QString, ObjectSensor *> mObjectSensors;  // Has ownership.
 	QHash<QString, SoundSensor *> mSoundSensors;  // Has ownership.
 	QHash<QString, Lidar *> mLidars;  // Has ownership.
 	QHash<QString, Fifo *> mFifos;  // Has ownership.
@@ -206,6 +215,16 @@ private:
 	QString mPlayWavFileCommand;
 	QString mPlayMp3FileCommand;
 	QString mMediaPath;
+
+	/// State of an active translation.
+	struct Translation {
+		QString streamerScript;
+		bool detached = false;
+		bool isUsb = false;
+	};
+
+	/// Active translations keyed by port.
+	QHash<QString, Translation> mTranslations;
 
 	trikKernel::Configurer mConfigurer;
 };

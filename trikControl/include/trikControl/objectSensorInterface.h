@@ -20,6 +20,7 @@
 #include "deviceInterface.h"
 
 #include <trikControl/trikControlDeclSpec.h>
+#include <trikControl/videoSensorStopFlags.h>
 
 namespace trikControl {
 
@@ -46,7 +47,9 @@ public Q_SLOTS:
 	virtual QVector<int> read() = 0;
 
 	/// Stops detection until init() will be called again.
-	virtual void stop() = 0;
+	/// @param flags - how far to tear the camera down (StopAll by default), OR-ed
+	///                from VideoSensorStopFlag.
+	virtual void stop(int flags = trikControl::StopAll) = 0;
 
 	/// Get values returned by last "detect" operation. Returned vector has 6 components - hue, saturation and value
 	/// of a dominant color (got by "detect") and hue, saturation and value tolerance factors.

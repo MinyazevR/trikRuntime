@@ -36,6 +36,12 @@ public:
 	/// Returns true if device is in "ready" state.
 	bool isReady() const;
 
+	/// Returns true if device is in "starting" state.
+	bool isStarting() const;
+
+	/// Returns true if device is in "stopped" state.
+	bool isStopped() const;
+
 	/// Returns true if device is in "failure" state.
 	bool isFailed() const;
 
