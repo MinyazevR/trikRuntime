@@ -16,7 +16,16 @@
 
 #include <QtCore/QString>
 #include <QtCore/QVector>
+#include <QtGlobal>
+#include <cstdint>
+
+#ifdef Q_OS_LINUX
 #include <linux/videodev2.h>
+#else
+// V4L2 FourCC codes (v4l2_fourcc) hardcoded so this header stays portable.
+static constexpr uint32_t V4L2_PIX_FMT_NV16 = 0x3631564E; // 'N', 'V', '1', '6'
+static constexpr uint32_t V4L2_PIX_FMT_YUYV = 0x56595559; // 'Y', 'U', 'Y', 'V'
+#endif
 
 namespace trikKernel {
 

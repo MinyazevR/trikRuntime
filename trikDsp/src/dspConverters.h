@@ -14,7 +14,6 @@
 
 #pragma once
 
-#include <linux/videodev2.h>
 #include <trik/sensors/cv_algorithm.h>
 #include <trik/sensors/cv_algorithm_args.h>
 #include <trik/sensors/video_format.h>

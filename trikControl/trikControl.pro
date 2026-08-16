@@ -106,7 +106,6 @@ HEADERS += \
 	$$PWD/src/shapes/shape.h \
 	$$PWD/src/gyroSensor.h \
 	$$PWD/src/qtCameraImplementation.h \
-	$$PWD/src/v4l2CameraImplementation.h \
 	$$PWD/src/imitationCameraImplementation.h \
 	$$PWD/src/i2cDevice.h \
 	$$PWD/src/fifoworker.h \
@@ -167,7 +166,6 @@ SOURCES += \
 	$$PWD/src/videoSensorManager.cpp \
 	$$PWD/src/cameraManager.cpp \
 	$$PWD/src/qtCameraImplementation.cpp \
-	$$PWD/src/v4l2CameraImplementation.cpp \
 	$$PWD/src/imitationCameraImplementation.cpp \
 	$$PWD/src/cameraDeviceInterface.cpp \
 	$$PWD/src/i2cDevice.cpp \
@@ -191,6 +189,11 @@ OTHER_FILES += \
 
 
 DEFINES += TRIKCONTROL_LIBRARY
+
+!win32:!macx {
+	HEADERS += $$PWD/src/v4l2CameraImplementation.h
+	SOURCES += $$PWD/src/v4l2CameraImplementation.cpp
+}
 
 QT += xml gui multimedia serialport quick
 

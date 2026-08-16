@@ -201,6 +201,12 @@ private:
 	/// videoOut=false / source=nullptr when inactive.
 	DspChannel mActive;
 
+	/// DSP shared input buffer (mmap'd /dev/mem).
+	/// data.start -> usable data pointer (page-offset into mmap region).
+	/// data.length -> BUFFER_SIZE.
+	struct buffer mDspIn = {};
+
+#ifndef TRIK_DSP_STUB
 	/// Last registered algorithm.  Used to avoid re-registration in processFrame.
 	enum trik_cv_algorithm mCurrentAlgo = TRIK_CV_ALGORITHM_NONE;
 
@@ -210,11 +216,6 @@ private:
 	/// TI IPC slave queue handle (opened by MessageQ_open).
 	/// Initialised to MessageQ_INVALIDMESSAGEQ (0xffff).
 	unsigned mSlaveQue = 0xffff;
-
-	/// DSP shared input buffer (mmap'd /dev/mem).
-	/// data.start -> usable data pointer (page-offset into mmap region).
-	/// data.length -> BUFFER_SIZE.
-	struct buffer mDspIn = {};
 
 	/// DSP shared output buffer (mmap'd /dev/mem).
 	struct buffer mDspOut = {};
@@ -226,6 +227,7 @@ private:
 	/// mmap base address for mDspOut (page-aligned, for munmap).
 	void *mMmapOut = nullptr;
 	size_t mMmapOutLen = 0;
+#endif
 };
 
 }

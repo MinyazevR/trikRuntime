@@ -50,6 +50,7 @@ HEADERS += \
 	SOURCES += $$PWD/src/dspServer.cpp
 	SOURCES += $$PWD/src/dspServerImpl.cpp
 } else {
+	DEFINES += TRIK_DSP_STUB
 	SOURCES += $$PWD/src/stubs/dspServerStub.cpp
 	SOURCES += $$PWD/src/stubs/dspServerStubImpl.cpp
 }
@@ -58,7 +59,7 @@ QMAKE_CXXFLAGS += \
 	-Wno-error=redundant-decls \
 	-Wno-error=missing-field-initializers
 
-links(trikHal)
+links(trikRuntimeQsLog trikHal)
 interfaceIncludes(trikHal trikKernel)
 
 installs()
