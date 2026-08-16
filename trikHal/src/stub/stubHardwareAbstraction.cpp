@@ -38,8 +38,7 @@ StubHardwareAbstraction::StubHardwareAbstraction()
 }
 
 StubHardwareAbstraction::~StubHardwareAbstraction()
-{
-}
+= default;
 
 MspI2cInterface &StubHardwareAbstraction::mspI2c()
 {
@@ -90,7 +89,7 @@ OutputDeviceFileInterface *StubHardwareAbstraction::createOutputDeviceFile(const
 	return new StubOutputDeviceFile(fileName);
 }
 
-VideoDeviceFileInterface *StubHardwareAbstraction::createVideoDeviceFile(
+VideoDeviceFileInterface *StubHardwareAbstraction::createVideoDeviceFile( // NOLINT(google-default-arguments)
 		const QString &devicePath, uint32_t width, uint32_t height,
 		uint32_t fourcc, bool isWebcam) const
 {

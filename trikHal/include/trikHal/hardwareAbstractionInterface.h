@@ -76,7 +76,7 @@ public:
 	/// @param fileName - file name (with path, relative or absolute) of a device file.
 	virtual OutputDeviceFileInterface *createOutputDeviceFile(const QString &fileName) const = 0;
 
-	virtual VideoDeviceFileInterface *createVideoDeviceFile(
+	virtual VideoDeviceFileInterface *createVideoDeviceFile( // NOLINT(google-default-arguments)
 			const QString &devicePath, uint32_t width, uint32_t height,
 			uint32_t fourcc, bool isWebcam = false) const = 0;
 

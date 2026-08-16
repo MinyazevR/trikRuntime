@@ -51,7 +51,7 @@ Q_SIGNALS:
 
 public Q_SLOTS:
 	void init(bool showOnDisplay) override;
-	void stop(int flags = StopAll) override;
+	void stop(int flags = StopAll) override; // NOLINT(google-default-arguments)
 
 private:
 	DspSensorHelper m;

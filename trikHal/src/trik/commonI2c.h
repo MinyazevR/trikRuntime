@@ -55,7 +55,7 @@ private:
 	uint8_t mRegSize;
 	int mDeviceFileDescriptor = -1;
 	ushort mDeviceAddress = 0;
-	int write(uchar* writeData__u8, ushort length);
+	int write(uchar* writeData, ushort length);
 };
 
 }

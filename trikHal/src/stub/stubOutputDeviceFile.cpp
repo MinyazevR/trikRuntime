@@ -23,7 +23,7 @@ StubOutputDeviceFile::StubOutputDeviceFile(const QString &fileName)
 {
 }
 
-bool StubOutputDeviceFile::open(OpenMode mode)
+bool StubOutputDeviceFile::open(OpenMode mode) // NOLINT(google-default-arguments)
 {
 	Q_UNUSED(mode)
 	QLOG_INFO() << "Opening stub output device file" << mFile.fileName();

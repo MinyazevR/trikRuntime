@@ -18,8 +18,6 @@
 #include <QtCore/QVector>
 #include <linux/videodev2.h>
 
-#include "trikKernelDeclSpec.h"
-
 namespace trikKernel {
 
 enum class PixelFormat {
@@ -41,7 +39,6 @@ inline uint32_t toV4l2Fourcc(PixelFormat fmt)
 {
 	switch (fmt) {
 	case PixelFormat::Nv16: return V4L2_PIX_FMT_NV16;
-	case PixelFormat::Yuyv: return V4L2_PIX_FMT_YUYV;
 	default:                return V4L2_PIX_FMT_YUYV;
 	}
 }
@@ -52,12 +49,5 @@ inline PixelFormat fromV4l2Fourcc(uint32_t fourcc)
 	if (fourcc == V4L2_PIX_FMT_YUYV) return PixelFormat::Yuyv;
 	return PixelFormat::Unknown;
 }
-
-class TRIKKERNEL_EXPORT VideoUtils
-{
-public:
-	static QVector<uint8_t> yuyvToRgb(const QVector<uint8_t> &shot, int height, int width);
-	static QVector<uint8_t> yuv422pToRgb(const QVector<uint8_t> &shot, int height, int width);
-};
 
 } // namespace trikKernel

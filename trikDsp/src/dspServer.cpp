@@ -27,7 +27,7 @@
 
 namespace {
 
-static const int _registerDspMetaTypes = []() {
+const int _registerDspMetaTypes = []() {
 	qRegisterMetaType<trikDsp::Algorithm>("trikDsp::Algorithm");
 	qRegisterMetaType<trikDsp::InArgs>("trikDsp::InArgs");
 	qRegisterMetaType<trikDsp::OutArgs>("trikDsp::OutArgs");

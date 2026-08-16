@@ -167,7 +167,7 @@ bool DspServer::Impl::setupMessageQueue()
 		QLOG_ERROR() << "DspServer: MessageQ_create failed";
 		return false;
 	}
-	std::array<char, 32> name;
+	std::array<char, 32> name{};
 	snprintf(name.data(), name.size(), TRIK_SLAVE_MSG_QUE_NAME, "DSP");
 	QLOG_INFO() << "DspServer: opening remote queue" << name.data();
 

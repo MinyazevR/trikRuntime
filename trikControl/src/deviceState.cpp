@@ -18,7 +18,7 @@
 
 using namespace trikControl;
 
-DeviceState::DeviceState(const QString &deviceName)
+DeviceState::DeviceState(const QString &deviceName) // NOLINT(modernize-pass-by-value)
 	: mDeviceName(deviceName)
 {
 }

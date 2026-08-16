@@ -18,7 +18,7 @@
 
 using namespace trikHal::stub;
 
-StubVideoDeviceFile::StubVideoDeviceFile(const QString &fileName)
+StubVideoDeviceFile::StubVideoDeviceFile(const QString &fileName) // NOLINT(modernize-pass-by-value)
 	: VideoDeviceFileInterface(nullptr)
 	, mFileName(fileName)
 {

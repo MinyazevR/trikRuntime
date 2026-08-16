@@ -56,26 +56,26 @@ public:
 
 	/// Reads integer child parameter by port, modifies device state. Returns 0 if parameter is incorrect.
 	inline static int configureChildInt(const trikKernel::Configurer &configurer, DeviceState &state
-			, const QString &port, const QString &childDevice, const QString &parameterName)
+			, const QString &port, const QString &childDeviceClass, const QString &parameterName)
 	{
 		return configure<int>(state, parameterName
-				, [&]() { return configurer.childAttributeByPort(port, childDevice, parameterName); });
+				, [&]() { return configurer.childAttributeByPort(port, childDeviceClass, parameterName); });
 	}
 
 	/// Reads long integer child parameter by port, modifies device state. Returns 0 if parameter is incorrect.
 	inline static long configureChildLong(const trikKernel::Configurer &configurer, DeviceState &state
-			, const QString &port, const QString &childDevice, const QString &parameterName)
+			, const QString &port, const QString &childDeviceClass, const QString &parameterName)
 	{
 		return configure<long>(state, parameterName
-				, [&]() { return configurer.childAttributeByPort(port, childDevice, parameterName); });
+				, [&]() { return configurer.childAttributeByPort(port, childDeviceClass, parameterName); });
 	}
 
 	/// Reads real child parameter by port, modifies device state. Returns 0.0 if parameter is incorrect.
 	inline static qreal configureChildReal(const trikKernel::Configurer &configurer, DeviceState &state
-			, const QString &port, const QString &childDevice, const QString &parameterName)
+			, const QString &port, const QString &childDeviceClass, const QString &parameterName)
 	{
 		return configure<qreal>(state, parameterName
-				, [&]() { return configurer.childAttributeByPort(port, childDevice, parameterName); });
+				, [&]() { return configurer.childAttributeByPort(port, childDeviceClass, parameterName); });
 	}
 
 	/// Reads parameter via a callable, modifies device state.

@@ -29,7 +29,7 @@
 
 using namespace trikHal;
 
-VideoDeviceFileBase::VideoDeviceFileBase(const QString &devicePath,
+VideoDeviceFileBase::VideoDeviceFileBase(const QString &devicePath, // NOLINT(modernize-pass-by-value)
                                          uint32_t width, uint32_t height,
                                          uint32_t preferredFourcc,
                                          uint32_t bufferCount,

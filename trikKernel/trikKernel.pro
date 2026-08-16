@@ -51,8 +51,7 @@ SOURCES += \
 	$$PWD/src/fileUtils.cpp \
 	$$PWD/src/loggingHelper.cpp \
 	$$PWD/src/rcReader.cpp \
-	$$PWD/src/translationsHelper.cpp \
-	$$PWD/src/videoUtils.cpp
+	$$PWD/src/translationsHelper.cpp
 
 OTHER_FILES += \
 	$$PWD/stubTrikRc \

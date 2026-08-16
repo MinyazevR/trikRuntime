@@ -62,7 +62,7 @@ QVector<int> ObjectSensor::read()
 	return mReading;
 }
 
-void ObjectSensor::stop(int flags)
+void ObjectSensor::stop(int flags) // NOLINT(google-default-arguments)
 {
 	m.doStop();
 	Q_EMIT stopRequested(flags);

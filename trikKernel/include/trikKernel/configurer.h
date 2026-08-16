@@ -44,7 +44,7 @@ public:
 	QString attributeByPort(const QString &port, const QString &attributeName, QString *defaultValue = nullptr) const;
 
 	/// Returns value of given attribute of a child device on given port.
-	QString childAttributeByPort(const QString &port, const QString &childDevice,
+	QString childAttributeByPort(const QString &port, const QString &childDeviceClass,
 					const QString &attributeName, QString *defaultValue = nullptr) const;
 
 	/// Returns true if device is enabled in current configuration (either explicitly enabled in model configuration

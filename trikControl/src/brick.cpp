@@ -269,7 +269,7 @@ void Brick::reset()
 	Q_EMIT resetCompleted();
 }
 
-void Brick::startVideoTranslation(const QString &port, const QVariant &params)
+void Brick::startVideoTranslation(const QString &port, const QVariant &params) // NOLINT(google-default-arguments)
 {
 	QLOG_INFO() << "Brick::startVideoTranslation: port" << port;
 

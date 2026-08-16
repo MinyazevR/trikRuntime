@@ -80,7 +80,7 @@ QVector<int> ColorSensor::read(int mIdx, int nIdx)
 	return mReading[mIdx - 1][nIdx - 1];
 }
 
-void ColorSensor::stop(int flags)
+void ColorSensor::stop(int flags) // NOLINT(google-default-arguments)
 {
 	m.doStop();
 	Q_EMIT stopRequested(flags);

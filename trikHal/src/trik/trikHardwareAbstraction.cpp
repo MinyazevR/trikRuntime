@@ -96,8 +96,7 @@ TrikHardwareAbstraction::TrikHardwareAbstraction()
 }
 
 TrikHardwareAbstraction::~TrikHardwareAbstraction()
-{
-}
+= default;
 
 MspI2cInterface &TrikHardwareAbstraction::mspI2c()
 {
@@ -148,7 +147,7 @@ OutputDeviceFileInterface *TrikHardwareAbstraction::createOutputDeviceFile(const
 	return new TrikOutputDeviceFile(fileName);
 }
 
-VideoDeviceFileInterface *TrikHardwareAbstraction::createVideoDeviceFile(
+VideoDeviceFileInterface *TrikHardwareAbstraction::createVideoDeviceFile( // NOLINT(google-default-arguments)
 		const QString &devicePath, uint32_t width, uint32_t height,
 		uint32_t fourcc, bool isWebcam) const
 {

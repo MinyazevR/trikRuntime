@@ -64,7 +64,7 @@ QVector<int> LineSensor::read()
 	return mReading;
 }
 
-void LineSensor::stop(int flags)
+void LineSensor::stop(int flags) // NOLINT(google-default-arguments)
 {
 	m.doStop();
 	Q_EMIT stopRequested(flags);

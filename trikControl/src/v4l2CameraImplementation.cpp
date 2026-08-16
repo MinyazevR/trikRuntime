@@ -15,18 +15,89 @@
 #include "v4l2CameraImplementation.h"
 #include "cameraManager.h"
 
-#include <trikKernel/videoUtils.h>
-
 #include <QtCore/QEventLoop>
 #include <QtCore/QSharedPointer>
 #include <QtCore/QTimer>
+#include <QtCore/QVector>
 #include <QtGui/QImage>
 #include <QsLog.h>
 #include <linux/videodev2.h>
 
 using namespace trikControl;
 
-V4l2CameraImplementation::V4l2CameraImplementation(const QString &port, CameraManager &cameraManager)
+namespace {
+
+inline unsigned char clip255(int x)
+{
+	return x >= 255 ? 255 : (x <= 0 ? 0 : static_cast<uint8_t>(x));
+}
+
+QVector<uint8_t> yuyvToRgb(const QVector<uint8_t> &shot, int height, int width)
+{
+	QVector<uint8_t> result(height * width * 3);
+	int startIndex = 0;
+	for (auto row = 0; row < height; ++row) {
+		for (auto col = 0; col < width; col += 2) {
+			auto y0 = shot[startIndex];
+			auto cb = shot[startIndex + 1];
+			auto y1 = shot[startIndex + 2];
+			auto cr = shot[startIndex + 3];
+			startIndex += 4;
+
+			auto resRgb = &result[(row * width + col) * 3];
+			const auto alpha = 180 * (cr - 128) / 128;
+			const auto beta  = 45 * (cb - 128) / 128;
+			resRgb[0] = clip255(y0 + alpha);
+			resRgb[1] = clip255(y0 - beta - alpha / 2);
+			resRgb[2] = clip255(y0 + 5 * beta);
+			resRgb[3] = clip255(y1 + alpha);
+			resRgb[4] = clip255(y1 - beta - alpha / 2);
+			resRgb[5] = clip255(y1 + 5 * beta);
+		}
+	}
+	return result;
+}
+
+QVector<uint8_t> yuv422pToRgb(const QVector<uint8_t> &shot, int height, int width)
+{
+	QVector<uint8_t> result(height * width * 3);
+	if (width <= 0 || height <= 0)
+		return result;
+
+	const auto Y  = &shot[0];
+	const auto UV = &shot[width * height];
+
+	for (auto row = 0u; row < static_cast<uint32_t>(height); ++row) {
+		for (auto col = 0; col < width; col += 2) {
+			auto startIndex = row * width + col;
+			int const y1 = Y[startIndex] - 16;
+			int const y2 = Y[startIndex + 1] - 16;
+			int const u  = UV[startIndex] - 128;
+			int const v  = UV[startIndex + 1] - 128;
+			auto _298y1 = 298 * y1;
+			auto _298y2 = 298 * y2;
+			auto _409v  = 409 * v;
+			auto _100u  = -100 * u;
+			auto _516u  = 516 * u;
+			auto _208v  = -208 * v;
+			auto r1 = clip255((_298y1 + _516u + 128) >> 8);
+			auto g1 = clip255((_298y1 + _100u + _208v + 128) >> 8);
+			auto b1 = clip255((_298y1 + _409v + 128) >> 8);
+			auto r2 = clip255((_298y2 + _516u + 128) >> 8);
+			auto g2 = clip255((_298y2 + _100u + _208v + 128) >> 8);
+			auto b2 = clip255((_298y2 + _409v + 128) >> 8);
+
+			auto rgb = &result[startIndex * 3];
+			rgb[0] = r1; rgb[1] = g1; rgb[2] = b1;
+			rgb[3] = r2; rgb[4] = g2; rgb[5] = b2;
+		}
+	}
+	return result;
+}
+
+}
+
+V4l2CameraImplementation::V4l2CameraImplementation(const QString &port, CameraManager &cameraManager) // NOLINT(modernize-pass-by-value)
 	: mPort(port)
 	, mCameraManager(cameraManager)
 {
@@ -104,10 +175,10 @@ QVector<uint8_t> V4l2CameraImplementation::getPhoto()
 	QVector<uint8_t> rgb;
 	switch (fourcc) {
 	case V4L2_PIX_FMT_NV16:
-		rgb = trikKernel::VideoUtils::yuv422pToRgb(raw, height, width);
+		rgb = yuv422pToRgb(raw, height, width);
 		break;
 	case V4L2_PIX_FMT_YUYV:
-		rgb = trikKernel::VideoUtils::yuyvToRgb(raw, height, width);
+		rgb = yuyvToRgb(raw, height, width);
 		break;
 	default:
 		break;

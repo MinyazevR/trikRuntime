@@ -28,7 +28,7 @@ class DeviceState
 public:
 	/// Constructor.
 	/// @param deviceName - name of the device, used for debug output.
-	DeviceState(const QString &deviceName);
+	explicit DeviceState(const QString &deviceName);
 
 	/// Returns current device state.
 	DeviceInterface::Status status() const;

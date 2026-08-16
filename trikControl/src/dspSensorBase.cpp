@@ -20,7 +20,7 @@
 namespace trikControl {
 
 DspSensorHelper::DspSensorHelper(const QString &name, const trikKernel::Configurer &configurer,
-                                 const QString &port, trikDsp::Algorithm algo)
+                                 const QString &port, trikDsp::Algorithm algo) // NOLINT(modernize-pass-by-value)
 	: mState(name)
 	, mConfigurer(configurer)
 	, mPort(port)

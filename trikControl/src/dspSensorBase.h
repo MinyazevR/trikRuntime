@@ -91,7 +91,7 @@ inline void applyToleranceFactor(trikDsp::DetectParams &p, qreal factor)
 {
 	const auto widen = [factor](trikDsp::HsvRange &range) {
 		const int center = (static_cast<int>(range.from) + static_cast<int>(range.to)) / 2;
-		const int tolerance = static_cast<int>((range.to - range.from) / 2 * factor);
+		const int tolerance = static_cast<int>((range.to - range.from) / 2.0 * factor);
 		range.from = static_cast<uint8_t>(std::max(0, center - tolerance));
 		range.to = static_cast<uint8_t>(std::min(255, center + tolerance));
 	};

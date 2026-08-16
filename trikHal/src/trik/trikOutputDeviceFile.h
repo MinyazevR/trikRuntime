@@ -28,9 +28,9 @@ class TrikOutputDeviceFile : public OutputDeviceFileInterface
 public:
 	/// Constructor.
 	/// @param fileName - name of a device file .
-	TrikOutputDeviceFile(const QString &fileName);
+	explicit TrikOutputDeviceFile(const QString &fileName);
 
-	bool open(OpenMode mode = OpenMode::Text) override;
+	bool open(OpenMode mode = OpenMode::Text) override; // NOLINT(google-default-arguments)
 	void close() override;
 	void write(const QString &data) override;
 	bool write(const QByteArray &data) override;

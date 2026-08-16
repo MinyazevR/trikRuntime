@@ -80,7 +80,7 @@ struct OutArgs {
 
 } // namespace trikDsp
 
-Q_DECLARE_METATYPE(trikDsp::InArgs)
-Q_DECLARE_METATYPE(trikDsp::OutArgs)
-Q_DECLARE_METATYPE(trikDsp::Algorithm)
+Q_DECLARE_METATYPE(trikDsp::InArgs) // NOLINT(misc-no-recursion)
+Q_DECLARE_METATYPE(trikDsp::OutArgs) // NOLINT(misc-no-recursion)
+Q_DECLARE_METATYPE(trikDsp::Algorithm) // NOLINT(misc-no-recursion)
 Q_DECLARE_METATYPE(uint32_t)

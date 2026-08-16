@@ -31,7 +31,7 @@ CameraDevice::CameraDevice(const QString & port, const QString & mediaPath,
                            const trikKernel::Configurer &configurer,
                            CameraManager &cameraManager)
 {
-	QString type = configurer.childAttributeByPort(port, "photo", "type");
+	QString type = configurer.childAttributeByPort(port, "camera", "type");
 	// The device file is owned by the CameraManager, keyed by port - no need
 	// to read it from the config again.
 	const QString src = cameraManager.deviceFile(port);
@@ -43,7 +43,7 @@ CameraDevice::CameraDevice(const QString & port, const QString & mediaPath,
 		decltype(mCameraImpl)(new V4l2CameraImplementation(port, cameraManager)).swap(mCameraImpl);
 #endif
 	} else if (type == "file") {
-		QStringList filters = configurer.attributeByPort(port, "filters").split(',');
+		QStringList filters = configurer.childAttributeByPort(port, "camera", "filters").split(',');
 		decltype(mCameraImpl)(new ImitationCameraImplementation(filters, mediaPath)).swap(mCameraImpl);
 	}
 
@@ -56,6 +56,16 @@ CameraDevice::CameraDevice(const QString & port, const QString & mediaPath,
 			.swap(mCameraImpl);
 		mCameraImpl->setTempDir(mediaPath);
 	}
+
+	// The capture (blocking V4L2 read + YUV->RGB + JPEG encode, or the async
+	// QCamera flow) runs on a persistent worker thread so the caller's event
+	// loop stays responsive.
+	mCameraThread.reset(new QThread);
+	mCameraThread->setObjectName("CameraDevice::getPhoto");
+	mCameraWorker.reset(new QObject);
+	mCameraWorker->setObjectName("CameraDevice::getPhotoWorker");
+	mCameraWorker->moveToThread(mCameraThread.data());
+	mCameraThread->start();
 }
 
 CameraDevice::~CameraDevice()

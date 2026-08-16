@@ -25,15 +25,16 @@ void trikCameraPhotoImitationTest::SetUp() {
 
 TEST_F(trikCameraPhotoImitationTest, cameraImitationTest)
 {
+	const auto imitationPort = "imitationCameraPort";
 	QVector<uint8_t> expectedPhoto = CameraDeviceInterface::qImageToQVector(QImage("./media/trik_smile_normal.png"));
-	QVector<uint8_t> currentPhoto = testBrick->getStillImage("video2");
+	QVector<uint8_t> currentPhoto = testBrick->getStillImage(imitationPort);
 	ASSERT_EQ(expectedPhoto, currentPhoto);
 
-	currentPhoto = testBrick->getStillImage("video2");
+	currentPhoto = testBrick->getStillImage(imitationPort);
 	expectedPhoto = CameraDeviceInterface::qImageToQVector(QImage("./media/trik_smile_sad.png"));
 	ASSERT_EQ(expectedPhoto, currentPhoto);
 
-	currentPhoto = testBrick->getStillImage("video2");
+	currentPhoto = testBrick->getStillImage(imitationPort);
 	expectedPhoto = CameraDeviceInterface::qImageToQVector(QImage("./media/trik_smile_normal.png"));
 	ASSERT_EQ(expectedPhoto, currentPhoto);
 }

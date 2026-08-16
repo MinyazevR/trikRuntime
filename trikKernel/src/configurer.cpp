@@ -136,7 +136,7 @@ QString Configurer::attribute(const QString &port, const QString &deviceType,
 			.arg(attributeName, deviceType, port));
 }
 
-QString Configurer::childAttributeByPort(const QString &port, const QString &childDevice,
+QString Configurer::childAttributeByPort(const QString &port, const QString &childDeviceClass,
 				const QString &attributeName, QString *defaultValue) const
 {
 	auto it = mModelConfiguration.find(port);
@@ -150,11 +150,22 @@ QString Configurer::childAttributeByPort(const QString &port, const QString &chi
 	if (!mGroupsDevices.contains(groupOwnerDeviceClassName)) {
 		return getDefaultOrException(defaultValue,
 			QString("Device class '%1' does not own a device group, so it has no child device '%2'")
-							.arg(groupOwnerDeviceClassName, childDevice));
+							.arg(groupOwnerDeviceClassName, childDeviceClass));
 	}
 
-	return attribute(port, childDevice, attributeName, defaultValue);
+	for (const auto &childDeviceType : mGroupsDevices.value(groupOwnerDeviceClassName)) {
+		const auto typeIt = mDeviceTypes.constFind(childDeviceType);
+		const QString childDeviceClassName = typeIt != mDeviceTypes.cend()
+				? typeIt->deviceClass
+				: childDeviceType;
+		if (childDeviceClassName == childDeviceClass) {
+			return attribute(port, childDeviceType, attributeName, defaultValue);
+		}
+	}
 
+	return getDefaultOrException(defaultValue,
+			QString("Device class '%1' is not a child of device group '%2'")
+							.arg(childDeviceClass, groupOwnerDeviceClassName));
 }
 
 QString Configurer::attributeByPort(const QString &port, const QString &attributeName, QString *defaultValue) const

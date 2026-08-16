@@ -43,7 +43,7 @@ public:
 	virtual ~OutputDeviceFileInterface() = default;
 
 	/// Open a file. File name must be set previously.
-	virtual bool open(OpenMode mode = OpenMode::Text) = 0;
+	virtual bool open(OpenMode mode = OpenMode::Text) = 0; // NOLINT(google-default-arguments)
 
 	/// Close a file.
 	virtual void close() = 0;

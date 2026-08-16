@@ -29,7 +29,7 @@ TrikOutputDeviceFile::TrikOutputDeviceFile(const QString &fileName)
 {
 }
 
-bool TrikOutputDeviceFile::open(OpenMode mode)
+bool TrikOutputDeviceFile::open(OpenMode mode) // NOLINT(google-default-arguments)
 {
 	if (mode == OpenMode::NonBlockingBinary) {
 		if (mFileDescriptor != -1)
