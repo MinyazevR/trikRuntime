@@ -39,8 +39,8 @@ public:
 	/// If it is false, script will exit immediately.
 	bool isInEventDrivenMode() const override;
 
-	/// Returns repacked RGB88 from 3 x uint8_t into int32_t image
-	Q_INVOKABLE QVector<int32_t> getPhoto() override;
+	/// Returns repacked RGB88 from 3 x uint8_t into int32_t image from the camera on @p port.
+	Q_INVOKABLE QVector<int32_t> getPhoto(const QString &port = QStringLiteral("video1")) override;
 
 	/// Starts a new timer with given interval and returns reference to it.
 	Q_INVOKABLE QObject *timer(int milliseconds) override;
@@ -96,6 +96,11 @@ Q_SIGNALS:
 	void textInStdOut(const QString &text);
 
 private:
+	/// Redirects the legacy mjpg-encoder-ov7670 / mjpg-streamer-ov7670 shell
+	/// commands (old codegen) to Brick::startVideoTranslation / stopVideoTranslation
+	/// for the ov7670 port (video1). Returns true if the command was intercepted.
+	bool redirectLegacyMjpgStreaming(const QString &command);
+
 	QList<QTimer *> mTimers; // Has ownership.
 	trikControl::BrickInterface *mBrick {}; //Does not have ownership
 
