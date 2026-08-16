@@ -63,7 +63,7 @@ QObject* ScriptExecutionControl::timer(int milliseconds)
 
 static inline int waitWithTimerType(ScriptExecutionControl *sec, int ms, Qt::TimerType tt) {
 	QEventLoop loop;
-	QObject::connect(sec, &TrikScriptControlInterface::stopWaiting, &loop, std::bind(&QEventLoop::exit, &loop,  -1));
+	QObject::connect(sec, &TrikScriptControlInterface::stopWaiting, &loop, [&loop]() { loop.exit(-1); });
 	QTimer t;
 	t.setTimerType(tt);
 	QObject::connect(&t, &QTimer::timeout, &loop, &QEventLoop::quit);
@@ -86,7 +86,7 @@ void ScriptExecutionControl::wait(const int &milliseconds)
 	constexpr auto preciseTimerDelta = 20;
 
 	if (diff > 100
-			&& waitWithTimerType(this, std::max(diff - preciseTimerDelta, 0ll), Qt::TimerType::CoarseTimer)) {
+			&& waitWithTimerType(this, static_cast<int>(std::max(diff - preciseTimerDelta, 0ll)), Qt::TimerType::CoarseTimer)) {
 		return;
 	}
 	diff = milliseconds - elapsed.elapsed();
@@ -97,7 +97,7 @@ void ScriptExecutionControl::wait(const int &milliseconds)
 
 	static_assert(preciseTimerDelta > usleepDelta, "Use timer for longer sleep");
 
-	if (waitWithTimerType(this, std::max(0ll, diff - (usleepDelta+spinLockDelta)), Qt::TimerType::PreciseTimer)) {
+	if (waitWithTimerType(this, static_cast<int>(std::max(0ll, diff - (usleepDelta+spinLockDelta))), Qt::TimerType::PreciseTimer)) {
 			return;
 	}
 
@@ -187,6 +187,7 @@ bool ScriptExecutionControl::redirectLegacyMjpgStreaming(const QString &command)
 	return false;
 }
 
+// NOLINTNEXTLINE(google-default-arguments)
 void ScriptExecutionControl::system(const QString &command, bool synchronously)
 {
 	if (redirectLegacyMjpgStreaming(command)) {
@@ -247,6 +248,7 @@ int ScriptExecutionControl::timeInterval(int packedTimeLeft, int packedTimeRight
 	return trikKernel::TimeVal::timeInterval(packedTimeLeft, packedTimeRight);
 }
 
+// NOLINTNEXTLINE(google-default-arguments)
 QVector<int32_t> ScriptExecutionControl::getPhoto(const QString &port)
 {
 	return trikControl::Utilities::rescalePhoto(mBrick->getStillImage(port));

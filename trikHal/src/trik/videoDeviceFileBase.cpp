@@ -277,9 +277,9 @@ void VideoDeviceFileBase::onActivated(int fd)
 		return;
 	}
 
-	mCurrentData = mMmapBufs[buf.index].data;
+	mCurrentData = mMmapBufs[buf.index].data; // NOLINT(cppcoreguidelines-narrowing-conversions)
 	mCurrentSize = buf.bytesused;
-	mCurrentBufIdx = buf.index;
+	mCurrentBufIdx = buf.index; // NOLINT(cppcoreguidelines-narrowing-conversions)
 
 	if (mNotifier)
 		mNotifier->setEnabled(false);
@@ -309,7 +309,7 @@ bool VideoDeviceFileBase::allocateBuffers()
 	}
 
 	const uint32_t count = std::min<uint32_t>(req.count, mBufferCount);
-	mMmapBufs.reserve(count);
+	mMmapBufs.reserve(static_cast<int>(count));
 
 	for (uint32_t i = 0; i < count; ++i) {
 		v4l2_buffer buf = {};

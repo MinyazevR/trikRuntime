@@ -40,6 +40,7 @@ public:
 	bool isInEventDrivenMode() const override;
 
 	/// Returns repacked RGB88 from 3 x uint8_t into int32_t image from the camera on @p port.
+	// NOLINTNEXTLINE(google-default-arguments)
 	Q_INVOKABLE QVector<int32_t> getPhoto(const QString &port = QStringLiteral("video1")) override;
 
 	/// Starts a new timer with given interval and returns reference to it.
@@ -55,6 +56,7 @@ public:
 	Q_INVOKABLE int random(int from, int to) const override;
 
 	/// Execute given sh command.
+	// NOLINTNEXTLINE(google-default-arguments)
 	Q_INVOKABLE void system(const QString &command, bool synchronously = false) override;
 
 	/// Appends given text to the end of a file.

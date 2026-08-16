@@ -160,9 +160,9 @@ private:
 	/// request wins, so a detect() arriving while init()'s acquire is pending is
 	/// not lost.
 	struct PendingActivation {
-		trikDsp::Algorithm algo;
-		trikDsp::InArgs args;
-		bool videoOut;
+		trikDsp::Algorithm algo = trikDsp::Algorithm::None;
+		trikDsp::InArgs args = {};
+		bool videoOut = false;
 	};
 
 	/// Ports whose translation/sensor is detached and must survive stop()/clear().

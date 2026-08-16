@@ -52,6 +52,8 @@ public:
 	Q_INVOKABLE virtual int random(int from, int to) const = 0;
 
 	/// Execute given sh command.
+	// TODO: The default parameter is part of the public API. Consider backward compatibility
+	// NOLINTNEXTLINE(google-default-arguments)
 	Q_INVOKABLE virtual void system(const QString &command, bool synchronously = false) = 0;
 
 	/// Appends given text to the end of a file.

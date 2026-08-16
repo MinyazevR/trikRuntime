@@ -67,7 +67,7 @@ QVector<uint8_t> yuv422pToRgb(const QVector<uint8_t> &shot, int height, int widt
 	const auto Y  = &shot[0];
 	const auto UV = &shot[width * height];
 
-	for (auto row = 0u; row < static_cast<uint32_t>(height); ++row) {
+	for (auto row = 0; row < height; ++row) {
 		for (auto col = 0; col < width; col += 2) {
 			auto startIndex = row * width + col;
 			int const y1 = Y[startIndex] - 16;

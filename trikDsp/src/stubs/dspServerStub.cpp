@@ -20,7 +20,7 @@
 
 namespace {
 
-static const int _registerDspMetaTypes = []() {
+const int _registerDspMetaTypes = []() {
 	qRegisterMetaType<trikDsp::Algorithm>("trikDsp::Algorithm");
 	qRegisterMetaType<trikDsp::InArgs>("trikDsp::InArgs");
 	qRegisterMetaType<trikDsp::OutArgs>("trikDsp::OutArgs");
@@ -40,9 +40,7 @@ DspServer::DspServer(uint16_t rprocId, QObject *parent)
 	QLOG_INFO() << "DspServer: init skipped (stub)";
 }
 
-DspServer::~DspServer()
-{
-}
+DspServer::~DspServer() = default;
 
 void DspServer::init()
 {
