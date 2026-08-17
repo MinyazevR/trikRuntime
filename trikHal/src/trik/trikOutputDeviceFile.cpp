@@ -17,8 +17,10 @@
 #include <unistd.h>
 #include <fcntl.h>
 #include <sys/stat.h>
+#include <sys/ioctl.h>
 #include <cerrno>
 #include <cstring>
+#include <algorithm>
 
 #include <QsLog.h>
 
@@ -88,11 +90,42 @@ bool TrikOutputDeviceFile::write(const QByteArray &data)
 	if (mFileDescriptor == -1)
 		return false;
 
-	const ssize_t written = ::write(mFileDescriptor, data.constData(), static_cast<size_t>(data.size()));
-	if (written < 0)
-		return false; // EAGAIN: pipe full, drop the frame
+	const size_t total = static_cast<size_t>(data.size());
+	if (total == 0)
+		return true;
 
-	return written == data.size();
+	// Drop a whole frame when it cannot fit into the pipe, so a truncated frame
+	// (and its missing trailing delimiter) never corrupts the MJPEG stream. The
+	// reader (mjpg-streamer's input_fifo) splits frames by delimiter, so a partial
+	// frame would be glued to the next one.
+	int capacity = 65536; // default Linux pipe capacity (16 * PIPE_BUF)
+#ifdef F_GETPIPE_SZ
+	const int actual = fcntl(mFileDescriptor, F_GETPIPE_SZ);
+	if (actual > 0)
+		capacity = actual;
+#endif
+
+	int unread = 0;
+	if (ioctl(mFileDescriptor, FIONREAD, &unread) == 0 && unread >= 0 && unread < capacity) {
+		if (static_cast<size_t>(capacity - unread) < total)
+			return false;
+	}
+
+	// Write in PIPE_BUF-sized chunks. A single write() larger than PIPE_BUF is
+	// not atomic and would be partially written when the pipe is nearly full,
+	// silently dropping the tail (including the delimiter).
+	size_t off = 0;
+	while (off < total) {
+		const size_t chunk = std::min(total - off, static_cast<size_t>(4096));
+		const ssize_t written = ::write(mFileDescriptor, data.constData() + off, chunk);
+		if (written < 0)
+			return false; // EAGAIN/EWOULDBLOCK: pipe filled up, drop the rest
+		if (static_cast<size_t>(written) < chunk)
+			return false; // unexpected short write
+		off += static_cast<size_t>(written);
+	}
+
+	return true;
 }
 
 QString TrikOutputDeviceFile::fileName() const

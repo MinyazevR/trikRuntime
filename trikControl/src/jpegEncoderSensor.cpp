@@ -89,6 +89,9 @@ void JpegEncoderSensor::onResult(const trikDsp::OutArgs &result)
 
 void JpegEncoderSensor::writeFrame(const QByteArray &jpegData)
 {
-	// Non-blocking: drops the frame when the pipe is full (slow consumer).
-	mFifoWriter->write(jpegData + sFrameDelimiter);
+	// Non-blocking: drops the whole frame when the pipe is full (slow consumer),
+	// so a truncated frame (missing its delimiter) never corrupts the stream.
+	if (!mFifoWriter->write(jpegData + sFrameDelimiter)) {
+		QLOG_WARN() << "JpegEncoderSensor: dropped frame, pipe full";
+	}
 }
