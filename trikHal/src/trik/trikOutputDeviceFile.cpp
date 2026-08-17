@@ -90,7 +90,7 @@ bool TrikOutputDeviceFile::write(const QByteArray &data)
 	if (mFileDescriptor == -1)
 		return false;
 
-	const size_t total = static_cast<size_t>(data.size());
+	const auto total = static_cast<size_t>(data.size());
 	if (total == 0)
 		return true;
 

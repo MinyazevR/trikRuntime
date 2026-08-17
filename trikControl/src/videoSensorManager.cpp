@@ -200,11 +200,6 @@ void VideoSensorManager::onAcquired(const QString &port, bool ok)
 void VideoSensorManager::subscribeFrames(const QString &port)
 {
 	mCameraManager->subscribe(port, this, [this, port](const uint8_t *data, size_t size) {
-		mCameraFrameCount++;
-		if (mCameraFpsTimer.hasExpired(1000) || !mCameraFpsTimer.isValid()) {
-			QLOG_INFO() << "CAM FPS:" << mCameraFrameCount;
-			mCameraFrameCount = 0; mCameraFpsTimer.restart();
-		}
 		// Lightweight callback: copy the frame into the DSP shared buffer,
 		// then queue processing on the DspServer thread. The data pointer is
 		// zero-copy and valid only within this callback.

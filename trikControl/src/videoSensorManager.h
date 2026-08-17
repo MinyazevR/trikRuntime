@@ -14,7 +14,6 @@
 
 #pragma once
 
-#include <QtCore/QElapsedTimer>
 #include <QtCore/QHash>
 #include <QtCore/QScopedPointer>
 #include <QtCore/QString>
@@ -184,9 +183,6 @@ private:
 	QHash<QString, ColorSensor*> mColorSensors;
 	QHash<QString, ObjectSensor*> mObjectSensors;
 	QHash<QString, JpegEncoderSensor*> mJpegEncoders;
-
-	QElapsedTimer mCameraFpsTimer;
-	int mCameraFrameCount = 0;
 };
 
 }

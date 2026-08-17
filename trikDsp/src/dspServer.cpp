@@ -120,13 +120,6 @@ void DspServer::processFrameData(const QString &sourceId)
 		if (ok && needVideo && videoFrame.data && d->mFbOutput && d->mFbOutput->isOpen()) {
 			d->mFbOutput->writeFrame(static_cast<const uint8_t *>(videoFrame.data));
 		}
-
-		const auto count = d->mFrameCount.fetch_add(1, std::memory_order_relaxed) + 1;
-		if (d->mFpsTimer.hasExpired(1000) || !d->mFpsTimer.isValid()) {
-			QLOG_INFO() << "DSP FPS:" << count;
-			d->mFrameCount.store(0, std::memory_order_relaxed);
-			d->mFpsTimer.restart();
-		}
 	}
 
 	emit resultReady(sourceId, algo, out);
