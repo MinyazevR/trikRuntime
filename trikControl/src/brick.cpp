@@ -103,6 +103,11 @@ Brick::Brick(const trikKernel::DifferentOwnerPointer<trikHal::HardwareAbstractio
 		}
 	}
 
+	// A previous trikGui/trikRun may have crashed without running ~Brick(),
+	// leaving detached mjpg-streamer daemons behind. Stop them now, before any
+	// new translation starts, so a fresh run begins from a clean state.
+	stopOrphanedStreamers();
+
 	mMspCommunicator.reset(MspBusAutoDetector::createCommunicator(mConfigurer, *mHardwareAbstraction));
 	mModuleLoader.reset(new ModuleLoader(mHardwareAbstraction->systemConsole()));
 
@@ -307,7 +312,7 @@ void Brick::startVideoTranslation(const QString &port, const QVariant &params) /
 		mVideoSensorManager->releasePort(port);
 	}
 
-	const auto detached = paramsMap.value(QStringLiteral("detached"), false).toBool();
+	const auto detached = paramsMap.value(QStringLiteral("detached"), true).toBool();
 
 	if (isUsb) {
 		// USB webcam: mjpg-streamer opens the device directly over UVC, so the
@@ -320,7 +325,7 @@ void Brick::startVideoTranslation(const QString &port, const QVariant &params) /
 		// streamed into the FIFO that mjpg-streamer's input_fifo.so reads.
 		if (mVideoSensorManager) {
 			if (auto &&encoder = mVideoSensorManager->jpegEncoderSensor(port)) {
-				const auto jpegQuality = paramsMap.value(QStringLiteral("jpeg-qual"), 40).toInt();
+				const auto jpegQuality = paramsMap.value(QStringLiteral("jpeg-qual"), 30).toInt();
 				const auto whiteBlack = paramsMap.value(QStringLiteral("white-black"), false).toBool();
 				encoder->init(static_cast<uint8_t>(jpegQuality), whiteBlack, false);
 			}
@@ -391,6 +396,29 @@ void Brick::stopVideoTranslationInternal(const QString &port, bool keepCamera)
 	}
 
 	mTranslations.erase(it);
+}
+
+void Brick::stopOrphanedStreamers()
+{
+	// Every videoDevice port records its mjpg-streamer launcher script in the
+	// config. Running "stop" per port is idempotent: with no daemon it is a
+	// no-op, so on a clean start this loop does nothing. It only matters after
+	// a crash, where ~Brick() never ran and the daemons are still alive.
+	for (const QString &port : mConfigurer.ports()) {
+		if (mConfigurer.deviceClass(port) != QStringLiteral("videoDevice")) {
+			continue;
+		}
+
+		QString defaultScript;
+		const QString script = mConfigurer.attributeByPort(port, "mjpgStreamerScript", &defaultScript);
+		if (script.isEmpty()) {
+			continue;
+		}
+
+		if (mHardwareAbstraction->systemConsole().system(script + " stop " + port) != 0) {
+			QLOG_INFO() << "Brick: no orphaned mjpg-streamer on port" << port;
+		}
+	}
 }
 
 void Brick::playSound(const QString &soundFileName)

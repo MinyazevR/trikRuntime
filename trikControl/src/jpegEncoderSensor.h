@@ -82,6 +82,11 @@ private:
 
 	/// Frame delimiter used by mjpg-streamer's input_fifo.so to split frames.
 	static const QByteArray sFrameDelimiter;
+
+	/// True while frames are being dropped because the pipe is full. Lets the
+	/// hot path log the transition instead of spamming one WARN per frame.
+	bool mDropping = false;
+	int mDroppedCount = 0;
 };
 
 }

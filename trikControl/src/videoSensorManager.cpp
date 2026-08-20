@@ -304,8 +304,12 @@ void VideoSensorManager::stop(int flags)
 
 void VideoSensorManager::releasePort(const QString &port)
 {
-	mDspServer->deactivate();
+	// The DSP is single-channel: deactivate it only when the port being
+	// released actually owns the active channel. Releasing an unrelated port
+	// (e.g. usb-camera, which never uses the DSP) must not kill the encoder
+	// currently streaming another video port.
 	if (mActiveDspPort == port) {
+		mDspServer->deactivate();
 		mActiveDspPort.clear();
 	}
 	mPendingActivations.remove(port);

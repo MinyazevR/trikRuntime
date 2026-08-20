@@ -91,7 +91,21 @@ void JpegEncoderSensor::writeFrame(const QByteArray &jpegData)
 {
 	// Non-blocking: drops the whole frame when the pipe is full (slow consumer),
 	// so a truncated frame (missing its delimiter) never corrupts the stream.
-	if (!mFifoWriter->write(jpegData + sFrameDelimiter)) {
-		QLOG_WARN() << "JpegEncoderSensor: dropped frame, pipe full";
+	if (mFifoWriter->write(jpegData + sFrameDelimiter)) {
+		if (mDropping) {
+			QLOG_INFO() << "JpegEncoderSensor: pipe drained,"
+			            << mDroppedCount << "frame(s) were dropped";
+			mDropping = false;
+			mDroppedCount = 0;
+		}
+		return;
 	}
+
+	// Log once when dropping starts and once (with the count) when it stops,
+	// instead of a WARN per dropped frame (~20/s) in this hot path.
+	if (!mDropping) {
+		QLOG_WARN() << "JpegEncoderSensor: dropped frame, pipe full (further drops suppressed)";
+		mDropping = true;
+	}
+	++mDroppedCount;
 }

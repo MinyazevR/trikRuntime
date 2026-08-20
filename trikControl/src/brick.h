@@ -171,6 +171,10 @@ private:
 	/// the DSP algorithm without a slow camera reopen; otherwise it is released.
 	void stopVideoTranslationInternal(const QString &port, bool keepCamera);
 
+	/// Stops any mjpg-streamer daemons left over from a previous (crashed) run,
+	/// so a fresh Brick starts clean instead of leaving orphaned streamers.
+	void stopOrphanedStreamers();
+
 	/// Deinitializes and properly shuts down device on a given port.
 	void shutdownDevice(const QString &port);
 
