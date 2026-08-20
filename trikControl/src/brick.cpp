@@ -156,7 +156,7 @@ Brick::~Brick()
 	// for good, so nothing should outlive it. The streamer processes are
 	// stopped explicitly here; the DSP encoders and cameras are torn down by
 	// mVideoSensorManager.reset() below.
-	for (const QString &port : mTranslations.keys()) {
+	for (auto &&port : mTranslations.keys()) {
 		const auto &t = mTranslations.value(port);
 		if (mHardwareAbstraction->systemConsole().system(t.streamerScript + " stop " + port) != 0) {
 			QLOG_ERROR() << "Failed to stop mjpg-streamer for port" << port;
@@ -226,8 +226,8 @@ void Brick::configure(const QString &portName, const QString &deviceName)
 	// VideoSensorManager/CameraManager. There is no standalone "device" to
 	// shut down on such a port - the camera itself is reused, so at most the
 	// high-level object (a sensor or a camera) has to be (re)created.
-	const bool isVideoSensor = VideoSensorManager::isVideoSensor(deviceName);
-	const bool isVideoPort = portName.startsWith(QStringLiteral("video"))
+	const auto isVideoSensor = VideoSensorManager::isVideoSensor(deviceName);
+	const auto isVideoPort = portName.startsWith(QStringLiteral("video"))
 				 || portName.startsWith(QStringLiteral("usb-camera"));
 
 	if (isVideoPort && (isVideoSensor
@@ -273,9 +273,15 @@ void Brick::startVideoTranslation(const QString &port, const QVariant &params) /
 {
 	QLOG_INFO() << "Brick::startVideoTranslation: port" << port;
 
-	const QVariantMap paramsMap = params.toMap();
+	const auto &paramsMap = params.toMap();
 
-	const bool isUsb = port.startsWith(QStringLiteral("usb-camera"));
+	const auto isUsb = port.startsWith(QStringLiteral("usb-camera"));
+
+	if (!isUsb && !port.startsWith(QStringLiteral("video"))) {
+		QLOG_ERROR() << "Brick::startVideoTranslation: unsupported port" << port
+		             << "(supported ports: video* or usb-camera)";
+		return;
+	}
 
 	// The DSP is single-channel: only one ov7670 translation can run at a time.
 	// A new video translation supersedes any other active video translation
@@ -285,11 +291,8 @@ void Brick::startVideoTranslation(const QString &port, const QVariant &params) /
 		QStringList superseded;
 		for (auto it = mTranslations.constBegin(); it != mTranslations.constEnd(); ++it) {
 			if (!it.value().isUsb && it.key() != port) {
-				superseded << it.key();
+				stopVideoTranslationInternal(it.key(), /*keepCamera=*/false);
 			}
-		}
-		for (const QString &other : superseded) {
-			stopVideoTranslationInternal(other, /*keepCamera=*/false);
 		}
 	}
 
@@ -304,7 +307,7 @@ void Brick::startVideoTranslation(const QString &port, const QVariant &params) /
 		mVideoSensorManager->releasePort(port);
 	}
 
-	const bool detached = paramsMap.value(QStringLiteral("detached"), false).toBool();
+	const auto detached = paramsMap.value(QStringLiteral("detached"), false).toBool();
 
 	if (isUsb) {
 		// USB webcam: mjpg-streamer opens the device directly over UVC, so the
@@ -316,9 +319,9 @@ void Brick::startVideoTranslation(const QString &port, const QVariant &params) /
 		// ov7670 camera port: schedule the DSP JPEG encoder. Its result is
 		// streamed into the FIFO that mjpg-streamer's input_fifo.so reads.
 		if (mVideoSensorManager) {
-			if (auto *encoder = mVideoSensorManager->jpegEncoderSensor(port)) {
-				const int jpegQuality = paramsMap.value(QStringLiteral("jpeg-qual"), 40).toInt();
-				const bool whiteBlack = paramsMap.value(QStringLiteral("white-black"), false).toBool();
+			if (auto &&encoder = mVideoSensorManager->jpegEncoderSensor(port)) {
+				const auto jpegQuality = paramsMap.value(QStringLiteral("jpeg-qual"), 40).toInt();
+				const auto whiteBlack = paramsMap.value(QStringLiteral("white-black"), false).toBool();
 				encoder->init(static_cast<uint8_t>(jpegQuality), whiteBlack, false);
 			}
 		}
@@ -341,6 +344,9 @@ void Brick::startVideoTranslation(const QString &port, const QVariant &params) /
 	const QString device = mCameraManager ? mCameraManager->deviceFile(port) : QString();
 	const QString command = script + " start " + port + " " + device;
 
+	QLOG_INFO() << "Brick::startVideoTranslation: launching mjpg-streamer port=" << port
+	            << "isUsb=" << isUsb << "detached=" << detached << "command=" << command;
+
 	if (mHardwareAbstraction->systemConsole().system(command) != 0) {
 		QLOG_ERROR() << "Failed to start mjpg-streamer for port" << port;
 	}
@@ -350,6 +356,12 @@ void Brick::startVideoTranslation(const QString &port, const QVariant &params) /
 
 void Brick::stopVideoTranslation(const QString &port)
 {
+	if (!port.startsWith(QStringLiteral("usb-camera")) && !port.startsWith(QStringLiteral("video"))) {
+		QLOG_ERROR() << "Brick::stopVideoTranslation: unsupported port" << port
+		             << "(supported ports: video* or usb-camera)";
+		return;
+	}
+
 	stopVideoTranslationInternal(port, false);
 }
 
@@ -361,7 +373,11 @@ void Brick::stopVideoTranslationInternal(const QString &port, bool keepCamera)
 		return;
 	}
 
-	const Translation translation = it.value();
+	const auto &translation = it.value();
+
+	QLOG_INFO() << "Brick::stopVideoTranslation: stopping mjpg-streamer port=" << port
+	            << "isUsb=" << translation.isUsb << "detached=" << translation.detached
+	            << "script=" << translation.streamerScript;
 
 	// Symmetric to the legacy codegen
 	// (mjpg-streamer stop && mjpg-encoder stop): stop the streamer process
@@ -453,7 +469,7 @@ void Brick::stop()
 		}
 		// Only the streamer process is stopped here; the DSP encoders and the
 		// cameras are torn down by VideoSensorManager::stop()/clear() below.
-		for (const QString &port : toStop) {
+		for (auto &&port : toStop) {
 			if (mHardwareAbstraction->systemConsole().system(mTranslations.value(port).streamerScript + " stop " + port) != 0) {
 				QLOG_ERROR() << "Failed to stop mjpg-streamer for port" << port;
 			}
@@ -656,7 +672,7 @@ QVector<uint8_t> Brick::getStillImage(const QString &port)
 
 	// Create the CameraDevice for @p port lazily and cache it. Its state is
 	// self-contained, so the device can be reused for subsequent photos.
-	CameraDeviceInterface *camera = mCameras.value(port, nullptr);
+	auto *camera = mCameras.value(port, nullptr);
 	if (!camera) {
 		camera = new CameraDevice(port, mMediaPath, mConfigurer, *mCameraManager);
 		mCameras.insert(port, camera);
