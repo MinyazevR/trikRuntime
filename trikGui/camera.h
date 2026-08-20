@@ -41,6 +41,10 @@ public Q_SLOTS:
 	Q_INVOKABLE void doPhoto(const QString &port = QStringLiteral("video1"));
 
 private:
+	/// Receives the captured image on the GUI thread after the asynchronous
+	/// capture completes, and emits imageChanged() or cameraUnavailable().
+	void onPhotoReady(const QImage &image);
+
 	QString namePhoto();
 	int count{0};
 
