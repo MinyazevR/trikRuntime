@@ -51,11 +51,13 @@ namespace trikControl {
 /// and per-port sensor instances.  Camera lifecycle (open/close/refcount)
 /// is delegated to CameraManager - VSM only manages DSP channel logic.
 ///
-/// ## Algorithm switching
+/// ## Algorithm switching (sensor stop() flags)
 ///
-/// stop(StopNone): deactivate the DSP, camera keeps streaming.
-/// stop(StopStream): deactivate + streamoff the camera, but keep it acquired.
-/// stop(StopAll): deactivate + unsubscribe + release the camera (default).
+/// A sensor's stop(StopNone) deactivates the DSP but keeps the camera streaming;
+/// stop(StopStream) additionally streams the camera off while keeping it
+/// acquired; stop(StopAll) releases the camera too (default). These flags only
+/// affect per-sensor stop() (handleStopRequested); VideoSensorManager::stop()
+/// is always a full teardown of every non-detached camera.
 ///
 /// ## Threading / connections
 ///
@@ -94,7 +96,9 @@ public:
 	/// The caller drives it through init(jpegQuality, ifBlackAndWhite, ...).
 	JpegEncoderSensor *jpegEncoderSensor(const QString &port);
 
-	void stop(int flags = StopAll);
+	/// Full teardown: deactivate the DSP (unless the active channel is detached)
+	/// and stop + release every held camera except detached ports.
+	void stop();
 	void clear();
 	void create(const QString &port, const QString &deviceClass);
 

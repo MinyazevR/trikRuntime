@@ -24,8 +24,6 @@ Rectangle {
         ListElement { portName: "video1" }
         ListElement { portName: "usb-camera" }
     }
-
-    // Фото — на весь экран, всегда под списком портов.
     ListView {
         id: _listSensors
         anchors.fill: parent
@@ -88,7 +86,6 @@ Rectangle {
         }
     }
 
-    // Выбор порта — на весь экран, крупные строки как в меню тестирования.
     ListView {
         id: _portsList
         anchors.fill: parent

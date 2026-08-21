@@ -327,12 +327,20 @@ bool DspServer::Impl::processFrame(const DspChannel &channel,
                                     OutArgs &out, VideoFrame *videoFrame)
 {
 	const auto dspAlgo = toDspAlgo(channel.algorithm);
-	if (dspAlgo != mCurrentAlgo) {
-		QLOG_INFO() << "DspServer: switching algorithm from" << mCurrentAlgo
-		            << "to" << dspAlgo;
-		AlgoDescriptor desc = {channel.format, channel.lineLength};
+	// Re-register when the algorithm, the pixel format or the line length
+	// changes. The DSP's setup() selects the format converter and fixes the
+	// stride from these, so a stale registration would decode the new channel's
+	// frames with the previous session's/port's settings.
+	if (dspAlgo != mCurrentAlgo || channel.format != mCurrentFormat
+	    || channel.lineLength != mCurrentLineLength) {
+		QLOG_INFO() << "DspServer: (re)registering algorithm" << dspAlgo
+		            << "format" << static_cast<int>(channel.format)
+		            << "lineLength" << channel.lineLength;
+		const AlgoDescriptor desc = {channel.format, channel.lineLength};
 		registerAlgorithm(channel.algorithm, desc);
 		mCurrentAlgo = dspAlgo;
+		mCurrentFormat = channel.format;
+		mCurrentLineLength = channel.lineLength;
 	}
 
 	const bool ok = step(channel.inArgs, out);

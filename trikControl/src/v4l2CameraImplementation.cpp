@@ -159,6 +159,7 @@ QVector<uint8_t> V4l2CameraImplementation::getPhoto()
 				loop.quit();
 		});
 
+	watchdog.start();
 	mCameraManager.subscribeLatest(mPort, &loop);
 	loop.exec();
 

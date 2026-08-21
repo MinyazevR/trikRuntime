@@ -155,7 +155,20 @@ public:
 	/// Set the active channel (replaces any previous one).
 	void setChannel(const DspChannel &c) { mActive = c; }
 	/// Clear the active channel (deactivate).
-	void clearChannel() { mActive = {}; }
+	///
+	/// Also forgets the last registered algorithm, so the next activation
+	/// re-registers the DSP algorithm with the channel's current pixel format
+	/// and line length. The DSP keeps its per-algorithm setup state across
+	/// sessions, so relying on a stale registration could feed a new channel's
+	/// frames through the previous session's format converter.
+	void clearChannel() {
+		mActive = {};
+#ifndef TRIK_DSP_STUB
+		mCurrentAlgo = TRIK_CV_ALGORITHM_NONE;
+		mCurrentFormat = PixelFormat::Unknown;
+		mCurrentLineLength = 0;
+#endif
+	}
 
 	/// Return a reference to the current channel.
 	/// Safe to call when no channel is active (returns default-constructed).
@@ -200,6 +213,10 @@ private:
 #ifndef TRIK_DSP_STUB
 	/// Last registered algorithm.  Used to avoid re-registration in processFrame.
 	enum trik_cv_algorithm mCurrentAlgo = TRIK_CV_ALGORITHM_NONE;
+	/// Pixel format the DSP algorithm was registered with (part of the cache).
+	PixelFormat mCurrentFormat = PixelFormat::Unknown;
+	/// Bytes-per-line the DSP algorithm was registered with (part of the cache).
+	uint32_t mCurrentLineLength = 0;
 
 	/// TI IPC host queue handle (created by MessageQ_create).
 	struct MessageQ_Object *mHostQue = nullptr;

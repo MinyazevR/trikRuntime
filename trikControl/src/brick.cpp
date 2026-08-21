@@ -21,6 +21,7 @@
 #endif
 
 #include <QtCore/QFileInfo>
+#include <QtCore/QProcess>
 #include <QtMultimedia/QCamera>
 #include <QtMultimedia/QCameraImageCapture>
 #include <QtMultimedia/QCameraInfo>
@@ -163,8 +164,8 @@ Brick::~Brick()
 	// mVideoSensorManager.reset() below.
 	for (auto &&port : mTranslations.keys()) {
 		const auto &t = mTranslations.value(port);
-		if (mHardwareAbstraction->systemConsole().system(t.streamerScript + " stop " + port) != 0) {
-			QLOG_ERROR() << "Failed to stop mjpg-streamer for port" << port;
+		if (t.streamerProcess) {
+			t.streamerProcess->stop();
 		}
 	}
 	mTranslations.clear();
@@ -296,8 +297,11 @@ void Brick::startVideoTranslation(const QString &port, const QVariant &params) /
 		QStringList superseded;
 		for (auto it = mTranslations.constBegin(); it != mTranslations.constEnd(); ++it) {
 			if (!it.value().isUsb && it.key() != port) {
-				stopVideoTranslationInternal(it.key(), /*keepCamera=*/false);
+				superseded << it.key();
 			}
+		}
+		for (const auto &other : superseded) {
+			stopVideoTranslationInternal(other, /*keepCamera=*/false);
 		}
 	}
 
@@ -347,16 +351,23 @@ void Brick::startVideoTranslation(const QString &port, const QVariant &params) /
 	}
 
 	const QString device = mCameraManager ? mCameraManager->deviceFile(port) : QString();
-	const QString command = script + " start " + port + " " + device;
+
+	// The streamer is launched as a QProcess owned by a StreamerProcess RAII
+	// wrapper (not via system() + the script's own "&" backgrounding), so Brick
+	// can wait for it to actually terminate - and thus release the camera - on
+	// stop. No QObject parent: start/stop may run on the script thread while
+	// Brick lives on the GUI thread.
+	auto streamer = QSharedPointer<Translation::StreamerProcess>::create();
 
 	QLOG_INFO() << "Brick::startVideoTranslation: launching mjpg-streamer port=" << port
-	            << "isUsb=" << isUsb << "detached=" << detached << "command=" << command;
+	            << "isUsb=" << isUsb << "detached=" << detached << "script=" << script;
 
-	if (mHardwareAbstraction->systemConsole().system(command) != 0) {
+	if (!streamer->start(script, port, device)) {
 		QLOG_ERROR() << "Failed to start mjpg-streamer for port" << port;
+		return;
 	}
 
-	mTranslations.insert(port, {script, detached, isUsb});
+	mTranslations.insert(port, {script, detached, isUsb, streamer});
 }
 
 void Brick::stopVideoTranslation(const QString &port)
@@ -386,16 +397,52 @@ void Brick::stopVideoTranslationInternal(const QString &port, bool keepCamera)
 
 	// Symmetric to the legacy codegen
 	// (mjpg-streamer stop && mjpg-encoder stop): stop the streamer process
-	// first, then the DSP encoder feeding it.
-	if (mHardwareAbstraction->systemConsole().system(translation.streamerScript + " stop " + port) != 0) {
-		QLOG_ERROR() << "Failed to stop mjpg-streamer for port" << port;
+	// first, then the DSP encoder feeding it. The process is owned by Brick, so
+	// stop() blocks until it exits and releases the camera.
+	if (translation.streamerProcess) {
+		translation.streamerProcess->stop();
 	}
 
-	if (!translation.isUsb && mVideoSensorManager) {
+	if (mVideoSensorManager) {
 		mVideoSensorManager->stopTranslation(port, keepCamera);
 	}
 
 	mTranslations.erase(it);
+}
+
+Brick::Translation::StreamerProcess::~StreamerProcess()
+{
+	stop();
+}
+
+bool Brick::Translation::StreamerProcess::start(const QString &script, const QString &port, const QString &device)
+{
+	mProcess.reset(new QProcess());
+	mProcess->setProgram(script);
+	mProcess->setArguments({QStringLiteral("start"), port, device});
+	mProcess->start();
+	return mProcess->waitForStarted();
+}
+
+void Brick::Translation::StreamerProcess::stop()
+{
+	if (!mProcess)
+		return;
+
+	if (mProcess->state() != QProcess::NotRunning) {
+		// terminate() sends SIGTERM and waitForFinished() blocks on waitpid()
+		// until the process actually exits - no busy-waiting. mjpg_streamer's
+		// signal handler closes the V4L2 device, so the camera is released only
+		// after this returns. Escalate to SIGKILL if it misbehaves.
+		mProcess->terminate();
+		if (!mProcess->waitForFinished(5000)) {
+			QLOG_WARN() << "Brick: mjpg-streamer did not exit after SIGTERM, killing";
+			mProcess->kill();
+			mProcess->waitForFinished(1000);
+		}
+	}
+
+	mProcess.reset();
 }
 
 void Brick::stopOrphanedStreamers()
@@ -498,8 +545,9 @@ void Brick::stop()
 		// Only the streamer process is stopped here; the DSP encoders and the
 		// cameras are torn down by VideoSensorManager::stop()/clear() below.
 		for (auto &&port : toStop) {
-			if (mHardwareAbstraction->systemConsole().system(mTranslations.value(port).streamerScript + " stop " + port) != 0) {
-				QLOG_ERROR() << "Failed to stop mjpg-streamer for port" << port;
+			auto &translation = mTranslations[port];
+			if (translation.streamerProcess) {
+				translation.streamerProcess->stop();
 			}
 			mTranslations.remove(port);
 		}

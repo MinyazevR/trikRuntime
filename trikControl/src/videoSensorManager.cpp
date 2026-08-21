@@ -180,7 +180,7 @@ void VideoSensorManager::onAcquired(const QString &port, bool ok)
 	if (it == mPendingActivations.end())
 		return;
 
-	const PendingActivation activation = it.value();
+	const auto &activation = it.value();
 	mPendingActivations.erase(it);
 
 	if (!ok) {
@@ -262,7 +262,7 @@ void VideoSensorManager::create(const QString &port, const QString &deviceClass)
 	createSensor(port, deviceClass);
 }
 
-void VideoSensorManager::stop(int flags)
+void VideoSensorManager::stop()
 {
 	QLOG_INFO() << "VideoSensorManager::stop: called, activePorts=" << mActivePorts.size()
 	            << "pendingActivations=" << mPendingActivations.size();
@@ -279,27 +279,17 @@ void VideoSensorManager::stop(int flags)
 	}
 	mPendingActivations.clear();
 
-	if (flags & StopStream) {
-		// Drop the push subscription on every held camera but keep it acquired;
-		// the CameraManager parks the stream and pull subscribers can still use
-		// the device.
-		for (const auto &port : mActivePorts) {
-			if (mDetachedPorts.contains(port)) continue;
-			mCameraManager->unsubscribe(port, this);
+	// Stop and release every held camera except detached ports.
+	for (auto it = mActivePorts.begin(); it != mActivePorts.end();) {
+		if (mDetachedPorts.contains(*it)) {
+			++it;
+			continue;
 		}
-		QLOG_INFO() << "VideoSensorManager::stop: streamed off (cameras kept)";
-	} else if (flags & StopAll) {
-		for (auto it = mActivePorts.begin(); it != mActivePorts.end();) {
-			if (mDetachedPorts.contains(*it)) {
-				++it;
-				continue;
-			}
-			mCameraManager->unsubscribe(*it, this);
-			mCameraManager->release(*it);
-			it = mActivePorts.erase(it);
-		}
-		QLOG_INFO() << "VideoSensorManager::stop: active ports released";
+		mCameraManager->unsubscribe(*it, this);
+		mCameraManager->release(*it);
+		it = mActivePorts.erase(it);
 	}
+	QLOG_INFO() << "VideoSensorManager::stop: active ports released";
 }
 
 void VideoSensorManager::releasePort(const QString &port)
