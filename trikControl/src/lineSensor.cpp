@@ -107,12 +107,6 @@ void LineSensor::onResult(const trikDsp::OutArgs &result)
 			QWriteLocker locker(&mDetectParametersLock);
 			mDetectParameters = toDetectParameters(result.detected);
 		}
-		QLOG_DEBUG() << "LineSensor::onResult: re-activating with params hue["
-		             << m.inArgs().params.hue.from << "," << m.inArgs().params.hue.to
-		             << "] sat[" << m.inArgs().params.saturation.from << ","
-		             << m.inArgs().params.saturation.to << "] val["
-		             << m.inArgs().params.value.from << ","
-		             << m.inArgs().params.value.to << "]";
 		Q_EMIT activateRequested(m.inArgs(), m.videoOut(), false);
 	}
 }

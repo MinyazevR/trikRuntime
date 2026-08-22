@@ -117,13 +117,12 @@ void DspServer::processFrameData(const QString &sourceId)
 			d->consumeAutoDetect();
 		}
 
-		QLOG_INFO() << "ok" << ok << needVideo << videoFrame.data << d->mFbOutput <<  d->mFbOutput->isOpen();
 		if (ok && needVideo && videoFrame.data && d->mFbOutput && d->mFbOutput->isOpen()) {
 			d->mFbOutput->writeFrame(static_cast<const uint8_t *>(videoFrame.data));
 		} else if (needVideo) {
-			QLOG_WARN() << "DspServer: video display skipped (ok=" << ok
-			            << "data=" << (videoFrame.data != nullptr)
-			            << "fbOpen=" << (d->mFbOutput && d->mFbOutput->isOpen()) << ")";
+			// QLOG_WARN() << "DspServer: video display skipped (ok=" << ok
+			    //        << "data=" << (videoFrame.data != nullptr)
+			      //      << "fbOpen=" << (d->mFbOutput && d->mFbOutput->isOpen()) << ")";
 		}
 	} else {
 		QLOG_DEBUG() << "DspServer: dropping frame from inactive source" << sourceId

@@ -310,15 +310,6 @@ bool DspServer::Impl::step(const InArgs &in, OutArgs &out)
 	}
 
 	out = fromDspOutArgs(reinterpret_cast<struct trik_res_step_msg *>(res)->out_args);
-
-	if (in.autoDetect) {
-		QLOG_DEBUG() << "DspServer::step: autoDetect result hue[" << out.detected.hue.from
-		             << "," << out.detected.hue.to << "] sat["
-		             << out.detected.saturation.from << ","
-		             << out.detected.saturation.to << "] val["
-		             << out.detected.value.from << "," << out.detected.value.to << "]";
-	}
-
 	freeMessage(res);
 	return true;
 }

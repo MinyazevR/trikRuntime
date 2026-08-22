@@ -93,7 +93,7 @@ void VideoSensorManager::createSensor(const QString &port, const QString &device
 	// its signal wiring is intact, so there is nothing to do.
 	if (deviceClass == QStringLiteral("lineSensor")) {
 		if (mLineSensors.contains(port)) {
-			QLOG_INFO() << "VideoSensorManager: lineSensor on port" << port << "already created";
+			// QLOG_INFO() << "VideoSensorManager: lineSensor on port" << port << "already created";
 			return;
 		}
 		auto *s = new LineSensor(port, mConfigurer);
@@ -106,7 +106,7 @@ void VideoSensorManager::createSensor(const QString &port, const QString &device
 		mLineSensors.insert(port, s);
 	} else if (deviceClass == QStringLiteral("objectSensor")) {
 		if (mObjectSensors.contains(port)) {
-			QLOG_INFO() << "VideoSensorManager: objectSensor on port" << port << "already created";
+			// QLOG_INFO() << "VideoSensorManager: objectSensor on port" << port << "already created";
 			return;
 		}
 		auto *s = new ObjectSensor(port, mConfigurer);
@@ -119,7 +119,7 @@ void VideoSensorManager::createSensor(const QString &port, const QString &device
 		mObjectSensors.insert(port, s);
 	} else if (deviceClass == QStringLiteral("colorSensor")) {
 		if (mColorSensors.contains(port)) {
-			QLOG_INFO() << "VideoSensorManager: colorSensor on port" << port << "already created";
+			// QLOG_INFO() << "VideoSensorManager: colorSensor on port" << port << "already created";
 			return;
 		}
 		auto *s = new ColorSensor(port, mConfigurer);
@@ -132,7 +132,7 @@ void VideoSensorManager::createSensor(const QString &port, const QString &device
 		mColorSensors.insert(port, s);
 	} else if (deviceClass == QStringLiteral("jpegEncoderSensor")) {
 		if (mJpegEncoders.contains(port)) {
-			QLOG_INFO() << "VideoSensorManager: jpegEncoderSensor on port" << port << "already created";
+			// QLOG_INFO() << "VideoSensorManager: jpegEncoderSensor on port" << port << "already created";
 			return;
 		}
 		auto *s = new JpegEncoderSensor(port, mConfigurer, mHardwareAbstractionInterface);
@@ -180,7 +180,7 @@ void VideoSensorManager::onAcquired(const QString &port, bool ok)
 	if (it == mPendingActivations.end())
 		return;
 
-	const auto &activation = it.value();
+	const auto activation = it.value();
 	mPendingActivations.erase(it);
 
 	if (!ok) {
