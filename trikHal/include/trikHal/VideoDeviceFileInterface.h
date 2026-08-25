@@ -53,6 +53,17 @@ public:
 	virtual uint32_t actualFourcc() const = 0;
 	virtual uint32_t bytesPerLine() const = 0;
 
+	/// Configure the device to use a caller-managed buffer (USERPTR mode)
+	/// instead of driver-allocated MMAP buffers.  Must be called before
+	/// open().  The buffer must be physically contiguous and stay valid for
+	/// the entire lifetime of the device.  Pass nullptr to use the default
+	/// MMAP mode.  The default implementation is a no-op (MMAP only).
+	virtual void setUserPtrBuffer(void *data, size_t size)
+	{
+		Q_UNUSED(data);
+		Q_UNUSED(size);
+	}
+
 Q_SIGNALS:
 	void frameReady(const uint8_t *data, size_t size);
 };

@@ -92,6 +92,16 @@ void DspServer::copyFrame(const uint8_t *data, size_t size)
 	memcpy(d->inBufferStart(), data, std::min(size, d->inBufferLen()));
 }
 
+uint8_t *DspServer::inBufferStart() const
+{
+	return static_cast<uint8_t *>(d->inBufferStart());
+}
+
+size_t DspServer::inBufferLen() const
+{
+	return d->inBufferLen();
+}
+
 void DspServer::processFrameData(const QString &sourceId)
 {
 	OutArgs out{};

@@ -162,7 +162,7 @@ void VideoSensorManager::activateForPort(const QString &port, trikDsp::Algorithm
 		// there is nothing to do.
 		if (canOpen) {
 			mPendingActivations[port] = {algo, args, videoOut};
-			mCameraManager->acquire(port);
+			mCameraManager->acquire(port, mDspServer->inBufferStart(), mDspServer->inBufferLen());
 		}
 		return;
 	}
@@ -200,10 +200,13 @@ void VideoSensorManager::onAcquired(const QString &port, bool ok)
 void VideoSensorManager::subscribeFrames(const QString &port)
 {
 	mCameraManager->subscribe(port, this, [this, port](const uint8_t *data, size_t size) {
-		// Lightweight callback: copy the frame into the DSP shared buffer,
-		// then queue processing on the DspServer thread. The data pointer is
-		// zero-copy and valid only within this callback.
-		mDspServer->copyFrame(data, size);
+		// When USERPTR is active (VPIF DMA'd straight into the DSP carveout)
+		// the frame is already in the DSP input buffer — skip the memcpy.
+		// For MMAP fallback and stub builds the copy still runs.
+		const auto *dspBuf = mDspServer->inBufferStart();
+		if (dspBuf && data != dspBuf) {
+			mDspServer->copyFrame(data, size);
+		}
 		QMetaObject::invokeMethod(mDspServer.data(), [this, port]() {
 			mDspServer->processFrameData(port);
 		}, Qt::QueuedConnection);

@@ -119,15 +119,18 @@ CameraManager::~CameraManager()
 	mThread->wait();
 }
 
-void CameraManager::acquire(const QString &port)
+void CameraManager::acquire(const QString &port, void *userPtrData, size_t userPtrSize)
 {
-	runAsync([this, port]() {
+	runAsync([this, port, userPtrData, userPtrSize]() {
 		bool ok = false;
 		{
 			QWriteLocker lock(&mLock);
 			auto it = mDevices.find(port);
 			if (it != mDevices.end() && it->second.ready) {
-				// Open with the format recorded in the config.
+				// Store the USERPTR address before opening, so the device
+				// can be configured in openDeviceLocked().
+				it->second.userPtrData = userPtrData;
+				it->second.userPtrSize = userPtrSize;
 				ok = openDeviceLocked(port, it->second);
 			} else {
 				QLOG_ERROR() << "CameraManager: port" << port << "is not available";
@@ -162,6 +165,7 @@ bool CameraManager::openDeviceLocked(const QString &port, Entry &entry)
 		std::unique_ptr<trikHal::VideoDeviceFileInterface> dev(
 			mHal.createVideoDeviceFile(entry.devFile, entry.w, entry.h,
 			                           entry.fmt, !isVideoPort));
+
 		if (!dev->open() || !dev->startStreaming()) {
 			QLOG_ERROR() << "CameraManager: failed to open" << entry.devFile;
 			return false;

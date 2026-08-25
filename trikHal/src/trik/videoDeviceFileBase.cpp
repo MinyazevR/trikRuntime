@@ -161,6 +161,9 @@ void VideoDeviceFileBase::close()
 	mCurrentData = nullptr;
 	mCurrentSize = 0;
 	mCurrentBufIdx = -1;
+	mUseUserPtr = false;
+	mUserPtrData = nullptr;
+	mUserPtrSize = 0;
 
 	QLOG_INFO() << "VideoDeviceFileBase:" << mPath << "closed";
 }
@@ -238,8 +241,15 @@ void VideoDeviceFileBase::release()
 
 	v4l2_buffer buf = {};
 	buf.type = V4L2_BUF_TYPE_VIDEO_CAPTURE;
-	buf.memory = V4L2_MEMORY_MMAP;
 	buf.index = mCurrentBufIdx;
+
+	if (mUseUserPtr) {
+		buf.memory = V4L2_MEMORY_USERPTR;
+		buf.m.userptr = reinterpret_cast<unsigned long>(mMmapBufs[mCurrentBufIdx].data);
+		buf.length = mMmapBufs[mCurrentBufIdx].size;
+	} else {
+		buf.memory = V4L2_MEMORY_MMAP;
+	}
 
 	if (ioctl(mFd, VIDIOC_QBUF, &buf) < 0) {
 		QLOG_ERROR() << "VideoDeviceFileBase: QBUF failed:" << strerror(errno);
@@ -263,7 +273,7 @@ void VideoDeviceFileBase::onActivated(int fd)
 
 	v4l2_buffer buf = {};
 	buf.type = V4L2_BUF_TYPE_VIDEO_CAPTURE;
-	buf.memory = V4L2_MEMORY_MMAP;
+	buf.memory = mUseUserPtr ? V4L2_MEMORY_USERPTR : V4L2_MEMORY_MMAP;
 
 	if (ioctl(mFd, VIDIOC_DQBUF, &buf) < 0) {
 		if (errno != EAGAIN) {
@@ -272,12 +282,16 @@ void VideoDeviceFileBase::onActivated(int fd)
 		return;
 	}
 
-	if (buf.index >= static_cast<decltype(buf.index)>(mMmapBufs.size())) {
-		QLOG_ERROR() << "VideoDeviceFileBase: invalid buffer index" << buf.index;
-		return;
+	if (mUseUserPtr) {
+		mCurrentData = reinterpret_cast<const uint8_t *>(buf.m.userptr);
+	} else {
+		if (buf.index >= static_cast<decltype(buf.index)>(mMmapBufs.size())) {
+			QLOG_ERROR() << "VideoDeviceFileBase: invalid buffer index" << buf.index;
+			return;
+		}
+		mCurrentData = mMmapBufs[buf.index].data; // NOLINT(cppcoreguidelines-narrowing-conversions)
 	}
 
-	mCurrentData = mMmapBufs[buf.index].data; // NOLINT(cppcoreguidelines-narrowing-conversions)
 	mCurrentSize = buf.bytesused;
 	mCurrentBufIdx = buf.index; // NOLINT(cppcoreguidelines-narrowing-conversions)
 
@@ -291,12 +305,19 @@ void VideoDeviceFileBase::onActivated(int fd)
 // allocateBuffers / freeBuffers / startStreaming / stopStreaming
 // ---------------------------------------------------------------------------
 
+void VideoDeviceFileBase::setUserPtrBuffer(void *data, size_t size)
+{
+	mUserPtrData = data;
+	mUserPtrSize = size;
+	mUseUserPtr = (data != nullptr);
+}
+
 bool VideoDeviceFileBase::allocateBuffers()
 {
 	v4l2_requestbuffers req = {};
 	req.count = mBufferCount;
 	req.type = V4L2_BUF_TYPE_VIDEO_CAPTURE;
-	req.memory = V4L2_MEMORY_MMAP;
+	req.memory = mUseUserPtr ? V4L2_MEMORY_USERPTR : V4L2_MEMORY_MMAP;
 
 	if (ioctl(mFd, VIDIOC_REQBUFS, &req) < 0) {
 		QLOG_ERROR() << "VideoDeviceFileBase: REQBUFS failed:" << strerror(errno);
@@ -311,35 +332,51 @@ bool VideoDeviceFileBase::allocateBuffers()
 	const uint32_t count = std::min<uint32_t>(req.count, mBufferCount);
 	mMmapBufs.reserve(static_cast<int>(count));
 
-	for (uint32_t i = 0; i < count; ++i) {
-		v4l2_buffer buf = {};
-		buf.type = V4L2_BUF_TYPE_VIDEO_CAPTURE;
-		buf.memory = V4L2_MEMORY_MMAP;
-		buf.index = i;
-
-		if (ioctl(mFd, VIDIOC_QUERYBUF, &buf) < 0) {
-			QLOG_ERROR() << "VideoDeviceFileBase: QUERYBUF" << i << "failed:" << strerror(errno);
-			freeBuffers();
-			return false;
+	if (mUseUserPtr) {
+		// USERPTR: the caller owns the memory.  Every slot points to the
+		// same DSP buffer, but at most one is queued at a time, so the VPIF
+		// DMA engine never races with DSP processing.
+		for (uint32_t i = 0; i < count; ++i) {
+			mMmapBufs.push_back({static_cast<uint8_t *>(mUserPtrData), mUserPtrSize});
 		}
+	} else {
+		for (uint32_t i = 0; i < count; ++i) {
+			v4l2_buffer buf = {};
+			buf.type = V4L2_BUF_TYPE_VIDEO_CAPTURE;
+			buf.memory = V4L2_MEMORY_MMAP;
+			buf.index = i;
 
-		auto *map = mmap(nullptr, buf.length, PROT_READ | PROT_WRITE,
-		                 MAP_SHARED, mFd, buf.m.offset);
-		if (map == MAP_FAILED) {
-			QLOG_ERROR() << "VideoDeviceFileBase: mmap" << i << "failed:" << strerror(errno);
-			freeBuffers();
-			return false;
+			if (ioctl(mFd, VIDIOC_QUERYBUF, &buf) < 0) {
+				QLOG_ERROR() << "VideoDeviceFileBase: QUERYBUF" << i << "failed:" << strerror(errno);
+				freeBuffers();
+				return false;
+			}
+
+			auto *map = mmap(nullptr, buf.length, PROT_READ | PROT_WRITE,
+			                 MAP_SHARED, mFd, buf.m.offset);
+			if (map == MAP_FAILED) {
+				QLOG_ERROR() << "VideoDeviceFileBase: mmap" << i << "failed:" << strerror(errno);
+				freeBuffers();
+				return false;
+			}
+
+			mMmapBufs.push_back({static_cast<uint8_t *>(map), buf.length});
 		}
-
-		mMmapBufs.push_back({static_cast<uint8_t *>(map), buf.length});
 	}
 
-	QLOG_INFO() << "VideoDeviceFileBase:" << mMmapBufs.size() << "buffers allocated";
+	QLOG_INFO() << "VideoDeviceFileBase:" << mMmapBufs.size() << "buffers allocated"
+	            << (mUseUserPtr ? "(USERPTR)" : "(MMAP)");
 	return true;
 }
 
 void VideoDeviceFileBase::freeBuffers()
 {
+	if (mUseUserPtr) {
+		// Caller owns the memory — just drop the pointers.
+		mMmapBufs.clear();
+		return;
+	}
+
 	for (auto &buf : mMmapBufs) {
 		if (buf.data != nullptr && buf.data != MAP_FAILED)
 			munmap(buf.data, buf.size);
@@ -349,11 +386,23 @@ void VideoDeviceFileBase::freeBuffers()
 
 bool VideoDeviceFileBase::startStreaming()
 {
-	for (uint32_t i = 0; i < static_cast<uint32_t>(mMmapBufs.size()); ++i) {
+	// USERPTR: queue only the first buffer so the VPIF DMA engine has exactly
+	// one target.  After DQBUF the driver's ready queue is empty — hardware
+	// cannot overwrite the frame while the DSP is reading it.
+	const uint32_t count = mUseUserPtr ? 1u : static_cast<uint32_t>(mMmapBufs.size());
+
+	for (uint32_t i = 0; i < count; ++i) {
 		v4l2_buffer buf = {};
 		buf.type = V4L2_BUF_TYPE_VIDEO_CAPTURE;
-		buf.memory = V4L2_MEMORY_MMAP;
 		buf.index = i;
+
+		if (mUseUserPtr) {
+			buf.memory = V4L2_MEMORY_USERPTR;
+			buf.m.userptr = reinterpret_cast<unsigned long>(mMmapBufs[i].data);
+			buf.length = mMmapBufs[i].size;
+		} else {
+			buf.memory = V4L2_MEMORY_MMAP;
+		}
 
 		if (ioctl(mFd, VIDIOC_QBUF, &buf) < 0) {
 			QLOG_ERROR() << "VideoDeviceFileBase: QBUF" << i << "failed:" << strerror(errno);

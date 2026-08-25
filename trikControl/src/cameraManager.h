@@ -126,7 +126,14 @@ public:
 	/// On the first acquisition the device is opened and streaming is started
 	/// with the port's static format; on subsequent ones only the refcount is
 	/// incremented. Asynchronous: the outcome is reported via acquired().
-	void acquire(const QString &port);
+	///
+	/// When @p userPtrData is non-null the V4L2 device is configured in
+	/// USERPTR mode and the VPIF DMA engine writes frames directly into the
+	/// caller's buffer (e.g. a DSP carveout mapped through /dev/mem),
+	/// eliminating the per-frame memcpy into the DSP input buffer.
+	void acquire(const QString &port,
+	             void *userPtrData = nullptr,
+	             size_t userPtrSize = 0);
 
 	/// Whether @p port is currently held by at least one client.
 	bool isOccupied(const QString &port) const;
@@ -236,6 +243,8 @@ private:
 		int gpioNumber = 0;              ///< Reset GPIO (ov7670 analog ports only).
 		bool sensorInitialized = false;  ///< ov7670 already configured once, so
 		                                 ///< a re-open (hot-plug) skips init.
+		void *userPtrData = nullptr;     ///< USERPTR target address (DSP carveout).
+		size_t userPtrSize = 0;          ///< USERPTR buffer size.
 	};
 
 	/// The single streaming (push) subscriber of a port: the receiver (for

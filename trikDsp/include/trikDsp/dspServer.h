@@ -117,6 +117,15 @@ public:
 	/// resultReady, so the shared buffer is never accessed concurrently.
 	void copyFrame(const uint8_t *data, size_t size);
 
+	/// Start of the DSP shared input buffer (mmap'd via /dev/mem).  Returns
+	/// nullptr when the DSP server is not initialised (e.g. stub build).
+	/// The caller may use the address as a V4L2 USERPTR target so the VPIF
+	/// DMA engine writes frames directly into DSP memory.
+	uint8_t *inBufferStart() const;
+
+	/// Size of the DSP shared input buffer in bytes.
+	size_t inBufferLen() const;
+
 	/// Process the frame previously copied by copyFrame().
 	/// MUST be called from the DspServer thread (use invokeMethod).
 	///
