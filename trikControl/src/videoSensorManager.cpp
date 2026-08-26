@@ -55,6 +55,13 @@ VideoSensorManager::VideoSensorManager(const trikKernel::Configurer &configurer,
 	// reports completion via this queued signal.
 	connect(mCameraManager, &CameraManager::acquired, this, &VideoSensorManager::onAcquired);
 
+	// init() is intentionally synchronous here: the DSP shared input buffer
+	// must be mmap'd before any sensor activation, because activateForPort()
+	// reads inBufferStart() and hands it to CameraManager::acquire() as the
+	// USERPTR target. Making this async would let an early acquire() fall back
+	// to MMAP (no zero-copy) until init completes. The block runs on the GUI
+	// thread, but init() spins a local QEventLoop, so the UI stays responsive
+	// during the (worst-case 15s) wait.
 	mDspServer->init();
 	if (!mState.isReady()) return;
 
@@ -227,8 +234,12 @@ void VideoSensorManager::activateDsp(const QString &port, trikDsp::Algorithm alg
 
 void VideoSensorManager::handleStopRequested(const QString &port, int flags)
 {
-	mDspServer->deactivate();
+	// The DSP is single-channel: deactivate it only when the port being stopped
+	// actually owns the active channel. Otherwise stopping a background sensor
+	// would silently kill the channel of the sensor currently streaming on
+	// another port (and leave mActiveDspPort pointing at a dead channel).
 	if (mActiveDspPort == port) {
+		mDspServer->deactivate();
 		mActiveDspPort.clear();
 	}
 

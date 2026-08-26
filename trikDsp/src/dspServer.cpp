@@ -48,6 +48,11 @@ DspServer::DspServer(uint16_t rprocId, QObject *parent)
 
 DspServer::~DspServer()
 {
+	// Tear down the IPC stack while the LAD daemon is still alive: the
+	// MessageQ teardown blocks on MessageQ_FOREVER and needs the daemon to
+	// respond, so killing LAD first could hang forever.
+	d.reset();
+
 	mLadProcess.terminate();
 	if (!mLadProcess.waitForFinished(3000)) {
 		QLOG_ERROR() << "DspServer: LAD daemon did not finish, killing";
@@ -89,7 +94,13 @@ void DspServer::copyFrame(const uint8_t *data, size_t size)
 {
 	// Plain memcpy into the DSP shared input buffer. See the header comment for
 	// the serialization contract with processFrameData().
-	memcpy(d->inBufferStart(), data, std::min(size, d->inBufferLen()));
+	auto *dst = d->inBufferStart();
+	if (!dst) {
+		QLOG_WARN() << "DspServer: copyFrame called before init (no input buffer)";
+		return;
+	}
+
+	memcpy(dst, data, std::min(size, d->inBufferLen()));
 }
 
 uint8_t *DspServer::inBufferStart() const
@@ -204,7 +215,7 @@ void DspServer::init()
 
 void DspServer::setFbOutput(trikHal::FbOutputInterface *fb)
 {
-	d->mFbOutput = fb;
+	d->mFbOutput.reset(fb);
 }
 
 }

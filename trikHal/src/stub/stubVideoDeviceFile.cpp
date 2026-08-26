@@ -27,7 +27,6 @@ StubVideoDeviceFile::StubVideoDeviceFile(const QString &fileName) // NOLINT(mode
 bool StubVideoDeviceFile::open()
 {
 	QLOG_INFO() << "StubVideoDeviceFile: open" << mFileName;
-	mOpened = true;
 	return true;
 }
 
@@ -50,21 +49,8 @@ void StubVideoDeviceFile::stopStreaming()
 void StubVideoDeviceFile::close()
 {
 	QLOG_INFO() << "StubVideoDeviceFile: close" << mFileName;
-	mOpened = false;
-}
-
-bool StubVideoDeviceFile::capture(const uint8_t *&data, size_t &size)
-{
-	Q_UNUSED(data)
-	Q_UNUSED(size)
-	return false;
 }
 
 void StubVideoDeviceFile::release()
 {
-}
-
-bool StubVideoDeviceFile::isOpen() const
-{
-	return mOpened;
 }

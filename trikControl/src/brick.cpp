@@ -279,7 +279,6 @@ void Brick::startVideoTranslation(const QString &port, const QVariant &params) /
 	QLOG_INFO() << "Brick::startVideoTranslation: port" << port;
 
 	const auto &paramsMap = params.toMap();
-
 	const auto isUsb = port.startsWith(QStringLiteral("usb-camera"));
 
 	if (!isUsb && !port.startsWith(QStringLiteral("video"))) {
@@ -299,7 +298,7 @@ void Brick::startVideoTranslation(const QString &port, const QVariant &params) /
 				superseded << it.key();
 			}
 		}
-		for (const auto &other : superseded) {
+		for (auto &&other : superseded) {
 			stopVideoTranslationInternal(other, /*keepCamera=*/false);
 		}
 	}
@@ -342,7 +341,7 @@ void Brick::startVideoTranslation(const QString &port, const QVariant &params) /
 
 	// Run the mjpg-streamer launcher script ("start <port> [device]"). Its path
 	// is recorded in the system config per videoDevice port (see CameraManager).
-	const QString script = mCameraManager ? mCameraManager->streamerScript(port) : QString();
+	const auto &script = mCameraManager ? mCameraManager->streamerScript(port) : QString();
 
 	if (script.isEmpty()) {
 		QLOG_ERROR() << "Brick::startVideoTranslation: no mjpg-streamer script configured for port" << port;
@@ -415,13 +414,13 @@ void Brick::stopOrphanedStreamers()
 	// config. Running "stop" per port is idempotent: with no daemon it is a
 	// no-op, so on a clean start this loop does nothing. It only matters after
 	// a crash, where ~Brick() never ran and the daemons are still alive.
-	for (const QString &port : mConfigurer.ports()) {
+	for (auto &&port : mConfigurer.ports()) {
 		if (mConfigurer.deviceClass(port) != QStringLiteral("videoDevice")) {
 			continue;
 		}
 
 		QString defaultScript;
-		const QString script = mConfigurer.attributeByPort(port, "mjpgStreamerScript", &defaultScript);
+		const auto &script = mConfigurer.attributeByPort(port, "mjpgStreamerScript", &defaultScript);
 		if (script.isEmpty()) {
 			continue;
 		}

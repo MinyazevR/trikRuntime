@@ -44,25 +44,14 @@ public:
 	/// Pretends to close the device.
 	void close() override;
 
-	/// Never returns a frame.
-	bool capture(const uint8_t *&data, size_t &size) override;
-
 	/// No-op buffer release.
 	void release() override;
 
-	/// Whether the stub considers itself open.
-	bool isOpen() const override;
-
-	uint32_t actualWidth() const override { return 0; }
-	uint32_t actualHeight() const override { return 0; }
 	uint32_t actualFourcc() const override { return 0; }
 	uint32_t bytesPerLine() const override { return 0; }
 
-	QString id() const override { return mFileName; }
-
 private:
 	QString mFileName;
-	bool mOpened = false;
 };
 
 } // namespace stub

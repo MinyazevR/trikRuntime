@@ -16,6 +16,8 @@
 #include "../dspServer_p.h"
 #include "../dspConverters.h"
 
+#include <trikHal/fbOutputInterface.h>
+
 #include <QsLog.h>
 
 namespace {
@@ -87,7 +89,7 @@ void DspServer::processFrameData(const QString &sourceId)
 
 void DspServer::setFbOutput(trikHal::FbOutputInterface *fb)
 {
-	Q_UNUSED(fb)
+	d->mFbOutput.reset(fb);
 	QLOG_INFO() << "DspServer: setFbOutput (stub)";
 }
 

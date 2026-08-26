@@ -79,20 +79,10 @@ CameraDevice::~CameraDevice()
 }
 
 QVector<uint8_t> CameraDevice::getPhoto() {
-	if (!mCameraImpl) return {};
-	QMutexLocker lock(&mCameraMutex);
-
-	// The capture (blocking V4L2 read + YUV->RGB + JPEG encode, or the async
-	// QCamera flow) runs on a persistent worker thread so the caller's event
-	// loop stays responsive and no thread is spawned per photo.
-	if (!mCameraThread) {
-		mCameraThread.reset(new QThread);
-		mCameraThread->setObjectName("CameraDevice::getPhoto");
-		mCameraWorker.reset(new QObject);
-		mCameraWorker->setObjectName("CameraDevice::getPhotoWorker");
-		mCameraWorker->moveToThread(mCameraThread.data());
-		mCameraThread->start();
+	if (!mCameraImpl) {
+		return {};
 	}
+	QMutexLocker lock(&mCameraMutex);
 
 	QVector<uint8_t> photo;
 	QEventLoop l;

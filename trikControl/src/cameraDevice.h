@@ -44,9 +44,9 @@ public:
 private:
 	QMutex mCameraMutex;
 	QScopedPointer<CameraImplementationInterface> mCameraImpl;
-	/// Persistent worker thread the photo capture runs on. Created lazily on the
-	/// first getPhoto() and reused afterwards, so a thread is not spawned per
-	/// photo.
+	/// Persistent worker thread the photo capture runs on. Created once in the
+	/// constructor and reused for every getPhoto(), so a thread is not spawned
+	/// per photo.
 	QScopedPointer<QThread> mCameraThread;
 	/// Context QObject living on mCameraThread, used as the target for queued
 	/// functor invocations (a plain QObject is enough).

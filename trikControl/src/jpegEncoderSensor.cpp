@@ -31,7 +31,7 @@ JpegEncoderSensor::JpegEncoderSensor(const QString &port, const trikKernel::Conf
 	// Each camera port streams through its own FIFO (mjpg-streamer's
 	// input_fifo.so reads "/run/mjpg-encoder-<port>.out.fifo"); it may still be
 	// overridden per port in the config ("outputFile").
-	QString fifoName = QStringLiteral("/run/mjpg-encoder-%1.out.fifo").arg(port);
+	auto fifoName = QStringLiteral("/run/mjpg-encoder-%1.out.fifo").arg(port);
 	fifoName = configurer.attributeByPort(port, "outputFile", &fifoName);
 
 	mFifoWriter.reset(hardwareAbstraction.createOutputDeviceFile(fifoName));

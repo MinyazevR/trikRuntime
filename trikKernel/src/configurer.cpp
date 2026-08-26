@@ -155,9 +155,9 @@ QString Configurer::childAttributeByPort(const QString &port, const QString &chi
 
 	for (const auto &childDeviceType : mGroupsDevices.value(groupOwnerDeviceClassName)) {
 		const auto typeIt = mDeviceTypes.constFind(childDeviceType);
-		const QString childDeviceClassName = typeIt != mDeviceTypes.cend()
-				? typeIt->deviceClass
-				: childDeviceType;
+		const auto &childDeviceClassName = typeIt != mDeviceTypes.cend()
+							? typeIt->deviceClass
+							: childDeviceType;
 		if (childDeviceClassName == childDeviceClass) {
 			return attribute(port, childDeviceType, attributeName, defaultValue);
 		}
@@ -333,9 +333,8 @@ QList<QDomElement> Configurer::parseDeviceClassChildList(const QDomElement &elem
 			continue;
 		}
 
-		const auto deviceClassName = deviceClassNode.tagName();
-
-		const auto deviceTypeIt = mDeviceTypes.find(deviceClassName);
+		const auto &deviceClassName = deviceClassNode.tagName();
+		const auto &deviceTypeIt = mDeviceTypes.find(deviceClassName);
 
 		if (deviceTypeIt == mDeviceTypes.end()) {
 			const auto it = mDevices.find(deviceClassName);

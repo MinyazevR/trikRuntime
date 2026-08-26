@@ -26,8 +26,9 @@ ObjectSensor::ObjectSensor(const QString &port, const trikKernel::Configurer &co
 	mToleranceFactor = ConfigurerHelper::configureChildReal(
 	                       configurer, m.state(), port, "objectSensor", "toleranceFactor");
 
-	if (!m.state().isFailed())
+	if (!m.state().isFailed()) {
 		m.state().ready();
+	}
 }
 
 ObjectSensor::~ObjectSensor()

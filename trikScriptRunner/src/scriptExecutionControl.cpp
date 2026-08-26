@@ -159,16 +159,16 @@ bool ScriptExecutionControl::redirectLegacyMjpgStreaming(const QString &command)
 
 	if (command.contains(QStringLiteral("mjpg-encoder-ov7670 start"))) {
 		QVariantMap params;
-		const QRegularExpression qualRe(QStringLiteral("--jpeg-qual\\s+(\\d+)"));
-		const auto qualMatch = qualRe.match(command);
+		const static QRegularExpression qualRe(QStringLiteral("--jpeg-qual\\s+(\\d+)"));
+		const auto &qualMatch = qualRe.match(command);
 		if (qualMatch.hasMatch()) {
 			params.insert(QStringLiteral("jpeg-qual"), qualMatch.captured(1).toInt());
 		}
 
-		const QRegularExpression bwRe(QStringLiteral("--white-black\\s+(\\w+)"));
-		const auto bwMatch = bwRe.match(command);
+		const static QRegularExpression bwRe(QStringLiteral("--white-black\\s+(\\w+)"));
+		const auto &bwMatch = bwRe.match(command);
 		if (bwMatch.hasMatch()) {
-			const QString value = bwMatch.captured(1);
+			const auto &value = bwMatch.captured(1);
 			params.insert(QStringLiteral("white-black"),
 			              value == QStringLiteral("true") || value == QStringLiteral("1"));
 		}

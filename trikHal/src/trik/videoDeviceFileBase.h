@@ -60,21 +60,11 @@ public:
 	/// Releases every OS resource held by the device. Idempotent.
 	void close() override;
 
-	/// Returns the last dequeued frame, or false when none is pending.
-	bool capture(const uint8_t *&data, size_t &size) override;
-
 	/// Returns the current buffer to the driver (QBUF).
 	void release() override;
 
-	/// Whether the device file is currently open.
-	bool isOpen() const override;
-
-	uint32_t actualWidth() const override { return mWidth; }
-	uint32_t actualHeight() const override { return mHeight; }
 	uint32_t actualFourcc() const override { return mActualFourcc; }
 	uint32_t bytesPerLine() const override { return mLineLen; }
-
-	QString id() const override { return mPath; }
 
 protected:
 	/// Sets the capture format via VIDIOC_S_FMT. May be overridden to add extra
@@ -112,6 +102,7 @@ protected:
 	uint32_t mRequestedFourcc;
 	uint32_t mActualFourcc = 0;
 	uint32_t mLineLen = 0;
+	uint32_t mSizeImage = 0;
 	uint32_t mBufferCount;
 	bool mIsWebcam = false;
 	bool mExposureFixed = false;

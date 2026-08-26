@@ -15,6 +15,8 @@
 #include "../dspServer_p.h"
 #include "dspServer.h"
 
+#include <trikHal/fbOutputInterface.h>
+
 #include <QsLog.h>
 
 namespace trikDsp {

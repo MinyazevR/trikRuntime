@@ -28,8 +28,9 @@ LineSensor::LineSensor(const QString &port, const trikKernel::Configurer &config
 	mToleranceFactor = ConfigurerHelper::configureChildReal(
 	                       configurer, m.state(), port, "lineSensor", "toleranceFactor");
 
-	if (!m.state().isFailed())
+	if (!m.state().isFailed()) {
 		m.state().ready();
+	}
 }
 
 LineSensor::~LineSensor()

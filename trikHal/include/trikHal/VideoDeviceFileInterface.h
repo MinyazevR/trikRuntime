@@ -44,12 +44,7 @@ public:
 
 	virtual void stopStreaming() = 0;
 	virtual void close() = 0;
-	virtual bool capture(const uint8_t *&data, size_t &size) = 0;
 	virtual void release() = 0;
-	virtual bool isOpen() const = 0;
-	virtual QString id() const = 0;
-	virtual uint32_t actualWidth() const = 0;
-	virtual uint32_t actualHeight() const = 0;
 	virtual uint32_t actualFourcc() const = 0;
 	virtual uint32_t bytesPerLine() const = 0;
 

@@ -14,6 +14,8 @@
 
 #pragma once
 
+#include <QtCore/QScopedPointer>
+
 #include <trik/buffer.h>
 #include <trik/sensors/cv_algorithm.h>
 #include <trik/sensors/cv_algorithm_args.h>
@@ -189,8 +191,9 @@ public:
 	/// 	TI remoteproc ID of the DSP core (0 for OMAP-L138).
 	uint16_t rprocId = 0;
 
-	/// HAL framebuffer output (optional, set via setFbOutput).
-	class trikHal::FbOutputInterface *mFbOutput = nullptr;
+	/// HAL framebuffer output (optional, set via setFbOutput). Owned here: it is
+	/// created by the HAL (createFbOutput) with no parent and destroyed in ~Impl.
+	QScopedPointer<trikHal::FbOutputInterface> mFbOutput;
 
 private:
 	/// Send a MessageQ request and block until the DSP responds.

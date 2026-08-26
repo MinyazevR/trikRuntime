@@ -90,11 +90,11 @@ void ColorSensor::stop(int flags) // NOLINT(google-default-arguments)
 void ColorSensor::onResult(const trikDsp::OutArgs &result)
 {
 	QWriteLocker locker(&mReadingLock);
-	const int total = std::min(mM * mN, 9);
+	const auto total = std::min(mM * mN, 9);
 	for (int i = 0; i < total; ++i) {
-		const int row = i / mN;
-		const int col = i % mN;
-		const uint32_t c = result.colors[i];
+		const auto row = i / mN;
+		const auto col = i % mN;
+		const auto c = result.colors[i];
 		mReading[row][col] = {
 			static_cast<int>((c >> 16) & 0xFF),
 			static_cast<int>((c >> 8) & 0xFF),

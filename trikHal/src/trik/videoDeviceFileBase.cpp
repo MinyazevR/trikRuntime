@@ -50,13 +50,11 @@ VideoDeviceFileBase::~VideoDeviceFileBase()
 	close();
 }
 
-bool VideoDeviceFileBase::isOpen() const
-{
-	return mFd >= 0;
-}
-
 bool VideoDeviceFileBase::open()
 {
+	if (mFd >= 0)
+		return true;
+
 	mFd = ::open(qPrintable(mPath), O_RDWR | O_NONBLOCK | O_CLOEXEC);
 	if (mFd < 0) {
 		QLOG_ERROR() << "VideoDeviceFileBase: open" << mPath << "failed:" << strerror(errno);
@@ -164,13 +162,10 @@ void VideoDeviceFileBase::close()
 	mUseUserPtr = false;
 	mUserPtrData = nullptr;
 	mUserPtrSize = 0;
+	mExposureFixed = false;
 
 	QLOG_INFO() << "VideoDeviceFileBase:" << mPath << "closed";
 }
-
-// ---------------------------------------------------------------------------
-// setFormat / onFrameReady
-// ---------------------------------------------------------------------------
 
 bool VideoDeviceFileBase::setFormat()
 {
@@ -178,7 +173,7 @@ bool VideoDeviceFileBase::setFormat()
 	fmt.type = V4L2_BUF_TYPE_VIDEO_CAPTURE;
 	fmt.fmt.pix.width = mWidth;
 	fmt.fmt.pix.height = mHeight;
-	fmt.fmt.pix.pixelformat = mActualFourcc ? mActualFourcc : mRequestedFourcc;
+	fmt.fmt.pix.pixelformat = mRequestedFourcc;
 	fmt.fmt.pix.field = V4L2_FIELD_NONE;
 
 	QLOG_INFO() << "VideoDeviceFileBase:" << mPath << "requesting format" << Qt::hex
@@ -198,6 +193,7 @@ bool VideoDeviceFileBase::setFormat()
 	mWidth = fmt.fmt.pix.width;
 	mHeight = fmt.fmt.pix.height;
 	mLineLen = fmt.fmt.pix.bytesperline;
+	mSizeImage = fmt.fmt.pix.sizeimage;
 
 	QLOG_INFO() << "VideoDeviceFileBase:" << mPath << "negotiated format" << Qt::hex
 	            << mActualFourcc << Qt::dec << mWidth << 'x' << mHeight
@@ -205,26 +201,9 @@ bool VideoDeviceFileBase::setFormat()
 	return true;
 }
 
-// ---------------------------------------------------------------------------
-// onActivated  (QSocketNotifier slot)
-// ---------------------------------------------------------------------------
-
 void VideoDeviceFileBase::onFrameReady(const uint8_t *data, size_t size)
 {
 	emit frameReady(data, size);
-}
-
-// ---------------------------------------------------------------------------
-// capture / release
-// ---------------------------------------------------------------------------
-
-bool VideoDeviceFileBase::capture(const uint8_t *&data, size_t &size)
-{
-	if (!mCurrentData)
-		return false;
-	data = mCurrentData;
-	size = mCurrentSize;
-	return true;
 }
 
 void VideoDeviceFileBase::release()
@@ -263,10 +242,6 @@ void VideoDeviceFileBase::release()
 		mNotifier->setEnabled(true);
 }
 
-// ---------------------------------------------------------------------------
-// onActivated  (QSocketNotifier slot)
-// ---------------------------------------------------------------------------
-
 void VideoDeviceFileBase::onActivated(int fd)
 {
 	Q_UNUSED(fd);
@@ -289,21 +264,17 @@ void VideoDeviceFileBase::onActivated(int fd)
 			QLOG_ERROR() << "VideoDeviceFileBase: invalid buffer index" << buf.index;
 			return;
 		}
-		mCurrentData = mMmapBufs[buf.index].data; // NOLINT(cppcoreguidelines-narrowing-conversions)
+		mCurrentData = mMmapBufs[static_cast<int>(buf.index)].data;
 	}
 
 	mCurrentSize = buf.bytesused;
-	mCurrentBufIdx = buf.index; // NOLINT(cppcoreguidelines-narrowing-conversions)
+	mCurrentBufIdx = static_cast<int>(buf.index);
 
 	if (mNotifier)
 		mNotifier->setEnabled(false);
 
 	onFrameReady(mCurrentData, mCurrentSize);
 }
-
-// ---------------------------------------------------------------------------
-// allocateBuffers / freeBuffers / startStreaming / stopStreaming
-// ---------------------------------------------------------------------------
 
 void VideoDeviceFileBase::setUserPtrBuffer(void *data, size_t size)
 {
@@ -333,6 +304,15 @@ bool VideoDeviceFileBase::allocateBuffers()
 	mMmapBufs.reserve(static_cast<int>(count));
 
 	if (mUseUserPtr) {
+		// The VPIF DMA engine writes a full frame (negotiated sizeimage) into
+		// the caller's buffer on every capture. Reject a buffer smaller than
+		// one frame, otherwise the DMA would overrun the caller's memory.
+		if (mUserPtrSize < mSizeImage) {
+			QLOG_ERROR() << "VideoDeviceFileBase: USERPTR buffer too small, need"
+			             << mSizeImage << "have" << mUserPtrSize;
+			return false;
+		}
+
 		// USERPTR: the caller owns the memory.  Every slot points to the
 		// same DSP buffer, but at most one is queued at a time, so the VPIF
 		// DMA engine never races with DSP processing.
@@ -382,6 +362,18 @@ void VideoDeviceFileBase::freeBuffers()
 			munmap(buf.data, buf.size);
 	}
 	mMmapBufs.clear();
+
+	// Release the driver-side buffers too, so a close()/open() cycle (or a
+	// partial allocation failure) leaves the device with a clean request.
+	if (mFd >= 0) {
+		v4l2_requestbuffers req = {};
+		req.count = 0;
+		req.type = V4L2_BUF_TYPE_VIDEO_CAPTURE;
+		req.memory = V4L2_MEMORY_MMAP;
+		if (ioctl(mFd, VIDIOC_REQBUFS, &req) < 0) {
+			QLOG_WARN() << "VideoDeviceFileBase: REQBUFS(0) failed:" << strerror(errno);
+		}
+	}
 }
 
 bool VideoDeviceFileBase::startStreaming()
@@ -398,8 +390,9 @@ bool VideoDeviceFileBase::startStreaming()
 
 		if (mUseUserPtr) {
 			buf.memory = V4L2_MEMORY_USERPTR;
-			buf.m.userptr = reinterpret_cast<unsigned long>(mMmapBufs[i].data);
-			buf.length = mMmapBufs[i].size;
+			const auto &slot = mMmapBufs[static_cast<int>(i)];
+			buf.m.userptr = reinterpret_cast<unsigned long>(slot.data);
+			buf.length = slot.size;
 		} else {
 			buf.memory = V4L2_MEMORY_MMAP;
 		}

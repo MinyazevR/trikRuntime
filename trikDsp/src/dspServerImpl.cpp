@@ -15,6 +15,8 @@
 #include "dspServer_p.h"
 #include "dspConverters.h"
 
+#include <trikHal/fbOutputInterface.h>
+
 #include <algorithm>
 #include <array>
 #include <cerrno>
