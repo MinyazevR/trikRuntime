@@ -95,6 +95,7 @@ HEADERS += \
 	$$PWD/src/cameraManager.h \
 	$$PWD/src/soundSensorWorker.h \
 	$$PWD/src/tonePlayer.h \
+	$$PWD/src/translation.h \
 	$$PWD/src/vectorSensor.h \
 	$$PWD/src/exceptions/incorrectDeviceConfigurationException.h \
 	$$PWD/src/exceptions/incorrectStateChangeException.h \
@@ -154,6 +155,7 @@ SOURCES += \
 	$$PWD/src/soundSensor.cpp \
 	$$PWD/src/soundSensorWorker.cpp \
 	$$PWD/src/tonePlayer.cpp \
+	$$PWD/src/translation.cpp \
 	$$PWD/src/vectorSensor.cpp \
 	$$PWD/src/shapes/ellipse.cpp \
 	$$PWD/src/shapes/point.cpp \

@@ -21,7 +21,6 @@
 #endif
 
 #include <QtCore/QFileInfo>
-#include <QtCore/QProcess>
 #include <QtMultimedia/QCamera>
 #include <QtMultimedia/QCameraImageCapture>
 #include <QtMultimedia/QCameraInfo>
@@ -316,7 +315,7 @@ void Brick::startVideoTranslation(const QString &port, const QVariant &params) /
 		mVideoSensorManager->releasePort(port);
 	}
 
-	const auto detached = paramsMap.value(QStringLiteral("detached"), true).toBool();
+	const auto detached = paramsMap.value(QStringLiteral("detached"), false).toBool();
 
 	if (isUsb) {
 		// USB webcam: mjpg-streamer opens the device directly over UVC, so the
@@ -408,41 +407,6 @@ void Brick::stopVideoTranslationInternal(const QString &port, bool keepCamera)
 	}
 
 	mTranslations.erase(it);
-}
-
-Brick::Translation::StreamerProcess::~StreamerProcess()
-{
-	stop();
-}
-
-bool Brick::Translation::StreamerProcess::start(const QString &script, const QString &port, const QString &device)
-{
-	mProcess.reset(new QProcess());
-	mProcess->setProgram(script);
-	mProcess->setArguments({QStringLiteral("start"), port, device});
-	mProcess->start();
-	return mProcess->waitForStarted();
-}
-
-void Brick::Translation::StreamerProcess::stop()
-{
-	if (!mProcess)
-		return;
-
-	if (mProcess->state() != QProcess::NotRunning) {
-		// terminate() sends SIGTERM and waitForFinished() blocks on waitpid()
-		// until the process actually exits - no busy-waiting. mjpg_streamer's
-		// signal handler closes the V4L2 device, so the camera is released only
-		// after this returns. Escalate to SIGKILL if it misbehaves.
-		mProcess->terminate();
-		if (!mProcess->waitForFinished(5000)) {
-			QLOG_WARN() << "Brick: mjpg-streamer did not exit after SIGTERM, killing";
-			mProcess->kill();
-			mProcess->waitForFinished(1000);
-		}
-	}
-
-	mProcess.reset();
 }
 
 void Brick::stopOrphanedStreamers()

@@ -16,14 +16,12 @@
 
 #include <QtCore/QHash>
 #include <QtCore/QScopedPointer>
-#include <QtCore/QSharedPointer>
 
 #include <trikKernel/configurer.h>
 #include <trikKernel/differentOwnerPointer.h>
 #include <functional>
 #include "internalBrickInterface.h"
-
-class QProcess;
+#include "translation.h"
 
 namespace trikHal {
 class HardwareAbstractionInterface;
@@ -222,35 +220,6 @@ private:
 	QString mPlayWavFileCommand;
 	QString mPlayMp3FileCommand;
 	QString mMediaPath;
-
-	/// State of an active translation.
-	struct Translation {
-		QString streamerScript;
-		bool detached = false;
-		bool isUsb = false;
-
-		/// RAII owner of the mjpg_streamer process. QProcess has no QObject
-		/// parent because start/stop may be called from the script thread while
-		/// Brick lives on the GUI thread; this wrapper owns it and stops it
-		/// (terminate + waitForFinished) on destruction.
-		class StreamerProcess
-		{
-		public:
-			StreamerProcess() = default;
-			~StreamerProcess();
-
-			StreamerProcess(const StreamerProcess &) = delete;
-			StreamerProcess &operator=(const StreamerProcess &) = delete;
-
-			bool start(const QString &script, const QString &port, const QString &device);
-			void stop();
-
-		private:
-			QScopedPointer<QProcess> mProcess;
-		};
-
-		QSharedPointer<StreamerProcess> streamerProcess;  ///< Owns the mjpg_streamer process.
-	};
 
 	/// Active translations keyed by port.
 	QHash<QString, Translation> mTranslations;
