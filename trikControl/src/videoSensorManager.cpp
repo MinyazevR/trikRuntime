@@ -28,7 +28,25 @@
 
 namespace trikControl {
 
-namespace { constexpr uint16_t DSP_RPROC_ID = 1; }
+namespace {
+constexpr uint16_t DSP_RPROC_ID = 1;
+/// How often to report per-algorithm FPS (ms). Reporting every frame would
+/// flood the log, so the counters are flushed at this cadence instead.
+constexpr int FPS_LOG_INTERVAL_MS = 1000;
+
+const char *algorithmName(trikDsp::Algorithm algorithm)
+{
+	switch (algorithm) {
+	case trikDsp::Algorithm::Line: return "LineSensor";
+	case trikDsp::Algorithm::Object: return "ObjectSensor";
+	case trikDsp::Algorithm::Mxn: return "ColorSensor";
+	case trikDsp::Algorithm::Jpeg: return "JpegEncoder";
+	case trikDsp::Algorithm::Motion: return "Motion";
+	case trikDsp::Algorithm::EdgeLine: return "EdgeLine";
+	default: return "Unknown";
+	}
+}
+}
 
 VideoSensorManager::VideoSensorManager(const trikKernel::Configurer &configurer,
 				       const trikHal::HardwareAbstractionInterface &hardwareAbstraction,
@@ -422,6 +440,26 @@ void VideoSensorManager::onResult(const QString &sourceId, trikDsp::Algorithm al
 		break;
 	}
 	default: break;
+	}
+
+	recordFps(algorithm);
+}
+
+void VideoSensorManager::recordFps(trikDsp::Algorithm algorithm)
+{
+	auto &counter = mFpsCounters[algorithm];
+	if (!counter.timer.isValid()) {
+		counter.timer.start();
+	}
+	++counter.frames;
+
+	const auto elapsed = counter.timer.elapsed();
+	if (elapsed >= FPS_LOG_INTERVAL_MS) {
+		const double fps = counter.frames * 1000.0 / elapsed;
+		QLOG_INFO() << "VideoSensorManager: algorithm" << algorithmName(algorithm)
+		            << "fps =" << fps;
+		counter.timer.restart();
+		counter.frames = 0;
 	}
 }
 

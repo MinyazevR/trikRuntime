@@ -14,7 +14,9 @@
 
 #pragma once
 
+#include <QtCore/QElapsedTimer>
 #include <QtCore/QHash>
+#include <QtCore/QMap>
 #include <QtCore/QScopedPointer>
 #include <QtCore/QString>
 #include <QtCore/QThread>
@@ -150,6 +152,10 @@ private:
 	bool checkManagerState(const QString &message) const;
 	void destroyDsp();
 
+	/// Periodically logs the FPS of a DSP algorithm. Counts every result and
+	/// reports the measured rate once per interval, avoiding per-frame spam.
+	void recordFps(trikDsp::Algorithm algorithm);
+
 	const trikKernel::Configurer &mConfigurer;
 	const trikHal::HardwareAbstractionInterface &mHardwareAbstractionInterface;
 
@@ -181,6 +187,15 @@ private:
 	/// completion. The port is removed here when the acquire finishes (or is
 	/// cancelled by a stop).
 	QHash<QString, PendingActivation> mPendingActivations;
+
+	/// FPS measurement state for one DSP algorithm.
+	struct FpsCounter {
+		QElapsedTimer timer;
+		qint64 frames = 0;
+	};
+
+	/// Per-algorithm FPS counters, keyed by the DSP algorithm.
+	QMap<trikDsp::Algorithm, FpsCounter> mFpsCounters;
 
 	/// Sensor instances indexed by port.
 	QHash<QString, LineSensor*> mLineSensors;
