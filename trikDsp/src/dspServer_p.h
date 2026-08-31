@@ -16,7 +16,9 @@
 
 #include <QtCore/QScopedPointer>
 
+#ifdef Q_OS_LINUX
 #include <trikHal/physicalMemoryMapper.h>
+#endif
 #include <trik/buffer.h>
 #include <trik/sensors/cv_algorithm.h>
 #include <trik/sensors/cv_algorithm_args.h>

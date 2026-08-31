@@ -80,7 +80,7 @@ MappedMemory mapPhysicalMemory(uintptr_t physAddr, size_t length)
 
 	const size_t mapLen = pageOffset + length;
 	auto *mapped = ::mmap(nullptr, mapLen, PROT_READ | PROT_WRITE, MAP_SHARED,
-	                      memfd, pageBase);
+	                      memfd, static_cast<off_t>(pageBase));
 	if (mapped == MAP_FAILED) {
 		QLOG_ERROR() << "mapPhysicalMemory: mmap /dev/mem failed:" << strerror(errno);
 		::close(memfd);

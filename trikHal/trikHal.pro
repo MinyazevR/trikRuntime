@@ -29,11 +29,12 @@ PUBLIC_HEADERS += \
 	$$PWD/include/trikHal/systemConsoleInterface.h \
 	$$PWD/include/trikHal/IIOFileInterface.h \
 	$$PWD/include/trikHal/VideoDeviceFileInterface.h \
-	$$PWD/include/trikHal/fbOutputInterface.h \
-	$$PWD/include/trikHal/physicalMemoryMapper.h
+	$$PWD/include/trikHal/fbOutputInterface.h
 
 !win32:!macx {
+	PUBLIC_HEADERS += $$PWD/include/trikHal/physicalMemoryMapper.h
 	HEADERS += \
+		$$PWD/include/trikHal/physicalMemoryMapper.h \
 		$$PWD/src/trik/trikHardwareAbstraction.h \
 		$$PWD/src/trik/trikI2c.h \
 		$$PWD/src/trik/commonI2c.h \

@@ -26,7 +26,10 @@
 #include <unordered_map>
 
 #include <trikKernel/videoUtils.h>
+
+#ifdef Q_OS_LINUX
 #include <trikHal/physicalMemoryMapper.h>
+#endif
 
 namespace trikHal {
 class HardwareAbstractionInterface;
@@ -220,11 +223,13 @@ private:
 	void onDeviceFrame(const QString &port, uint32_t bufferIdx,
 	                   const uint8_t *data, size_t size);
 
+#ifdef Q_OS_LINUX
 	/// Map the capture region (fixed physical address) into host virtual memory
 	/// via /dev/mem, so the VPIF DMA engine can capture straight into it without
 	/// waiting for the DSP's INIT response. Runs in the constructor. Returns
 	/// true on success.
 	bool mapInputRegion();
+#endif
 
 	/// Stop, close and destroy the open device of a single @p port, reset its
 	/// refcount/streaming flags. Assumes the write lock is already held and the
@@ -281,9 +286,11 @@ private:
 	/// unique_ptr), which Qt's QHash (copy-based) does not support.
 	std::unordered_map<QString, Entry, QStringHash> mDevices;
 
+#ifdef Q_OS_LINUX
 	/// RAII-mapped capture region (mmap'd /dev/mem). Written once in the
 	/// constructor, then read-only; munmaps itself on destruction.
 	trikHal::MappedMemory mInputMap;
+#endif
 
 	/// Capture region index assigned to each video port. Static: filled once in
 	/// the constructor, never changed afterwards.

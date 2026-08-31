@@ -18,7 +18,9 @@
 
 #include <trikHal/VideoDeviceFileInterface.h>
 #include <trikHal/hardwareAbstractionInterface.h>
+#ifdef Q_OS_LINUX
 #include <trikHal/physicalMemoryMapper.h>
+#endif
 #include <trikKernel/configurer.h>
 #include <trikKernel/videoUtils.h>
 #include <trikDsp/dspTypes.h>
@@ -28,6 +30,8 @@
 #include "deviceState.h"
 
 namespace trikControl {
+
+#ifdef Q_OS_LINUX
 
 namespace {
 
@@ -51,6 +55,8 @@ constexpr uint32_t INPUT_TOTAL = INPUT_REGIONS * INPUT_BUFFERS_PER_REGION;
 constexpr size_t INPUT_BUFFER_LEN = 320 * 240 * 2;
 
 } // namespace
+
+#endif // Q_OS_LINUX
 
 CameraManager::CameraManager(const trikKernel::Configurer &configurer,
                              const trikHal::HardwareAbstractionInterface &hal,
@@ -115,6 +121,7 @@ CameraManager::CameraManager(const trikKernel::Configurer &configurer,
 		mDevices.emplace(port, std::move(entry));
 	}
 
+#ifdef Q_OS_LINUX
 	// Assign each video port a capture region up front (one per port, so every
 	// camera always streams into its own DSP memory). The assignment is static:
 	// CameraManager and VideoSensorManager both read it via inputRegion().
@@ -132,6 +139,7 @@ CameraManager::CameraManager(const trikKernel::Configurer &configurer,
 	} else {
 		QLOG_WARN() << "CameraManager: capture region unavailable, USERPTR disabled (MMAP fallback)";
 	}
+#endif // Q_OS_LINUX
 
 	// Run the manager (and its V4L2 devices / QSocketNotifiers) on a dedicated
 	// thread, so the slow sensor initialization and device I/O never block the
@@ -218,6 +226,7 @@ bool CameraManager::openDeviceLocked(const QString &port, Entry &entry)
 			mHal.createVideoDeviceFile(entry.devFile, entry.w, entry.h,
 			                           entry.fmt, !isVideoPort));
 
+#ifdef Q_OS_LINUX
 		// Zero-copy: capture straight into the port's capture region (USERPTR),
 		// which was assigned and mapped in the constructor. Falls back to MMAP
 		// when the region is unavailable (no /dev/mem).
@@ -232,6 +241,7 @@ bool CameraManager::openDeviceLocked(const QString &port, Entry &entry)
 			dev->setUserPtrBuffers(buffers, INPUT_BUFFER_LEN);
 			QLOG_INFO() << "CameraManager: port" << port << "capturing into region" << region;
 		}
+#endif // Q_OS_LINUX
 
 		if (!dev->open()) {
 			QLOG_ERROR() << "CameraManager: failed to open" << entry.devFile;
@@ -462,6 +472,7 @@ void CameraManager::releaseFrame(const QString &port, uint32_t bufferIdx)
 	});
 }
 
+#ifdef Q_OS_LINUX
 bool CameraManager::mapInputRegion()
 {
 	const auto regionLen = INPUT_TOTAL * INPUT_BUFFER_LEN;
@@ -475,15 +486,24 @@ bool CameraManager::mapInputRegion()
 	            << static_cast<void *>(mInputMap.data()) << "size" << regionLen;
 	return true;
 }
+#endif // Q_OS_LINUX
 
 uint32_t CameraManager::inputBuffersPerRegion() const
 {
+#ifdef Q_OS_LINUX
 	return INPUT_BUFFERS_PER_REGION;
+#else
+	return 0;
+#endif
 }
 
 size_t CameraManager::inputBufferLen() const
 {
+#ifdef Q_OS_LINUX
 	return INPUT_BUFFER_LEN;
+#else
+	return 0;
+#endif
 }
 
 uint32_t CameraManager::inputRegion(const QString &port) const
