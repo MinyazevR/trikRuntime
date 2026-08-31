@@ -29,7 +29,8 @@ PUBLIC_HEADERS += \
 	$$PWD/include/trikHal/systemConsoleInterface.h \
 	$$PWD/include/trikHal/IIOFileInterface.h \
 	$$PWD/include/trikHal/VideoDeviceFileInterface.h \
-	$$PWD/include/trikHal/fbOutputInterface.h
+	$$PWD/include/trikHal/fbOutputInterface.h \
+	$$PWD/include/trikHal/physicalMemoryMapper.h
 
 !win32:!macx {
 	HEADERS += \
@@ -80,6 +81,7 @@ HEADERS += \
 		$$PWD/src/trik/trikVideoDevice.cpp \
 		$$PWD/src/trik/videoDeviceFileBase.cpp \
 		$$PWD/src/trik/trikFbOutput.cpp \
+		$$PWD/src/trik/physicalMemoryMapper.cpp \
 }
 
 SOURCES += \
