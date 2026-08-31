@@ -378,9 +378,11 @@ void VideoDeviceFileBase::freeBuffers()
 
 bool VideoDeviceFileBase::startStreaming()
 {
-	// USERPTR: queue only the first buffer so the VPIF DMA engine has exactly
-	// one target.  After DQBUF the driver's ready queue is empty — hardware
-	// cannot overwrite the frame while the DSP is reading it.
+	// TODO: queue only one buffer as a temporary measure. The DSP is currently
+	// set up for a single buffer (zero-copy pipeline), so all USERPTR slots
+	// alias the same DSP memory and queueing more than one would let the VPIF
+	// DMA overwrite the frame while the DSP is still reading it. Once the DSP
+	// supports multiple buffers, queue all of them like the MMAP path.
 	const uint32_t count = mUseUserPtr ? 1u : static_cast<uint32_t>(mMmapBufs.size());
 
 	for (uint32_t i = 0; i < count; ++i) {
