@@ -51,6 +51,7 @@ void StubVideoDeviceFile::close()
 	QLOG_INFO() << "StubVideoDeviceFile: close" << mFileName;
 }
 
-void StubVideoDeviceFile::release()
+void StubVideoDeviceFile::release(uint32_t bufferIdx)
 {
+	Q_UNUSED(bufferIdx)
 }

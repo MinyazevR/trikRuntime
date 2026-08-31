@@ -25,9 +25,9 @@ class QSocketNotifier;
 
 namespace trikHal {
 
-/// Shared V4L2 capture implementation (mmap buffers, notifier-driven dequeue)
-/// for the target hardware. Streams start/stop and USB-webcam exposure handling
-/// live here; concrete devices only plug in their format negotiation.
+/// Shared V4L2 capture implementation (mmap or USERPTR buffers, notifier-driven
+/// dequeue) for the target hardware. Streams start/stop and USB-webcam exposure
+/// handling live here; concrete devices only plug in their format negotiation.
 class VideoDeviceFileBase : public VideoDeviceFileInterface
 {
 	Q_OBJECT
@@ -61,10 +61,13 @@ public:
 	void close() override;
 
 	/// Returns the current buffer to the driver (QBUF).
-	void release() override;
+	void release(uint32_t bufferIdx) override;
 
 	uint32_t actualFourcc() const override { return mActualFourcc; }
 	uint32_t bytesPerLine() const override { return mLineLen; }
+
+	/// See VideoDeviceFileInterface::setUserPtrBuffers().
+	void setUserPtrBuffers(const QVector<void *> &buffers, size_t bufferSize) override;
 
 protected:
 	/// Sets the capture format via VIDIOC_S_FMT. May be overridden to add extra
@@ -72,7 +75,7 @@ protected:
 	virtual bool setFormat();
 
 	/// Forwards a dequeued frame to the frameReady() signal.
-	virtual void onFrameReady(const uint8_t *data, size_t size);
+	virtual void onFrameReady(uint32_t bufferIdx, const uint8_t *data, size_t size);
 
 	/// Apply the default V4L2 control values for a USB (UVC) webcam. Mirrors the
 	/// init_webcam() step previously performed by the media-sensor init script:
@@ -88,13 +91,6 @@ protected:
 
 	/// Unmaps every capture buffer.
 	virtual void freeBuffers();
-
-	/// Configure USERPTR mode.  Must be called before open().
-	/// When @p data is non-null the device uses V4L2_MEMORY_USERPTR and
-	/// instructs the driver to DMA directly into the caller's buffer,
-	/// eliminating the per-frame memcpy.  bufferCount buffers are registered
-	/// but only one is queued at a time (single-frame-in-flight pipeline).
-	void setUserPtrBuffer(void *data, size_t size) override;
 
 	QString mPath;
 	uint32_t mWidth;
@@ -116,12 +112,8 @@ protected:
 	QVector<MmapBuf> mMmapBufs;
 
 	bool mUseUserPtr = false;
-	void *mUserPtrData = nullptr;
+	QVector<void *> mUserPtrBuffers;
 	size_t mUserPtrSize = 0;
-
-	const uint8_t *mCurrentData = nullptr;
-	size_t mCurrentSize = 0;
-	int mCurrentBufIdx = -1;
 
 private Q_SLOTS:
 	void onActivated(int fd);

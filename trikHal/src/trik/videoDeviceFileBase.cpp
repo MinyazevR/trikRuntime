@@ -156,11 +156,8 @@ void VideoDeviceFileBase::close()
 		mFd = -1;
 	}
 
-	mCurrentData = nullptr;
-	mCurrentSize = 0;
-	mCurrentBufIdx = -1;
 	mUseUserPtr = false;
-	mUserPtrData = nullptr;
+	mUserPtrBuffers.clear();
 	mUserPtrSize = 0;
 	mExposureFixed = false;
 
@@ -201,12 +198,12 @@ bool VideoDeviceFileBase::setFormat()
 	return true;
 }
 
-void VideoDeviceFileBase::onFrameReady(const uint8_t *data, size_t size)
+void VideoDeviceFileBase::onFrameReady(uint32_t bufferIdx, const uint8_t *data, size_t size)
 {
-	emit frameReady(data, size);
+	emit frameReady(bufferIdx, data, size);
 }
 
-void VideoDeviceFileBase::release()
+void VideoDeviceFileBase::release(uint32_t bufferIdx)
 {
 	// A release() deferred past a stopStreaming()/startStreaming() cycle (e.g. a
 	// frame that was in flight when the sensor was stopped) would otherwise
@@ -215,17 +212,17 @@ void VideoDeviceFileBase::release()
 	if (!mStreaming)
 		return;
 
-	if (mCurrentBufIdx < 0 || mCurrentBufIdx >= static_cast<int>(mMmapBufs.size()))
+	if (bufferIdx >= static_cast<uint32_t>(mMmapBufs.size()))
 		return;
 
 	v4l2_buffer buf = {};
 	buf.type = V4L2_BUF_TYPE_VIDEO_CAPTURE;
-	buf.index = mCurrentBufIdx;
+	buf.index = bufferIdx;
 
 	if (mUseUserPtr) {
 		buf.memory = V4L2_MEMORY_USERPTR;
-		buf.m.userptr = reinterpret_cast<unsigned long>(mMmapBufs[mCurrentBufIdx].data);
-		buf.length = mMmapBufs[mCurrentBufIdx].size;
+		buf.m.userptr = reinterpret_cast<unsigned long>(mMmapBufs[static_cast<int>(bufferIdx)].data);
+		buf.length = mMmapBufs[static_cast<int>(bufferIdx)].size;
 	} else {
 		buf.memory = V4L2_MEMORY_MMAP;
 	}
@@ -234,12 +231,10 @@ void VideoDeviceFileBase::release()
 		QLOG_ERROR() << "VideoDeviceFileBase: QBUF failed:" << strerror(errno);
 	}
 
-	mCurrentData = nullptr;
-	mCurrentSize = 0;
-	mCurrentBufIdx = -1;
-
-	if (mNotifier)
-		mNotifier->setEnabled(true);
+	// The notifier stays enabled throughout streaming: with multiple buffers
+	// queued, the camera keeps filling the free slots while the DSP processes
+	// the dequeued ones, so the level-triggered notifier fires again on the
+	// next filled buffer without explicit re-arming.
 }
 
 void VideoDeviceFileBase::onActivated(int fd)
@@ -251,42 +246,39 @@ void VideoDeviceFileBase::onActivated(int fd)
 	buf.memory = mUseUserPtr ? V4L2_MEMORY_USERPTR : V4L2_MEMORY_MMAP;
 
 	if (ioctl(mFd, VIDIOC_DQBUF, &buf) < 0) {
-		if (errno != EAGAIN) {
-			QLOG_ERROR() << "VideoDeviceFileBase: DQBUF failed:" << strerror(errno);
+		if (errno == EAGAIN) {
+			// No filled buffer yet: level-triggered notifier re-arms on its own.
+			return;
 		}
+		// A fatal error (e.g. ENODEV after the camera was torn down) would
+		// otherwise keep re-firing the notifier in a busy loop. Disable it; the
+		// stream is re-armed by the next startStreaming().
+		QLOG_ERROR() << "VideoDeviceFileBase: DQBUF failed:" << strerror(errno);
+		if (mNotifier)
+			mNotifier->setEnabled(false);
 		return;
 	}
 
-	if (mUseUserPtr) {
-		mCurrentData = reinterpret_cast<const uint8_t *>(buf.m.userptr);
-	} else {
-		if (buf.index >= static_cast<decltype(buf.index)>(mMmapBufs.size())) {
-			QLOG_ERROR() << "VideoDeviceFileBase: invalid buffer index" << buf.index;
-			return;
-		}
-		mCurrentData = mMmapBufs[static_cast<int>(buf.index)].data;
+	if (buf.index >= static_cast<decltype(buf.index)>(mMmapBufs.size())) {
+		QLOG_ERROR() << "VideoDeviceFileBase: invalid buffer index" << buf.index;
+		return;
 	}
 
-	mCurrentSize = buf.bytesused;
-	mCurrentBufIdx = static_cast<int>(buf.index);
-
-	if (mNotifier)
-		mNotifier->setEnabled(false);
-
-	onFrameReady(mCurrentData, mCurrentSize);
+	const auto *data = mMmapBufs[static_cast<int>(buf.index)].data;
+	onFrameReady(buf.index, data, buf.bytesused);
 }
 
-void VideoDeviceFileBase::setUserPtrBuffer(void *data, size_t size)
+void VideoDeviceFileBase::setUserPtrBuffers(const QVector<void *> &buffers, size_t bufferSize)
 {
-	mUserPtrData = data;
-	mUserPtrSize = size;
-	mUseUserPtr = (data != nullptr);
+	mUserPtrBuffers = buffers;
+	mUserPtrSize = bufferSize;
+	mUseUserPtr = !buffers.isEmpty();
 }
 
 bool VideoDeviceFileBase::allocateBuffers()
 {
 	v4l2_requestbuffers req = {};
-	req.count = mBufferCount;
+	req.count = mUseUserPtr ? static_cast<uint32_t>(mUserPtrBuffers.size()) : mBufferCount;
 	req.type = V4L2_BUF_TYPE_VIDEO_CAPTURE;
 	req.memory = mUseUserPtr ? V4L2_MEMORY_USERPTR : V4L2_MEMORY_MMAP;
 
@@ -305,19 +297,20 @@ bool VideoDeviceFileBase::allocateBuffers()
 
 	if (mUseUserPtr) {
 		// The VPIF DMA engine writes a full frame (negotiated sizeimage) into
-		// the caller's buffer on every capture. Reject a buffer smaller than
-		// one frame, otherwise the DMA would overrun the caller's memory.
+		// each caller-managed buffer. Reject buffers smaller than one frame,
+		// otherwise the DMA would overrun the caller's memory.
 		if (mUserPtrSize < mSizeImage) {
 			QLOG_ERROR() << "VideoDeviceFileBase: USERPTR buffer too small, need"
 			             << mSizeImage << "have" << mUserPtrSize;
 			return false;
 		}
 
-		// USERPTR: the caller owns the memory.  Every slot points to the
-		// same DSP buffer, but at most one is queued at a time, so the VPIF
-		// DMA engine never races with DSP processing.
+		// USERPTR: the caller owns the memory. Each slot is a distinct DSP
+		// input buffer, so the VPIF DMA engine round-robins through them while
+		// the DSP processes the previous frames.
 		for (uint32_t i = 0; i < count; ++i) {
-			mMmapBufs.push_back({static_cast<uint8_t *>(mUserPtrData), mUserPtrSize});
+			mMmapBufs.push_back({static_cast<uint8_t *>(mUserPtrBuffers[static_cast<int>(i)]),
+			                     mUserPtrSize});
 		}
 	} else {
 		for (uint32_t i = 0; i < count; ++i) {
@@ -352,16 +345,15 @@ bool VideoDeviceFileBase::allocateBuffers()
 void VideoDeviceFileBase::freeBuffers()
 {
 	if (mUseUserPtr) {
-		// Caller owns the memory — just drop the pointers.
+		// Caller owns the memory - just drop the pointers.
 		mMmapBufs.clear();
-		return;
+	} else {
+		for (auto &buf : mMmapBufs) {
+			if (buf.data != nullptr && buf.data != MAP_FAILED)
+				munmap(buf.data, buf.size);
+		}
+		mMmapBufs.clear();
 	}
-
-	for (auto &buf : mMmapBufs) {
-		if (buf.data != nullptr && buf.data != MAP_FAILED)
-			munmap(buf.data, buf.size);
-	}
-	mMmapBufs.clear();
 
 	// Release the driver-side buffers too, so a close()/open() cycle (or a
 	// partial allocation failure) leaves the device with a clean request.
@@ -369,7 +361,7 @@ void VideoDeviceFileBase::freeBuffers()
 		v4l2_requestbuffers req = {};
 		req.count = 0;
 		req.type = V4L2_BUF_TYPE_VIDEO_CAPTURE;
-		req.memory = V4L2_MEMORY_MMAP;
+		req.memory = mUseUserPtr ? V4L2_MEMORY_USERPTR : V4L2_MEMORY_MMAP;
 		if (ioctl(mFd, VIDIOC_REQBUFS, &req) < 0) {
 			QLOG_WARN() << "VideoDeviceFileBase: REQBUFS(0) failed:" << strerror(errno);
 		}
@@ -378,23 +370,17 @@ void VideoDeviceFileBase::freeBuffers()
 
 bool VideoDeviceFileBase::startStreaming()
 {
-	// TODO: queue only one buffer as a temporary measure. The DSP is currently
-	// set up for a single buffer (zero-copy pipeline), so all USERPTR slots
-	// alias the same DSP memory and queueing more than one would let the VPIF
-	// DMA overwrite the frame while the DSP is still reading it. Once the DSP
-	// supports multiple buffers, queue all of them like the MMAP path.
-	const uint32_t count = mUseUserPtr ? 1u : static_cast<uint32_t>(mMmapBufs.size());
-
-	for (uint32_t i = 0; i < count; ++i) {
+	// Queue every buffer so the VPIF DMA engine keeps capturing into the free
+	// slots while the DSP processes the dequeued ones (triple buffering).
+	for (uint32_t i = 0; i < static_cast<uint32_t>(mMmapBufs.size()); ++i) {
 		v4l2_buffer buf = {};
 		buf.type = V4L2_BUF_TYPE_VIDEO_CAPTURE;
 		buf.index = i;
 
 		if (mUseUserPtr) {
 			buf.memory = V4L2_MEMORY_USERPTR;
-			const auto &slot = mMmapBufs[static_cast<int>(i)];
-			buf.m.userptr = reinterpret_cast<unsigned long>(slot.data);
-			buf.length = slot.size;
+			buf.m.userptr = reinterpret_cast<unsigned long>(mMmapBufs[static_cast<int>(i)].data);
+			buf.length = mMmapBufs[static_cast<int>(i)].size;
 		} else {
 			buf.memory = V4L2_MEMORY_MMAP;
 		}
@@ -432,12 +418,4 @@ void VideoDeviceFileBase::stopStreaming()
 		QLOG_ERROR() << "VideoDeviceFileBase: STREAMOFF failed:" << strerror(errno);
 	}
 	mStreaming = false;
-
-	// STREAMOFF hands all buffers back to the driver, so the "dequeued frame in
-	// flight" state is gone. Clear it so a stale release() (a frame queued for
-	// processing before the stop) becomes a no-op instead of double-QBUF'ing a
-	// buffer that the next startStreaming() already re-queued.
-	mCurrentData = nullptr;
-	mCurrentSize = 0;
-	mCurrentBufIdx = -1;
 }

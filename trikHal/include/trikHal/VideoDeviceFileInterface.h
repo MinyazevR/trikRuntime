@@ -16,13 +16,16 @@
 
 #include <QtCore/QObject>
 #include <QtCore/QString>
+#include <QtCore/QVector>
+#include <cstdint>
+#include <cstddef>
 #include "trikHal/trikHalDeclSpec.h"
 
 namespace trikHal {
 
 /// A V4L2 capture device: open/start/stop a streaming capture and hand raw
 /// frames to consumers via the frameReady() signal. Implementations own the
-/// underlying mmap buffers and are created by HardwareAbstractionInterface.
+/// underlying buffers and are created by HardwareAbstractionInterface.
 class TRIKHAL_EXPORT VideoDeviceFileInterface : public QObject
 {
 	Q_OBJECT
@@ -44,23 +47,31 @@ public:
 
 	virtual void stopStreaming() = 0;
 	virtual void close() = 0;
-	virtual void release() = 0;
+
+	/// Return the buffer identified by @p bufferIdx back to the driver (QBUF),
+	/// so the next frame can be captured into it.
+	virtual void release(uint32_t bufferIdx) = 0;
+
 	virtual uint32_t actualFourcc() const = 0;
 	virtual uint32_t bytesPerLine() const = 0;
 
-	/// Configure the device to use a caller-managed buffer (USERPTR mode)
-	/// instead of driver-allocated MMAP buffers.  Must be called before
-	/// open().  The buffer must be physically contiguous and stay valid for
-	/// the entire lifetime of the device.  Pass nullptr to use the default
-	/// MMAP mode.  The default implementation is a no-op (MMAP only).
-	virtual void setUserPtrBuffer(void *data, size_t size)
+	/// Configure the device to capture into caller-managed buffers (USERPTR
+	/// mode) instead of driver-allocated MMAP buffers. Must be called before
+	/// open(). Each entry of @p buffers is a physically contiguous buffer the
+	/// VPIF DMA engine writes one frame into; all of them are queued so the
+	/// camera streams continuously. Pass an empty vector to use the default
+	/// MMAP mode. The default implementation is a no-op (MMAP only).
+	virtual void setUserPtrBuffers(const QVector<void *> &buffers, size_t bufferSize)
 	{
-		Q_UNUSED(data);
-		Q_UNUSED(size);
+		Q_UNUSED(buffers);
+		Q_UNUSED(bufferSize);
 	}
 
 Q_SIGNALS:
-	void frameReady(const uint8_t *data, size_t size);
+	/// Emitted when a frame is captured into buffer @p bufferIdx.  @p data is
+	/// the buffer's virtual address (valid until release() is called for that
+	/// buffer) and @p size is the frame size in bytes.
+	void frameReady(uint32_t bufferIdx, const uint8_t *data, size_t size);
 };
 
 } // namespace trikHal

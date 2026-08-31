@@ -45,7 +45,7 @@ public:
 	void close() override;
 
 	/// No-op buffer release.
-	void release() override;
+	void release(uint32_t bufferIdx) override;
 
 	uint32_t actualFourcc() const override { return 0; }
 	uint32_t bytesPerLine() const override { return 0; }
