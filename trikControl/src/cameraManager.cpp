@@ -14,10 +14,11 @@
 
 #include "cameraManager.h"
 
-#include <QtCore/QByteArray>
+#include <QtCore/QVector>
 
 #include <trikHal/VideoDeviceFileInterface.h>
 #include <trikHal/hardwareAbstractionInterface.h>
+#include <trikHal/physicalMemoryMapper.h>
 #include <trikKernel/configurer.h>
 #include <trikKernel/videoUtils.h>
 #include <trikDsp/dspTypes.h>
@@ -27,6 +28,29 @@
 #include "deviceState.h"
 
 namespace trikControl {
+
+namespace {
+
+/// Fixed physical address of the capture region (`in_buff`). The DSP linker
+/// places it right after `.resource_table` in DDR, so it is a build-time
+/// constant (see trikDsp/trik-media-sensors/dsp/bin/*/obj/server_dsp.xe674.map,
+/// `in_buff @ 0xc4000100`). Mapping it directly via /dev/mem lets the VPIF DMA
+/// engine capture into that memory without waiting for the DSP's INIT response.
+constexpr uintptr_t INPUT_PHYS = 0xc4000100;
+
+/// Capture region layout (mirrors trik/buffer.h).
+///
+/// One buffer holds one 320x240 YUV422 frame: 2 bytes per pixel, so
+/// 320 * 240 * 2 = 153600 bytes. Three buffers per region give triple
+/// buffering, so one region is 3 * 153600 = 460800 bytes (0x70800); the three
+/// regions together are 9 * 153600 = 1382400 bytes (0x151800), matching the
+/// `in_buff` symbol in the DSP map file.
+constexpr uint32_t INPUT_REGIONS = 3;
+constexpr uint32_t INPUT_BUFFERS_PER_REGION = 3;
+constexpr uint32_t INPUT_TOTAL = INPUT_REGIONS * INPUT_BUFFERS_PER_REGION;
+constexpr size_t INPUT_BUFFER_LEN = 320 * 240 * 2;
+
+} // namespace
 
 CameraManager::CameraManager(const trikKernel::Configurer &configurer,
                              const trikHal::HardwareAbstractionInterface &hal,
@@ -91,6 +115,24 @@ CameraManager::CameraManager(const trikKernel::Configurer &configurer,
 		mDevices.emplace(port, std::move(entry));
 	}
 
+	// Assign each video port a capture region up front (one per port, so every
+	// camera always streams into its own DSP memory). The assignment is static:
+	// CameraManager and VideoSensorManager both read it via inputRegion().
+	auto nextRegion = 0u;
+	for (auto &kv : mDevices) {
+		mPortRegions[kv.first] = nextRegion;
+		nextRegion = (nextRegion + 1) % INPUT_REGIONS;
+	}
+
+	// Map the capture region up front (before sensors start, and before the
+	// DSP's INIT response): the manager learns the per-port capture ranges here
+	// so acquire() can set up USERPTR zero-copy streaming at any time.
+	if (mapInputRegion()) {
+		QLOG_INFO() << "CameraManager: capture region mapped, zero-copy streaming available";
+	} else {
+		QLOG_WARN() << "CameraManager: capture region unavailable, USERPTR disabled (MMAP fallback)";
+	}
+
 	// Run the manager (and its V4L2 devices / QSocketNotifiers) on a dedicated
 	// thread, so the slow sensor initialization and device I/O never block the
 	// GUI thread. The static port state above was recorded before the move and
@@ -117,21 +159,31 @@ CameraManager::~CameraManager()
 
 	mThread->quit();
 	mThread->wait();
+	// mInputMap munmaps itself (RAII).
 }
 
-void CameraManager::acquire(const QString &port, void *userPtrData, size_t userPtrSize)
+void CameraManager::acquire(const QString &port)
 {
-	runAsync([this, port, userPtrData, userPtrSize]() {
+	runAsync([this, port]() {
 		bool ok = false;
 		{
 			QWriteLocker lock(&mLock);
 			auto it = mDevices.find(port);
 			if (it != mDevices.end() && it->second.ready) {
-				// Store the USERPTR address before opening, so the device
-				// can be configured in openDeviceLocked().
-				it->second.userPtrData = userPtrData;
-				it->second.userPtrSize = userPtrSize;
 				ok = openDeviceLocked(port, it->second);
+				// A client that grabs the camera wants frames: resume a parked
+				// camera (startStreaming), and clear any pending park request.
+				if (ok && it->second.dev && !it->second.streaming) {
+					if (it->second.dev->startStreaming()) {
+						it->second.streaming = true;
+					} else {
+						// Streaming failed to start: undo the acquisition so the
+						// client does not hold a non-streaming camera forever.
+						ok = false;
+						--it->second.refCount;
+					}
+				}
+				it->second.stopRequested = false;
 			} else {
 				QLOG_ERROR() << "CameraManager: port" << port << "is not available";
 			}
@@ -166,7 +218,22 @@ bool CameraManager::openDeviceLocked(const QString &port, Entry &entry)
 			mHal.createVideoDeviceFile(entry.devFile, entry.w, entry.h,
 			                           entry.fmt, !isVideoPort));
 
-		if (!dev->open() || !dev->startStreaming()) {
+		// Zero-copy: capture straight into the port's capture region (USERPTR),
+		// which was assigned and mapped in the constructor. Falls back to MMAP
+		// when the region is unavailable (no /dev/mem).
+		if (mInputMap) {
+			const auto region = mPortRegions.value(port, 0);
+			const auto base = region * INPUT_BUFFERS_PER_REGION;
+			QVector<void *> buffers;
+			buffers.reserve(static_cast<int>(INPUT_BUFFERS_PER_REGION));
+			for (uint32_t i = 0; i < INPUT_BUFFERS_PER_REGION; ++i) {
+				buffers.append(mInputMap.data() + (base + i) * INPUT_BUFFER_LEN);
+			}
+			dev->setUserPtrBuffers(buffers, INPUT_BUFFER_LEN);
+			QLOG_INFO() << "CameraManager: port" << port << "capturing into region" << region;
+		}
+
+		if (!dev->open()) {
 			QLOG_ERROR() << "CameraManager: failed to open" << entry.devFile;
 			return false;
 		}
@@ -179,25 +246,65 @@ bool CameraManager::openDeviceLocked(const QString &port, Entry &entry)
 		QLOG_DEBUG() << "CameraManager: port" << port << "opened, actualFourcc=0x"
 		             << Qt::hex << dev->actualFourcc() << "lineLength" << entry.lineLength;
 
-		// Fan out frames from the device to all subscribers of this port.
+		// Relay frames from the device to all consumers of this port.
 		connect(dev.get(), &trikHal::VideoDeviceFileInterface::frameReady, this,
-		        [this, port](const uint8_t *data, size_t size) {
-			onFrameReady(port, data, size);
+		        [this, port](uint32_t bufferIdx, const uint8_t *data, size_t size) {
+			onDeviceFrame(port, bufferIdx, data, size);
 		});
 
 		entry.dev = std::move(dev);
-		entry.streaming = true;
 	}
 
 	++entry.refCount;
 	return true;
 }
 
-bool CameraManager::isOccupied(const QString &port) const
+void CameraManager::onDeviceFrame(const QString &port, uint32_t bufferIdx,
+                                  const uint8_t *data, size_t size)
 {
-	QReadLocker lock(&mLock);
+	QWriteLocker lock(&mLock);
 	auto it = mDevices.find(port);
-	return it != mDevices.end() && it->second.ready && it->second.refCount > 0;
+	if (it == mDevices.end() || !it->second.dev) {
+		return;
+	}
+
+	auto &refCounts = it->second.frameRefCount;
+
+	// Auto-return every delivered-but-unclaimed frame of this port: nobody
+	// grabbed it (refcount 0), so let the driver reuse/overwrite the buffer.
+	for (auto refIt = refCounts.begin(); refIt != refCounts.end();) {
+		if (refIt.value() == 0) {
+			it->second.dev->release(refIt.key());
+			refIt = refCounts.erase(refIt);
+		} else {
+			++refIt;
+		}
+	}
+
+	// Deliver the new frame, initially unclaimed (refcount 0).
+	refCounts[bufferIdx] = 0;
+	emit frameReady(port, bufferIdx, data, size);
+}
+
+void CameraManager::stopStreaming(const QString &port)
+{
+	runAsync([this, port]() {
+		QWriteLocker lock(&mLock);
+		auto it = mDevices.find(port);
+		if (it == mDevices.end() || !it->second.dev) {
+			return;
+		}
+		// Remember the park request. If the camera is not needed by anyone else
+		// (the requester is its only client), park it right away; otherwise the
+		// park happens in release() when the last client lets go.
+		it->second.stopRequested = true;
+		if (it->second.refCount <= 1 && it->second.streaming) {
+			it->second.dev->stopStreaming();
+			it->second.streaming = false;
+			// STREAMOFF returns every buffer to the driver; forget our refcounts.
+			it->second.frameRefCount.clear();
+		}
+	});
 }
 
 void CameraManager::release(const QString &port)
@@ -207,22 +314,33 @@ void CameraManager::release(const QString &port)
 		{
 			QWriteLocker lock(&mLock);
 			auto it = mDevices.find(port);
-			if (it == mDevices.end() || !it->second.ready || it->second.refCount <= 0)
+			if (it == mDevices.end() || !it->second.ready || it->second.refCount <= 0) {
 				return;
+			}
 
 			// Still used by other clients - nothing to tear down yet.
-			if (--it->second.refCount > 0)
+			if (--it->second.refCount > 0) {
 				return;
+			}
 
-			// Last client gone: take ownership of the device out of the map,
-			// drop all pending subscriptions, pull clients and the latched
-			// frame, then release the lock before the slow teardown. The
-			// device is destroyed when `dev` goes out of scope.
+			// Last client gone. If a stop was requested, only park the camera
+			// (streamoff) and keep it open so a later acquire() starts it again.
+			// Otherwise tear the device down for good.
+			if (it->second.stopRequested) {
+				if (it->second.streaming) {
+					it->second.dev->stopStreaming();
+					it->second.streaming = false;
+				}
+				it->second.frameRefCount.clear();
+				return;
+			}
+
+			// Take ownership of the device out of the map, then release the
+			// lock before the slow teardown. The device is destroyed when `dev`
+			// goes out of scope.
 			dev = std::move(it->second.dev);
 			it->second.streaming = false;
-			mStreamingSubs.remove(port);
-			mPullSubs.remove(port);
-			mLatest.remove(port);
+			it->second.frameRefCount.clear();
 		}
 
 		if (dev) {
@@ -256,6 +374,7 @@ void CameraManager::stop(const QString &port)
 
 void CameraManager::tearDownPortLocked(const QString &port, Entry &entry)
 {
+	Q_UNUSED(port);
 	if (entry.dev) {
 		entry.dev->disconnect();
 		entry.dev->stopStreaming();
@@ -263,10 +382,9 @@ void CameraManager::tearDownPortLocked(const QString &port, Entry &entry)
 		entry.dev.reset();
 	}
 	entry.refCount = 0;
+	entry.stopRequested = false;
 	entry.streaming = false;
-	mStreamingSubs.remove(port);
-	mPullSubs.remove(port);
-	mLatest.remove(port);
+	entry.frameRefCount.clear();
 }
 
 void CameraManager::tearDownLocked()
@@ -295,184 +413,84 @@ void CameraManager::initSensors()
 	}
 }
 
-void CameraManager::subscribe(const QString &port, QObject *receiver,
-                              FrameCb callback)
+void CameraManager::retainFrame(const QString &port, uint32_t bufferIdx)
 {
-	// Posted to the manager's thread so the subscription map stays owned by
-	// the capture hot path (onFrameReady reads it lock-free). Cold path.
-	runAsync([this, port, receiver, callback = std::move(callback)]() mutable {
+	runAsync([this, port, bufferIdx]() {
+		QWriteLocker lock(&mLock);
 		auto it = mDevices.find(port);
-		if (it == mDevices.end() || !it->second.ready || !it->second.dev) {
-			QLOG_WARN() << "CameraManager: cannot subscribe to" << port
-			            << "(not acquired or not ready)";
+		if (it == mDevices.end() || !it->second.dev) {
 			return;
 		}
 
-		mStreamingSubs[port] = StreamingSub{receiver, std::move(callback)};
-		updateStreaming(port);
+		auto &refCounts = it->second.frameRefCount;
+		const auto refIt = refCounts.find(bufferIdx);
+		// Only a currently-delivered frame (one that has an entry, initially 0)
+		// can be claimed. If the entry is gone the frame was already
+		// auto-returned to the driver (a newer frame superseded it before we
+		// got here) - claiming it now would later produce a double QBUF.
+		if (refIt != refCounts.end()) {
+			++refIt.value();
+		}
 	});
 }
 
-void CameraManager::unsubscribe(const QString &port, QObject *receiver)
+void CameraManager::releaseFrame(const QString &port, uint32_t bufferIdx)
 {
-	runAsync([this, port, receiver]() {
-		auto it = mStreamingSubs.find(port);
-		if (it != mStreamingSubs.end() && it->receiver == receiver)
-			mStreamingSubs.erase(it);
-		updateStreaming(port);
-	});
-}
-
-void CameraManager::subscribeLatest(const QString &port, QObject *receiver)
-{
-	runAsync([this, port, receiver]() {
+	runAsync([this, port, bufferIdx]() {
+		QWriteLocker lock(&mLock);
 		auto it = mDevices.find(port);
-		if (it == mDevices.end() || !it->second.ready || !it->second.dev) {
-			QLOG_WARN() << "CameraManager: cannot subscribe latest to" << port
-			            << "(not acquired or not ready)";
+		if (it == mDevices.end() || !it->second.dev) {
 			return;
 		}
 
-		mPullSubs[port].append(receiver);
-		updateStreaming(port);
-
-		// Auto-unsubscribe when the receiver dies, so a forgotten unsubscribe
-		// cannot keep latching on forever. The handler runs in the manager's
-		// thread (queued via the `this` context), so it may touch mPullSubs
-		// directly. The connection dies together with the receiver.
-		QObject::connect(receiver, &QObject::destroyed, this,
-		                 [this, port]() { prunePullSubs(port); });
-	});
-}
-
-void CameraManager::prunePullSubs(const QString &port)
-{
-	auto it = mPullSubs.find(port);
-	if (it == mPullSubs.end())
-		return;
-
-	auto &pull = it.value();
-	for (int i = pull.size() - 1; i >= 0; --i) {
-		if (!pull[i])
-			pull.removeAt(i);
-	}
-	if (pull.isEmpty())
-		mPullSubs.erase(it);
-	updateStreaming(port);
-}
-
-void CameraManager::unsubscribeLatest(const QString &port, QObject *receiver)
-{
-	runAsync([this, port, receiver]() {
-		auto it = mPullSubs.find(port);
-		if (it == mPullSubs.end())
+		auto &refCounts = it->second.frameRefCount;
+		const auto refIt = refCounts.find(bufferIdx);
+		// The buffer was never claimed, was already recycled, or was never
+		// retained at all (refcount 0) - nothing to hand back. The manager
+		// auto-returns unclaimed frames when the next one arrives. This also
+		// guards against a stray double release.
+		if (refIt == refCounts.end() || refIt.value() == 0) {
 			return;
-
-		auto &pull = it.value();
-		for (int i = pull.size() - 1; i >= 0; --i) {
-			if (pull[i] == receiver)
-				pull.removeAt(i);
 		}
-		if (pull.isEmpty())
-			mPullSubs.erase(it);
-		updateStreaming(port);
+
+		if (--refIt.value() > 0) {
+			return;
+		}
+
+		refCounts.erase(refIt);
+		it->second.dev->release(bufferIdx);
 	});
 }
 
-void CameraManager::updateStreaming(const QString &port)
+bool CameraManager::mapInputRegion()
 {
-	// Runs in the manager's thread (called from subscribe*/unsubscribe*).
-	// The device must stream iff at least one push or pull subscriber wants
-	// frames. This parks the camera when the last video-sensor push client
-	// unsubscribes (StopStream) and transparently resumes it when a pull client
-	// (getPhoto) subscribes - no client races over a shared flag.
-	QWriteLocker lock(&mLock);
-	auto it = mDevices.find(port);
-	if (it == mDevices.end() || !it->second.ready || !it->second.dev)
-		return;
-
-	const auto streamingIt = mStreamingSubs.constFind(port);
-	const bool hasStreaming = streamingIt != mStreamingSubs.constEnd() && streamingIt->receiver;
-	const auto pullIt = mPullSubs.constFind(port);
-	const bool hasPull = pullIt != mPullSubs.constEnd() && !pullIt->isEmpty();
-
-	if (hasStreaming || hasPull) {
-		if (!it->second.streaming) {
-			it->second.dev->startStreaming();
-			it->second.streaming = true;
-		}
-		// A continuous (push) consumer wants a stable, locked exposure. This is
-		// idempotent on the device, so it is requested on every subscription
-		// change, not only when streaming was just started - otherwise a push
-		// subscriber arriving after the initial open would never get the lock.
-		if (hasStreaming)
-			it->second.dev->fixExposure();
-	} else if (it->second.streaming) {
-		it->second.dev->stopStreaming();
-		it->second.streaming = false;
+	const auto regionLen = INPUT_TOTAL * INPUT_BUFFER_LEN;
+	mInputMap = trikHal::mapPhysicalMemory(INPUT_PHYS, regionLen);
+	if (!mInputMap) {
+		QLOG_WARN() << "CameraManager: failed to map capture region at 0x" << Qt::hex << INPUT_PHYS;
+		return false;
 	}
+
+	QLOG_INFO() << "CameraManager: mapped capture region at"
+	            << static_cast<void *>(mInputMap.data()) << "size" << regionLen;
+	return true;
 }
 
-QSharedPointer<QByteArray> CameraManager::grabLatestFrame(const QString &port) const
+uint32_t CameraManager::inputBuffersPerRegion() const
+{
+	return INPUT_BUFFERS_PER_REGION;
+}
+
+size_t CameraManager::inputBufferLen() const
+{
+	return INPUT_BUFFER_LEN;
+}
+
+uint32_t CameraManager::inputRegion(const QString &port) const
 {
 	QReadLocker lock(&mLock);
-	auto it = mLatest.constFind(port);
-	return (it != mLatest.constEnd()) ? it.value() : QSharedPointer<QByteArray>();
-}
-
-void CameraManager::onFrameReady(const QString &port, const uint8_t *data, size_t size)
-{
-	// Capture hot path. mStreamingSubs / mPullSubs are mutated only in the
-	// manager's thread (subscribe*/unsubscribe* are marshalled here), so they
-	// are read lock-free. Only the latched-frame publish takes a lock, to stay
-	// visible to grabLatestFrame() called from other threads.
-
-	// Streaming (push) subscriber: at most one, owns the buffer release. Copy
-	// the callback out so a re-entrant subscribe() from inside it cannot
-	// invalidate the map entry mid-call.
-	FrameCb streamingCb;
-	const auto sit = mStreamingSubs.constFind(port);
-	const bool hasStreaming = sit != mStreamingSubs.constEnd() && sit->receiver;
-	if (hasStreaming)
-		streamingCb = sit->callback;
-
-	// Pull clients: latching is active while any is registered. Dead receivers
-	// are removed by their own destroyed() handler (subscribeLatest), so this
-	// is a plain O(1) lookup with no traversal.
-	const auto pit = mPullSubs.constFind(port);
-	const bool latch = pit != mPullSubs.constEnd() && !pit->isEmpty();
-
-	if (hasStreaming)
-		streamingCb(data, size);
-
-	if (latch) {
-		auto frame = QSharedPointer<QByteArray>::create(
-			reinterpret_cast<const char *>(data), static_cast<int>(size));
-		{
-			QWriteLocker lock(&mLock);
-			mLatest[port] = std::move(frame);
-		}
-		emit latestFrameReady(port);
-	}
-
-	// Release policy: the streaming subscriber owns releaseFrame() (backpressure);
-	// with none, return the buffer now so pull clients keep receiving frames.
-	if (!hasStreaming)
-		releaseFrame(port);
-}
-
-void CameraManager::releaseFrame(const QString &port)
-{
-	// The streaming consumer owns the buffer release (backpressure). Posting it
-	// here keeps the caller's thread (the GUI thread, in onResult) responsive:
-	// the QBUF happens in the worker thread a moment later, still gated by the
-	// disabled QSocketNotifier, so no buffer overruns.
-	runAsync([this, port]() {
-		QReadLocker lock(&mLock);
-		auto it = mDevices.find(port);
-		if (it != mDevices.end() && it->second.dev)
-			it->second.dev->release();
-	});
+	const auto it = mPortRegions.find(port);
+	return it != mPortRegions.end() ? it.value() : 0;
 }
 
 uint32_t CameraManager::width(const QString &port) const
@@ -508,13 +526,6 @@ uint32_t CameraManager::lineLength(const QString &port) const
 	QReadLocker lock(&mLock);
 	auto it = mDevices.find(port);
 	return (it != mDevices.end() && it->second.ready) ? it->second.lineLength : 0;
-}
-
-bool CameraManager::isReady(const QString &port) const
-{
-	QReadLocker lock(&mLock);
-	auto it = mDevices.find(port);
-	return it != mDevices.end() && it->second.ready;
 }
 
 QString CameraManager::deviceFile(const QString &port) const

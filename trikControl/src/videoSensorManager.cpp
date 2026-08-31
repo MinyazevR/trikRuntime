@@ -55,13 +55,37 @@ VideoSensorManager::VideoSensorManager(const trikKernel::Configurer &configurer,
 	// reports completion via this queued signal.
 	connect(mCameraManager, &CameraManager::acquired, this, &VideoSensorManager::onAcquired);
 
-	// init() is intentionally synchronous here: the DSP shared input buffer
-	// must be mmap'd before any sensor activation, because activateForPort()
-	// reads inBufferStart() and hands it to CameraManager::acquire() as the
-	// USERPTR target. Making this async would let an early acquire() fall back
-	// to MMAP (no zero-copy) until init completes. The block runs on the GUI
-	// thread, but init() spins a local QEventLoop, so the UI stays responsive
-	// during the (worst-case 15s) wait.
+	// Frames arrive from the CameraManager's worker thread. The camera streams
+	// at its own rate; the DSP is a "latest wins" consumer and must not be
+	// forced to process every frame (it may not keep up). For the DSP-active
+	// port we keep only the newest ready frame and hand it to the DSP when it is
+	// idle; stale frames are released straight away. Frames of other ports are
+	// simply ignored - the manager auto-returns unclaimed buffers, and a parked
+	// camera does not stream at all. The data pointer is not used - the DSP
+	// reads the frame directly from its input buffer by index.
+	connect(mCameraManager, &CameraManager::frameReady, this,
+	        [this](const QString &port, uint32_t bufferIdx, const uint8_t *data, size_t size) {
+		Q_UNUSED(data);
+		Q_UNUSED(size);
+		if (!mActivePorts.contains(port) || port != mActiveDspPort) {
+			return;
+		}
+
+		// Active DSP channel, latest wins: supersede the previous pending frame
+		// (release it - it was never handed to the DSP), keep the newest.
+		const auto it = mPendingFrames.find(port);
+		if (it != mPendingFrames.end()) {
+			mCameraManager->releaseFrame(port, it.value());
+		}
+		mCameraManager->retainFrame(port, bufferIdx);
+		mPendingFrames[port] = bufferIdx;
+		kickDsp(port);
+	});
+
+	// init() is intentionally synchronous here: it starts the IPC stack and
+	// mmaps the DSP output buffer, which every subsequent activate()/step()
+	// depends on. The block runs on the GUI thread, but init() spins a local
+	// QEventLoop, so the UI stays responsive during the (worst-case 15s) wait.
 	mDspServer->init();
 	if (!mState.isReady()) return;
 
@@ -165,19 +189,18 @@ void VideoSensorManager::activateForPort(const QString &port, trikDsp::Algorithm
 
 	if (!mActivePorts.contains(port)) {
 		// The camera is not held. Start the (async) acquisition and defer the
-		// DSP activation to onAcquired(); without the right to open the camera
-		// there is nothing to do.
+		// DSP activation to onAcquired(). CameraManager owns the capture region
+		// (assigned and mapped up front, before sensors start) and captures the
+		// port's frames straight into its own region via USERPTR, so several
+		// cameras stream simultaneously.
 		if (canOpen) {
 			mPendingActivations[port] = {algo, args, videoOut};
-			mCameraManager->acquire(port, mDspServer->inBufferStart(), mDspServer->inBufferLen());
+			mCameraManager->acquire(port);
 		}
 		return;
 	}
 
-	// The camera is already held (possibly parked by a StopStream, which
-	// dropped the push subscription). Re-subscribe so frames flow again, then
-	// (re)activate the DSP.
-	subscribeFrames(port);
+	// The camera is already held. (Re)activate the DSP directly.
 	activateDsp(port, algo, args, videoOut);
 }
 
@@ -195,29 +218,10 @@ void VideoSensorManager::onAcquired(const QString &port, bool ok)
 		return;
 	}
 
-	// The camera is open and streaming. Subscribe to frames and activate the DSP.
-	subscribeFrames(port);
-
 	mActivePorts.insert(port);
 	QLOG_INFO() << "VideoSensorManager: camera acquired for port" << port;
 
 	activateDsp(port, activation.algo, activation.args, activation.videoOut);
-}
-
-void VideoSensorManager::subscribeFrames(const QString &port)
-{
-	mCameraManager->subscribe(port, this, [this, port](const uint8_t *data, size_t size) {
-		// When USERPTR is active (VPIF DMA'd straight into the DSP carveout)
-		// the frame is already in the DSP input buffer — skip the memcpy.
-		// For MMAP fallback and stub builds the copy still runs.
-		const auto *dspBuf = mDspServer->inBufferStart();
-		if (dspBuf && data != dspBuf) {
-			mDspServer->copyFrame(data, size);
-		}
-		QMetaObject::invokeMethod(mDspServer.data(), [this, port]() {
-			mDspServer->processFrameData(port);
-		}, Qt::QueuedConnection);
-	});
 }
 
 void VideoSensorManager::activateDsp(const QString &port, trikDsp::Algorithm algo,
@@ -225,11 +229,57 @@ void VideoSensorManager::activateDsp(const QString &port, trikDsp::Algorithm alg
 {
 	// The DSP CV algorithms must know the actual pixel format (NV16 vs YUYV) and
 	// the actual bytes-per-line to decode the frame correctly. They are taken
-	// from the CameraManager (cached at acquire), not from the raw device.
+	// from the CameraManager (cached at acquire), not from the raw device. The
+	// channel also records the port's DSP input region base so the DSP maps the
+	// per-port V4L2 buffer index to the correct input buffer.
+	//
+	// Switching the DSP to another port: release any frame still pending for the
+	// old port (its camera keeps streaming; VSM stops consuming its frames).
+	if (!mActiveDspPort.isEmpty() && mActiveDspPort != port) {
+		clearPendingFrame(mActiveDspPort);
+	}
+
+	const auto base = mCameraManager->inputRegion(port) * mCameraManager->inputBuffersPerRegion();
 	mDspServer->activate({port, algo, args, videoOut,
 	                      mCameraManager->width(port), mCameraManager->height(port),
-	                      mCameraManager->format(port), mCameraManager->lineLength(port)});
+	                      mCameraManager->format(port), mCameraManager->lineLength(port),
+	                      base});
 	mActiveDspPort = port;
+}
+
+void VideoSensorManager::kickDsp(const QString &port)
+{
+	// Try to hand the freshest pending frame to the DSP, but only when its
+	// processing slot is free. Called from frameReady (slot free -> hand over
+	// right away) and from onResult (slot just freed -> pick up any frame that
+	// arrived while the DSP was busy). Invariant: a pending frame never waits
+	// longer than one onResult, so the DSP is always fed the newest frame and
+	// never accumulates a backlog.
+	if (mDspBusyPorts.contains(port)) {
+		return;
+	}
+	const auto it = mPendingFrames.find(port);
+	if (it == mPendingFrames.end()) {
+		return;
+	}
+
+	const auto bufferIdx = it.value();
+	mPendingFrames.erase(it);
+	mDspBusyPorts.insert(port);
+
+	QMetaObject::invokeMethod(mDspServer.data(), [this, port, bufferIdx]() {
+		mDspServer->processFrameData(port, bufferIdx);
+	}, Qt::QueuedConnection);
+}
+
+void VideoSensorManager::clearPendingFrame(const QString &port)
+{
+	const auto it = mPendingFrames.find(port);
+	if (it == mPendingFrames.end()) {
+		return;
+	}
+	mCameraManager->releaseFrame(port, it.value());
+	mPendingFrames.erase(it);
 }
 
 void VideoSensorManager::handleStopRequested(const QString &port, int flags)
@@ -240,6 +290,7 @@ void VideoSensorManager::handleStopRequested(const QString &port, int flags)
 	// another port (and leave mActiveDspPort pointing at a dead channel).
 	if (mActiveDspPort == port) {
 		mDspServer->deactivate();
+		clearPendingFrame(port);
 		mActiveDspPort.clear();
 	}
 
@@ -249,17 +300,16 @@ void VideoSensorManager::handleStopRequested(const QString &port, int flags)
 	mPendingActivations.remove(port);
 
 	if (flags & StopStream) {
-		// Drop the push subscription but keep the camera acquired (open). The
-		// CameraManager parks the stream (streamoff) once the last subscriber
-		// is gone, and another pull client can transparently resume it.
-		mCameraManager->unsubscribe(port, this);
-		// The port stays in mActivePorts: we still hold the camera.
+		// Park the camera: keep it open but stop the stream. release() with the
+		// park flag leaves the device open for a quick re-acquire().
+		mCameraManager->stopStreaming(port);
+		mCameraManager->release(port);
+		mActivePorts.remove(port);
 	} else if (flags & StopAll) {
-		mCameraManager->unsubscribe(port, this);
 		mCameraManager->release(port);
 		mActivePorts.remove(port);
 	}
-	// StopNone: only the DSP is deactivated; streaming and the camera are kept.
+	// StopNone: only the DSP is deactivated; the camera keeps streaming.
 
 	// Repaint the display only when the camera was actually stopped or streamed
 	// off, i.e. when the framebuffer may hold a stale frame. A pure algorithm
@@ -288,6 +338,7 @@ void VideoSensorManager::stop()
 		QLOG_INFO() << "VideoSensorManager::stop: keeping detached channel" << mActiveDspPort << "active";
 	} else {
 		mDspServer->deactivate();
+		clearPendingFrame(mActiveDspPort);
 		mActiveDspPort.clear();
 		QLOG_INFO() << "VideoSensorManager::stop: DSP deactivated";
 	}
@@ -299,7 +350,7 @@ void VideoSensorManager::stop()
 			++it;
 			continue;
 		}
-		mCameraManager->unsubscribe(*it, this);
+		clearPendingFrame(*it);
 		mCameraManager->release(*it);
 		it = mActivePorts.erase(it);
 	}
@@ -314,19 +365,18 @@ void VideoSensorManager::releasePort(const QString &port)
 	// currently streaming another video port.
 	if (mActiveDspPort == port) {
 		mDspServer->deactivate();
+		clearPendingFrame(port);
 		mActiveDspPort.clear();
 	}
 	mPendingActivations.remove(port);
 	mDetachedPorts.remove(port);
 
-	// Fully release our camera hold: drop the push subscription and decrement
-	// the refcount, so the CameraManager stays balanced. The caller
-	// (Brick::startVideoTranslation) then either hands the device to
-	// mjpg-streamer (USB) or re-acquires it for the DSP JPEG encoder (video
-	// ports). A plain "forget the port" would leak the sensor's acquire() and
-	// leave the camera open forever.
+	// Fully release our camera hold: decrement the refcount, so the
+	// CameraManager stays balanced. The caller (Brick::startVideoTranslation)
+	// then either hands the device to mjpg-streamer (USB) or re-acquires it for
+	// the DSP JPEG encoder (video ports). A plain "forget the port" would leak
+	// the sensor's acquire() and leave the camera open forever.
 	if (mActivePorts.remove(port)) {
-		mCameraManager->unsubscribe(port, this);
 		mCameraManager->release(port);
 	}
 }
@@ -395,10 +445,16 @@ JpegEncoderSensor *VideoSensorManager::jpegEncoderSensor(const QString &port)
 	return it == mJpegEncoders.end() ? nullptr : *it;
 }
 
-void VideoSensorManager::onResult(const QString &sourceId, trikDsp::Algorithm algorithm, const trikDsp::OutArgs &result)
+void VideoSensorManager::onResult(const QString &sourceId, trikDsp::Algorithm algorithm,
+                                  const trikDsp::OutArgs &result, uint32_t bufferIdx)
 {
-	// The frame has been consumed: return the V4L2 buffer to the driver.
-	mCameraManager->releaseFrame(sourceId);
+	// The DSP finished (or dropped) the frame: hand the buffer back and free the
+	// processing slot. This is what re-feeds the DSP - kickDsp() picks up the
+	// freshest frame that arrived while it was busy, so stale frames never queue
+	// up (latest wins).
+	mCameraManager->releaseFrame(sourceId, bufferIdx);
+	mDspBusyPorts.remove(sourceId);
+	kickDsp(sourceId);
 
 	switch (algorithm) {
 	case trikDsp::Algorithm::Line: {

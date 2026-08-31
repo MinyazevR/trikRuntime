@@ -54,10 +54,11 @@ namespace trikControl {
 /// ## Algorithm switching (sensor stop() flags)
 ///
 /// A sensor's stop(StopNone) deactivates the DSP but keeps the camera streaming;
-/// stop(StopStream) additionally streams the camera off while keeping it
-/// acquired; stop(StopAll) releases the camera too (default). These flags only
-/// affect per-sensor stop() (handleStopRequested); VideoSensorManager::stop()
-/// is always a full teardown of every non-detached camera.
+/// stop(StopStream) parks the camera (streamoff, kept open for a quick
+/// re-acquire); stop(StopAll) releases the camera too (default). These flags
+/// only affect per-sensor stop() (handleStopRequested);
+/// VideoSensorManager::stop() is always a full teardown of every non-detached
+/// camera.
 ///
 /// ## Threading / connections
 ///
@@ -73,12 +74,12 @@ namespace trikControl {
 /// onResult() (re-activation after detect()), and the queue prevents that from
 /// re-entering the activation path synchronously.
 ///
-/// Frame flow (the backpressure point): CameraManager's worker thread runs the
-/// subscribeFrames callback, which copies the frame into the DSP input buffer and
-/// queues processFrameData() onto mDspThread; the DSP result returns via
-/// resultReady -> onResult (main thread), which finally releases the V4L2 buffer
-/// through CameraManager::releaseFrame(). Only one frame is in flight at a time:
-/// the buffer is released only after the DSP has consumed it.
+/// Frame flow: CameraManager's worker thread emits frameReady(port, bufferIdx),
+/// VSM forwards the buffer index to the DSP (which reads the frame directly from
+/// the DSP input buffer the VPIF DMA wrote into via USERPTR), the DSP result
+/// returns via resultReady -> onResult (main thread), which finally releases the
+/// V4L2 buffer through CameraManager::releaseFrame(port, bufferIdx). The camera
+/// streams continuously and multiple buffers may be in flight at once.
 class VideoSensorManager : public QObject
 {
 	Q_OBJECT
@@ -130,10 +131,11 @@ Q_SIGNALS:
 private Q_SLOTS:
 	void onResult(const QString &sourceId,
 	              trikDsp::Algorithm algorithm,
-	              const trikDsp::OutArgs &result);
+	              const trikDsp::OutArgs &result,
+	              uint32_t bufferIdx);
 
 	/// CameraManager::acquired() completion handler. The camera is open and
-	/// streaming here; subscribe to frames and activate the DSP algorithm.
+	/// streaming here; activate the DSP algorithm.
 	void onAcquired(const QString &port, bool ok);
 
 private:
@@ -141,14 +143,21 @@ private:
 	                     const trikDsp::InArgs &args, bool videoOut, bool canOpen);
 	void activateDsp(const QString &port, trikDsp::Algorithm algo,
 	                 const trikDsp::InArgs &args, bool videoOut);
-	/// (Re)subscribe as the camera's streaming (push) consumer. Idempotent: a
-	/// StopStream may have dropped the subscription, so re-initing a parked
-	/// sensor must re-subscribe before (re)activating the DSP.
-	void subscribeFrames(const QString &port);
 	void handleStopRequested(const QString &port, int flags);
 	void createSensor(const QString &port, const QString &deviceClass);
 	bool checkManagerState(const QString &message) const;
 	void destroyDsp();
+
+	/// Latest-wins DSP feeding: if @p port has a pending (retained, not yet
+	/// handed to the DSP) frame and it is not already processing, send the
+	/// pending frame to the DSP. Called on frameReady and onResult. Runs in the
+	/// main thread.
+	void kickDsp(const QString &port);
+
+	/// Drop and release the pending (not yet processed) frame of @p port, if
+	/// any. Called when the port stops driving the DSP or is released. Runs in
+	/// the main thread.
+	void clearPendingFrame(const QString &port);
 
 	const trikKernel::Configurer &mConfigurer;
 	const trikHal::HardwareAbstractionInterface &mHardwareAbstractionInterface;
@@ -181,6 +190,18 @@ private:
 	/// completion. The port is removed here when the acquire finishes (or is
 	/// cancelled by a stop).
 	QHash<QString, PendingActivation> mPendingActivations;
+
+	/// The latest retained frame of the DSP-active port that has not been handed
+	/// to the DSP yet. A newer frameReady supersedes (releases) the previous
+	/// entry, so the DSP always processes the freshest frame even if the camera
+	/// outruns it. Only the DSP-active port accumulates here; other ports drop
+	/// their frames immediately.
+	QHash<QString, uint32_t> mPendingFrames;
+
+	/// Ports with a processFrameData() currently in flight on the DSP thread.
+	/// Used to coalesce frameReady notifications (one frame in flight + one
+	/// pending per port).
+	QSet<QString> mDspBusyPorts;
 
 	/// Sensor instances indexed by port.
 	QHash<QString, LineSensor*> mLineSensors;
