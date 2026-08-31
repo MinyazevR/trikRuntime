@@ -90,30 +90,7 @@ void DspServer::deactivate()
 	}, Qt::QueuedConnection);
 }
 
-void DspServer::copyFrame(const uint8_t *data, size_t size)
-{
-	// Plain memcpy into the DSP shared input buffer. See the header comment for
-	// the serialization contract with processFrameData().
-	auto *dst = d->inBufferStart();
-	if (!dst) {
-		QLOG_WARN() << "DspServer: copyFrame called before init (no input buffer)";
-		return;
-	}
-
-	memcpy(dst, data, std::min(size, d->inBufferLen()));
-}
-
-uint8_t *DspServer::inBufferStart() const
-{
-	return static_cast<uint8_t *>(d->inBufferStart());
-}
-
-size_t DspServer::inBufferLen() const
-{
-	return d->inBufferLen();
-}
-
-void DspServer::processFrameData(const QString &sourceId)
+void DspServer::processFrameData(const QString &sourceId, uint32_t bufferIdx)
 {
 	OutArgs out{};
 	const auto algo = d->channelAlgo();
@@ -126,7 +103,11 @@ void DspServer::processFrameData(const QString &sourceId)
 		VideoFrame videoFrame;
 		const auto needVideo = d->channel().videoOut;
 		const auto &channel = d->channel();
-		const auto ok = d->processFrame(channel, out, needVideo ? &videoFrame : nullptr);
+		// bufferIdx is the V4L2 buffer index (0..buffersPerRegion-1); map it to
+		// the flat DSP input buffer index of the channel's region.
+		const auto flatIdx = channel.inputBufferBase + bufferIdx;
+		const auto ok = d->processFrame(channel, out, flatIdx,
+		                                needVideo ? &videoFrame : nullptr);
 
 		// autoDetect is one-shot: consume it on the DSP side so the detection
 		// runs on exactly one frame (like the old runtime, which cleared the
@@ -140,17 +121,15 @@ void DspServer::processFrameData(const QString &sourceId)
 
 		if (ok && needVideo && videoFrame.data && d->mFbOutput && d->mFbOutput->isOpen()) {
 			d->mFbOutput->writeFrame(static_cast<const uint8_t *>(videoFrame.data));
-		} else if (needVideo) {
-			// QLOG_WARN() << "DspServer: video display skipped (ok=" << ok
-			    //        << "data=" << (videoFrame.data != nullptr)
-			      //      << "fbOpen=" << (d->mFbOutput && d->mFbOutput->isOpen()) << ")";
 		}
 	} else {
 		QLOG_DEBUG() << "DspServer: dropping frame from inactive source" << sourceId
 		             << "(active=" << d->channelSourceId() << ")";
 	}
 
-	emit resultReady(sourceId, algo, out);
+	// bufferIdx here is the V4L2 buffer index, which the caller needs to hand
+	// the buffer back to the driver.
+	emit resultReady(sourceId, algo, out, bufferIdx);
 }
 
 void DspServer::init()

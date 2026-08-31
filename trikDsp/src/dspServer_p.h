@@ -16,6 +16,7 @@
 
 #include <QtCore/QScopedPointer>
 
+#include <trikHal/physicalMemoryMapper.h>
 #include <trik/buffer.h>
 #include <trik/sensors/cv_algorithm.h>
 #include <trik/sensors/cv_algorithm_args.h>
@@ -44,13 +45,13 @@ namespace trikDsp {
 ///
 ///   startIpc()         -> Ipc_transportConfig + Ipc_start
 ///   setupMessageQueue() -> MessageQ_create (host) + retry-loop MessageQ_open (slave)
-///   mapSharedBuffers()  -> INIT command over MessageQ, physToVirt x 2
+///   mapSharedBuffers()  -> INIT command over MessageQ, mapPhysicalMemory (output)
 ///
 /// If any step fails the object is left partially initialised.
 /// ~Impl() safely tears down whatever was allocated:
 ///   destroyMessageQueue() -> null-safe (checks mHostQue / mSlaveQue)
 ///   Ipc_stop()            -> safe even without Ipc_start
-///   munmap()              -> null-safe (checks mMmapIn/Out)
+///   mOutMap (RAII)        -> munmaps the output region by itself
 ///
 /// ## Concurrency contract
 ///
@@ -79,13 +80,13 @@ namespace trikDsp {
 ///
 ///   mHostQue:   created by MessageQ_create  -> deleted in destroyMessageQueue
 ///   mSlaveQue:   opened by MessageQ_open     -> closed in destroyMessageQueue
-///   mMmapIn/Out: allocated by mmap (physToVirt) -> freed by munmap in ~Impl()
-///   mDspIn/Out:  point into mMmapIn/Out regions (not separate allocations)
+///   mOutMap:    RAII owner of the DSP output mapping -> munmaps in ~MappedMemory
+///   mDspOut:     points into the mOutMap region (not a separate allocation)
 class DspServer::Impl
 {
 public:
 	/// Tears down IPC in reverse order:
-	///   destroyMessageQueue -> Ipc_stop -> munmap(mMmapIn) -> munmap(mMmapOut)
+	///   destroyMessageQueue -> Ipc_stop (mOutMap unmaps itself via RAII)
 	///
 	/// All steps are null-safe - the object may be in any state
 	/// (fully initialised, partially initialised, never initialised).
@@ -106,13 +107,10 @@ public:
 	/// Safe to call regardless of initialisation state.
 	void destroyMessageQueue();
 
-	/// Send the INIT command to DSP, receive physical addresses of
-	/// shared buffers, and mmap them via /dev/mem.
+	/// Send the INIT command to DSP, receive the physical address of the
+	/// shared output buffer, and mmap it via /dev/mem (RAII-owned by mOutMap).
 	///
-	/// Stores mmap base pointers and lengths in mMmapIn/mMmapOut for
-	/// proper munmap in the destructor.
-	///
-	/// @return true if both buffers were successfully mapped.
+	/// @return true if the output buffer was successfully mapped.
 	bool mapSharedBuffers();
 
 	/// Register a CV algorithm on the DSP.
@@ -124,32 +122,28 @@ public:
 	void registerAlgorithm(Algorithm algo, const AlgoDescriptor &desc);
 
 	/// Execute one frame-processing STEP on the DSP.
-	/// Sends input args to DSP, blocks until response, copies output args.
+	/// Sends the input buffer index plus the input args to the DSP, blocks
+	/// until response, copies output args.
 	///
-	/// @param in   sensor parameters (HSV ranges, matrix sizes, etc.).
-	/// @param out  DSP processing results (locations, colours).
+	/// @param in        sensor parameters (HSV ranges, matrix sizes, etc.).
+	/// @param out       DSP processing results (locations, colours).
+	/// @param bufferIdx index of the DSP input buffer holding the frame.
 	/// @return true on success.
-	bool step(const InArgs &in, OutArgs &out);
+	bool step(const InArgs &in, OutArgs &out, uint32_t bufferIdx);
 
 	/// Full frame processing pipeline:
 	///   step() -> optionally fill videoFrame from mDspOut
 	///
-	/// @pre  The caller MUST have already copied the frame data into mDspIn
-	///       (via the @c inBufferStart() / @c inBufferLen() helpers) before
-	///       calling this method.
-	/// @param channel     active channel (algorithm + inArgs + videoOut flag).
-	/// @param out         filled with DSP results.
-	/// @param videoFrame  if non-null and channel.videoOut == true,
-	///                    filled with pointer into mDspOut (zero-copy).
-	///                    The caller deep-copies for cross-thread signal emission.
+	/// @param channel    active channel (algorithm + inArgs + videoOut flag).
+	/// @param out        filled with DSP results.
+	/// @param bufferIdx  index of the DSP input buffer holding the frame.
+	/// @param videoFrame if non-null and channel.videoOut == true,
+	///                   filled with pointer into mDspOut (zero-copy).
+	///                   The caller deep-copies for cross-thread signal emission.
 	/// @return true if the frame was processed successfully.
 	bool processFrame(const DspChannel &channel,
-	                  OutArgs &out, VideoFrame *videoFrame = nullptr);
-
-	/// Start of the DSP shared input buffer (mmap'd /dev/mem).
-	void *inBufferStart() const { return mDspIn.start; }
-	/// Length of the DSP shared input buffer.
-	size_t inBufferLen() const { return mDspIn.length; }
+	                  OutArgs &out, uint32_t bufferIdx,
+	                  VideoFrame *videoFrame = nullptr);
 
 	/// @name Active channel accessors (single-channel DSP)
 	/// @{
@@ -208,11 +202,6 @@ private:
 	/// videoOut=false / source=nullptr when inactive.
 	DspChannel mActive;
 
-	/// DSP shared input buffer (mmap'd /dev/mem).
-	/// data.start -> usable data pointer (page-offset into mmap region).
-	/// data.length -> BUFFER_SIZE.
-	struct buffer mDspIn = {};
-
 #ifndef TRIK_DSP_STUB
 	/// Last registered algorithm.  Used to avoid re-registration in processFrame.
 	enum trik_cv_algorithm mCurrentAlgo = TRIK_CV_ALGORITHM_NONE;
@@ -228,16 +217,11 @@ private:
 	/// Initialised to MessageQ_INVALIDMESSAGEQ (0xffff).
 	unsigned mSlaveQue = 0xffff;
 
-	/// DSP shared output buffer (mmap'd /dev/mem).
+	/// DSP shared output buffer (mmap'd /dev/mem); start points into mOutMap.
 	struct buffer mDspOut = {};
 
-	/// mmap base address for mDspIn (page-aligned, for munmap).
-	void *mMmapIn = nullptr;
-	size_t mMmapInLen = 0;
-
-	/// mmap base address for mDspOut (page-aligned, for munmap).
-	void *mMmapOut = nullptr;
-	size_t mMmapOutLen = 0;
+	/// RAII owner of the DSP output mapping; munmaps itself on destruction.
+	trikHal::MappedMemory mOutMap;
 #endif
 };
 

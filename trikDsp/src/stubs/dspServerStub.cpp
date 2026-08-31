@@ -66,25 +66,10 @@ void DspServer::deactivate()
 	}, Qt::QueuedConnection);
 }
 
-void DspServer::copyFrame(const uint8_t *data, size_t size)
-{
-	Q_UNUSED(data)
-	Q_UNUSED(size)
-}
-
-uint8_t *DspServer::inBufferStart() const
-{
-	return static_cast<uint8_t *>(d->inBufferStart());
-}
-
-size_t DspServer::inBufferLen() const
-{
-	return d->inBufferLen();
-}
-
-void DspServer::processFrameData(const QString &sourceId)
+void DspServer::processFrameData(const QString &sourceId, uint32_t bufferIdx)
 {
 	Q_UNUSED(sourceId)
+	Q_UNUSED(bufferIdx)
 }
 
 void DspServer::setFbOutput(trikHal::FbOutputInterface *fb)

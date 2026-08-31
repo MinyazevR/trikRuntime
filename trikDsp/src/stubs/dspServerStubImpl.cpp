@@ -56,18 +56,20 @@ void DspServer::Impl::registerAlgorithm(Algorithm algo, const AlgoDescriptor &de
 	QLOG_INFO() << "DspServer: algorithm registration skipped (stub)";
 }
 
-bool DspServer::Impl::step(const InArgs &in, OutArgs &out)
+bool DspServer::Impl::step(const InArgs &in, OutArgs &out, uint32_t bufferIdx)
 {
 	Q_UNUSED(in)
 	Q_UNUSED(out)
+	Q_UNUSED(bufferIdx)
 	return false;
 }
 
 bool DspServer::Impl::processFrame(const DspChannel &channel,
-                                    OutArgs &out, VideoFrame *videoFrame)
+                                    OutArgs &out, uint32_t bufferIdx, VideoFrame *videoFrame)
 {
 	Q_UNUSED(channel)
 	Q_UNUSED(out)
+	Q_UNUSED(bufferIdx)
 	Q_UNUSED(videoFrame)
 	return false;
 }

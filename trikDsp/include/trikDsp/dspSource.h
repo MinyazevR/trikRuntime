@@ -35,6 +35,7 @@ struct DspChannel {
 	uint32_t height = 0;
 	PixelFormat format = PixelFormat::Unknown; ///< Actual pixel format of the source.
 	uint32_t lineLength = 0;                    ///< Actual bytes per line (V4L2 bytesperline).
+	uint32_t inputBufferBase = 0;               ///< Flat index of this source's first DSP input buffer.
 };
 
 struct VideoFrame {

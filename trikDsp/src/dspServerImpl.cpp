@@ -16,14 +16,10 @@
 #include "dspConverters.h"
 
 #include <trikHal/fbOutputInterface.h>
+#include <trikHal/physicalMemoryMapper.h>
 
 #include <algorithm>
 #include <array>
-#include <cerrno>
-#include <cstring>
-#include <fcntl.h>
-#include <sys/mman.h>
-#include <unistd.h>
 
 #include <ti/ipc/Std.h>
 #include <ti/ipc/Ipc.h>
@@ -40,7 +36,6 @@ namespace trikDsp {
 
 namespace {
 
-constexpr int PAGE_SIZE = 4096;
 constexpr int MSG_QUEUE_RETRIES = 10;
 
 /// The DSP video output is a fixed 240x240 RGB565 framebuffer (see BUFFER_SIZE_FOR_FB).
@@ -57,38 +52,6 @@ enum trik_cmd algoToDspCmd(enum trik_cv_algorithm algo)
 	case TRIK_CV_ALGORITHM_JPEG_ENCODER:    return TRIK_CMD_JPEG_ENCODER;
 	default:                                 return TRIK_CMD_NOP;
 	}
-}
-
-struct MmapResult {
-	uint8_t *data = nullptr;
-	void *base = nullptr;
-	size_t len = 0;
-};
-
-MmapResult physToVirt(void *physAddr)
-{
-	const auto addr = reinterpret_cast<uintptr_t>(physAddr);
-	const auto pageBase = addr / PAGE_SIZE * PAGE_SIZE;
-	const auto pageOffset = addr - pageBase;
-
-	const int memfd = open("/dev/mem", O_RDWR | O_SYNC);
-	if (memfd < 0) {
-		QLOG_ERROR() << "DspServer: open /dev/mem failed:" << strerror(errno);
-		return {};
-	}
-
-	const size_t mapLen = pageOffset + BUFFER_SIZE;
-	auto *mapped = mmap(nullptr, mapLen,
-	                    PROT_READ | PROT_WRITE, MAP_SHARED,
-	                    memfd, pageBase);
-
-	if (mapped == MAP_FAILED) {
-		QLOG_ERROR() << "DspServer: mmap /dev/mem failed:" << strerror(errno);
-		close(memfd);
-		return {};
-	}
-
-	return {static_cast<uint8_t*>(mapped) + pageOffset, mapped, mapLen};
 }
 
 ::trik_msg *allocRequest(MessageQ_Handle hostQue, UInt16 heapId,
@@ -111,15 +74,7 @@ DspServer::Impl::~Impl()
 {
 	destroyMessageQueue();
 	Ipc_stop();
-
-	if (mMmapIn) {
-		QLOG_INFO() << "DspServer: unmapping input buffer";
-		munmap(mMmapIn, mMmapInLen);
-	}
-	if (mMmapOut) {
-		QLOG_INFO() << "DspServer: unmapping output buffer";
-		munmap(mMmapOut, mMmapOutLen);
-	}
+	// mOutMap unmaps the DSP output region via RAII.
 
 	QLOG_INFO() << "DspServer: destroyed";
 }
@@ -226,37 +181,31 @@ bool DspServer::Impl::mapSharedBuffers()
 	}
 
 	auto *initRes = reinterpret_cast<struct trik_res_init_msg *>(res);
-	auto inMap = physToVirt(initRes->dsp_in_buffer);
-	auto outMap = physToVirt(initRes->dsp_out_buffer);
+	mOutMap = trikHal::mapPhysicalMemory(
+		reinterpret_cast<uintptr_t>(initRes->dsp_out_buffer), BUFFER_SIZE);
 
+	// The DSP input region is no longer mapped here: CameraManager maps it
+	// itself up front (fixed physical address) so the camera can capture into
+	// DSP memory independently of this INIT exchange. Only the output buffer is
+	// still obtained from the INIT response.
 	QLOG_DEBUG() << "DspServer: INIT response dsp_in_phys=" << initRes->dsp_in_buffer
 	             << "dsp_out_phys=" << initRes->dsp_out_buffer
-	             << "in_virt=" << static_cast<void*>(inMap.data)
-	             << "out_virt=" << static_cast<void*>(outMap.data);
+	             << "out_virt=" << static_cast<void*>(mOutMap.data());
 
-	if (inMap.data) {
-		QLOG_INFO() << "DspServer: mapped DSP input buffer at" << inMap.data;
-		mDspIn.start = inMap.data;
-		mDspIn.length = BUFFER_SIZE;
-		mMmapIn = inMap.base;
-		mMmapInLen = inMap.len;
-	}
-	if (outMap.data) {
-		QLOG_INFO() << "DspServer: mapped DSP output buffer at" << outMap.data;
-		mDspOut.start = outMap.data;
+	if (mOutMap) {
+		QLOG_INFO() << "DspServer: mapped DSP output buffer at" << mOutMap.data();
+		mDspOut.start = mOutMap.data();
 		mDspOut.length = BUFFER_SIZE;
-		mMmapOut = outMap.base;
-		mMmapOutLen = outMap.len;
 	}
 
 	freeMessage(res);
 
-	if (mDspIn.start && mDspOut.start) {
-		QLOG_INFO() << "DspServer: DSP buffers mapped";
+	if (mDspOut.start) {
+		QLOG_INFO() << "DspServer: DSP output buffer mapped";
 		return true;
 	}
 
-	QLOG_ERROR() << "DspServer: failed to mmap DSP buffers";
+	QLOG_ERROR() << "DspServer: failed to mmap DSP output buffer";
 	return false;
 }
 
@@ -294,7 +243,7 @@ void DspServer::Impl::registerAlgorithm(Algorithm algo, const AlgoDescriptor &de
 	freeMessage(res);
 }
 
-bool DspServer::Impl::step(const InArgs &in, OutArgs &out)
+bool DspServer::Impl::step(const InArgs &in, OutArgs &out, uint32_t bufferIdx)
 {
 	auto *req = reinterpret_cast<struct trik_res_step_msg *>(
 	    allocRequest(mHostQue, TRIK_MSG_HEAP_ID, TRIK_MSG_SIZE, TRIK_CMD_STEP));
@@ -303,6 +252,7 @@ bool DspServer::Impl::step(const InArgs &in, OutArgs &out)
 		return false;
 	}
 
+	req->buffer_idx = bufferIdx;
 	req->in_args = toDspInArgs(in);
 
 	auto *res = sendAndWaitForResponse(&req->header);
@@ -317,7 +267,7 @@ bool DspServer::Impl::step(const InArgs &in, OutArgs &out)
 }
 
 bool DspServer::Impl::processFrame(const DspChannel &channel,
-                                    OutArgs &out, VideoFrame *videoFrame)
+                                    OutArgs &out, uint32_t bufferIdx, VideoFrame *videoFrame)
 {
 	const auto dspAlgo = toDspAlgo(channel.algorithm);
 	// Re-register when the algorithm, the pixel format or the line length
@@ -336,7 +286,7 @@ bool DspServer::Impl::processFrame(const DspChannel &channel,
 		mCurrentLineLength = channel.lineLength;
 	}
 
-	const bool ok = step(channel.inArgs, out);
+	const bool ok = step(channel.inArgs, out, bufferIdx);
 
 	if (ok && dspAlgo == TRIK_CV_ALGORITHM_JPEG_ENCODER) {
 		// Capture the encoded JPEG synchronously on the DSP thread, before the

@@ -109,30 +109,14 @@ public:
 	/// Thread-safe - can be called from any thread.
 	void deactivate();
 
-	/// Copy a video frame into the DSP shared input buffer.
-	///
-	/// This is a plain (non-thread-affine) method: it may be called from the
-	/// streaming consumer's thread (main). It is serialized with the DSP-side
-	/// processing by the frame flow - releaseFrame is deferred until
-	/// resultReady, so the shared buffer is never accessed concurrently.
-	void copyFrame(const uint8_t *data, size_t size);
-
-	/// Start of the DSP shared input buffer (mmap'd via /dev/mem).  Returns
-	/// nullptr when the DSP server is not initialised (e.g. stub build).
-	/// The caller may use the address as a V4L2 USERPTR target so the VPIF
-	/// DMA engine writes frames directly into DSP memory.
-	uint8_t *inBufferStart() const;
-
-	/// Size of the DSP shared input buffer in bytes.
-	size_t inBufferLen() const;
-
-	/// Process the frame previously copied by copyFrame().
+	/// Process the frame captured into the DSP input buffer @p bufferIdx.
+	/// The DSP reads the frame directly from that buffer (no host-side copy).
 	/// MUST be called from the DspServer thread (use invokeMethod).
 	///
 	/// Drops frames from non-active sources (but still emits resultReady so the
 	/// caller can release the V4L2 buffer).
 	/// On success, emits resultReady() and writes video to FbOutput if attached.
-	Q_INVOKABLE void processFrameData(const QString &sourceId);
+	Q_INVOKABLE void processFrameData(const QString &sourceId, uint32_t bufferIdx);
 
 	/// Attach a HAL framebuffer output for direct video display.
 	/// Must be called before activate with videoOut=true.
@@ -145,9 +129,12 @@ Q_SIGNALS:
 
 	/// Emitted from the worker thread after each successfully processed frame.
 	/// OutArgs is passed by const reference to avoid copying the JPEG payload.
+	/// @p bufferIdx identifies the capture buffer whose frame was processed;
+	/// the caller must return that buffer to the driver when it sees this signal.
 	void resultReady(const QString &sourceId,
 			 trikDsp::Algorithm algorithm,
-			 const trikDsp::OutArgs &result);
+			 const trikDsp::OutArgs &result,
+			 uint32_t bufferIdx);
 
 	/// @}
 
