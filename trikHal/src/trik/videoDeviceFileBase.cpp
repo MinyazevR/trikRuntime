@@ -24,6 +24,7 @@
 #include <unistd.h>
 
 #include <QtCore/QSocketNotifier>
+#include <QtCore/QThread>
 #include <QtCore/QTimer>
 #include <QsLog.h>
 
@@ -144,6 +145,7 @@ bool VideoDeviceFileBase::setControl(uint32_t id, int32_t value)
 
 void VideoDeviceFileBase::close()
 {
+	disableNotifier();
 	mNotifier.reset();
 
 	if (mStreaming)
@@ -254,8 +256,7 @@ void VideoDeviceFileBase::onActivated(int fd)
 		// otherwise keep re-firing the notifier in a busy loop. Disable it; the
 		// stream is re-armed by the next startStreaming().
 		QLOG_ERROR() << "VideoDeviceFileBase: DQBUF failed:" << strerror(errno);
-		if (mNotifier)
-			mNotifier->setEnabled(false);
+		disableNotifier();
 		return;
 	}
 
@@ -266,6 +267,24 @@ void VideoDeviceFileBase::onActivated(int fd)
 
 	const auto *data = mMmapBufs[static_cast<int>(buf.index)].data;
 	onFrameReady(buf.index, data, buf.bytesused);
+}
+
+void VideoDeviceFileBase::disableNotifier()
+{
+	if (!mNotifier) {
+		return;
+	}
+	// QSocketNotifier is thread-affine: setEnabled() (and the destructor, which
+	// calls it when the notifier is enabled) from another thread only warns and
+	// does nothing. Run it on the notifier's own thread to be safe.
+	if (QThread::currentThread() == mNotifier->thread()) {
+		mNotifier->setEnabled(false);
+	} else {
+		const auto notifier = mNotifier.data();
+		QMetaObject::invokeMethod(notifier, [notifier]() {
+			notifier->setEnabled(false);
+		}, Qt::QueuedConnection);
+	}
 }
 
 void VideoDeviceFileBase::setUserPtrBuffers(const QVector<void *> &buffers, size_t bufferSize)
@@ -411,6 +430,7 @@ void VideoDeviceFileBase::stopStreaming()
 	if (!mStreaming || mFd < 0)
 		return;
 
+	disableNotifier();
 	mNotifier.reset();
 
 	v4l2_buf_type type = V4L2_BUF_TYPE_VIDEO_CAPTURE;

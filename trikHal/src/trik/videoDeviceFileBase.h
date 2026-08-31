@@ -119,6 +119,12 @@ private Q_SLOTS:
 	void onActivated(int fd);
 
 private:
+	/// Disable the socket notifier from its own thread. QSocketNotifier is
+	/// thread-affine: setEnabled()/destruction from another thread warns and is
+	/// a no-op. Runs inline when already on the notifier's thread, otherwise
+	/// posts a queued call to it.
+	void disableNotifier();
+
 	QScopedPointer<QSocketNotifier> mNotifier;
 };
 
