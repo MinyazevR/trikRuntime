@@ -35,6 +35,7 @@ HEADERS += \
 	$$PWD/include/trikKernel/translationsHelper.h \
 	$$PWD/include/trikKernel/version.h \
 	$$PWD/include/trikKernel/videoUtils.h \
+	$$PWD/include/trikKernel/fpsCounter.h \
 	$$PWD/include/trikKernel/exceptions/failedToOpenFileException.h \
 	$$PWD/include/trikKernel/exceptions/failedToParseXmlException.h \
 	$$PWD/include/trikKernel/exceptions/internalErrorException.h \
