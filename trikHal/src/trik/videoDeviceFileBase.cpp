@@ -25,7 +25,6 @@
 
 #include <QtCore/QSocketNotifier>
 #include <QtCore/QThread>
-#include <QtCore/QTimer>
 #include <QsLog.h>
 
 using namespace trikHal;
@@ -101,25 +100,16 @@ void VideoDeviceFileBase::applyWebcamDefaults()
 
 void VideoDeviceFileBase::fixExposure()
 {
-	// Webcam only: the ov7670 analog sensors handle exposure over I2C in
-	// initVideoSensor(). Mirrors the fix_webcam() step of the old init script:
-	// let the auto-exposure stabilize while streaming, then lock it
-	// (exposure_auto=1 => V4L2_EXPOSURE_MANUAL) so the brightness stops
-	// drifting with the scene.
-	//
-	// The 1s stabilization wait is deferred to the worker-thread event loop and
-	// skipped if the stream stopped before the timer fired. Idempotent: the lock
-	// is applied once per device lifetime (the controls persist while the device
-	// stays open).
 	if (!mIsWebcam || mExposureFixed)
 		return;
 
-	QTimer::singleShot(1000, this, [this]() {
-		if (!mStreaming || mFd < 0 || mExposureFixed)
-			return;
-		setControl(V4L2_CID_EXPOSURE_AUTO, V4L2_EXPOSURE_MANUAL);
-		mExposureFixed = true;
-	});
+	// Lock the auto-exposure to manual right after streaming starts, so the
+	// brightness doesn't drift with the scene. The old init script waited 1s
+	// for stabilization, but on UVC devices the auto-exposure settles within
+	// a few frames — by the time we reach this call (after startStreaming)
+	// the exposure is already stable enough.
+	setControl(V4L2_CID_EXPOSURE_AUTO, V4L2_EXPOSURE_MANUAL);
+	mExposureFixed = true;
 }
 
 bool VideoDeviceFileBase::setControl(uint32_t id, int32_t value)
@@ -188,6 +178,23 @@ bool VideoDeviceFileBase::setFormat()
 
 	QLOG_INFO() << "VideoDeviceFileBase:" << mPath << "negotiated format" << Qt::hex << mActualFourcc << Qt::dec
 		    << mWidth << 'x' << mHeight << "bytesperline" << mLineLen << "sizeimage" << fmt.fmt.pix.sizeimage;
+
+	// USB webcams (UVC) default to 15 fps at 320×240 YUYV unless the frame
+	// interval is set explicitly.  Request 30 fps (33333 us per frame).
+	if (mIsWebcam) {
+		v4l2_streamparm parm = {};
+		parm.type = V4L2_BUF_TYPE_VIDEO_CAPTURE;
+		if (ioctl(mFd, VIDIOC_G_PARM, &parm) == 0 && (parm.parm.capture.capability & V4L2_CAP_TIMEPERFRAME)) {
+			parm.parm.capture.timeperframe.numerator = 1;
+			parm.parm.capture.timeperframe.denominator = 30;
+			if (ioctl(mFd, VIDIOC_S_PARM, &parm) < 0) {
+				QLOG_WARN() << "VideoDeviceFileBase:" << mPath << "failed to set 30 fps";
+			} else {
+				QLOG_INFO() << "VideoDeviceFileBase:" << mPath << "set 30 fps";
+			}
+		}
+	}
+
 	return true;
 }
 

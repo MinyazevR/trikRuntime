@@ -235,6 +235,7 @@ bool CameraManager::openDeviceLocked(int id, Entry &entry)
 	});
 
 	entry.dev = std::move(dev);
+	entry.dev->fixExposure();
 	return true;
 }
 
