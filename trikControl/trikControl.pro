@@ -93,6 +93,7 @@ HEADERS += \
 	$$PWD/src/soundSensor.h \
 	$$PWD/src/videoSensorManager.h \
 	$$PWD/src/cameraManager.h \
+	$$PWD/src/dspFramePipeline.h \
 	$$PWD/src/soundSensorWorker.h \
 	$$PWD/src/tonePlayer.h \
 	$$PWD/src/translation.h \
@@ -167,6 +168,7 @@ SOURCES += \
 	$$PWD/src/cameraDevice.cpp \
 	$$PWD/src/videoSensorManager.cpp \
 	$$PWD/src/cameraManager.cpp \
+	$$PWD/src/dspFramePipeline.cpp \
 	$$PWD/src/qtCameraImplementation.cpp \
 	$$PWD/src/imitationCameraImplementation.cpp \
 	$$PWD/src/cameraDeviceInterface.cpp \
