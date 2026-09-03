@@ -31,11 +31,7 @@
 using namespace trikHal;
 
 VideoDeviceFileBase::VideoDeviceFileBase(const QString &devicePath, // NOLINT(modernize-pass-by-value)
-                                         uint32_t width, uint32_t height,
-                                         uint32_t preferredFourcc,
-                                         uint32_t bufferCount,
-                                         bool isWebcam,
-                                         QObject *parent)
+	uint32_t width, uint32_t height, uint32_t preferredFourcc, uint32_t bufferCount, bool isWebcam, QObject *parent)
 	: VideoDeviceFileInterface(parent)
 	, mPath(devicePath)
 	, mWidth(width)
@@ -64,9 +60,7 @@ bool VideoDeviceFileBase::open()
 
 	v4l2_capability cap = {};
 	if (ioctl(mFd, VIDIOC_QUERYCAP, &cap) == 0) {
-		const auto caps = (cap.capabilities & V4L2_CAP_DEVICE_CAPS)
-		                      ? cap.device_caps
-		                      : cap.capabilities;
+		const auto caps = (cap.capabilities & V4L2_CAP_DEVICE_CAPS) ? cap.device_caps : cap.capabilities;
 		constexpr unsigned needed = V4L2_CAP_STREAMING | V4L2_CAP_VIDEO_CAPTURE;
 		if ((caps & needed) != needed) {
 			close();
@@ -135,8 +129,8 @@ bool VideoDeviceFileBase::setControl(uint32_t id, int32_t value)
 	ctrl.value = value;
 
 	if (ioctl(mFd, VIDIOC_S_CTRL, &ctrl) < 0) {
-		QLOG_WARN() << "VideoDeviceFileBase:" << mPath << "failed to set control 0x"
-		            << Qt::hex << id << "to" << Qt::dec << value << ':' << strerror(errno);
+		QLOG_WARN() << "VideoDeviceFileBase:" << mPath << "failed to set control 0x" << Qt::hex << id << "to"
+			    << Qt::dec << value << ':' << strerror(errno);
 		return false;
 	}
 
@@ -145,8 +139,7 @@ bool VideoDeviceFileBase::setControl(uint32_t id, int32_t value)
 
 void VideoDeviceFileBase::close()
 {
-	disableNotifier();
-	mNotifier.reset();
+	teardownNotifier();
 
 	if (mStreaming)
 		stopStreaming();
@@ -175,9 +168,8 @@ bool VideoDeviceFileBase::setFormat()
 	fmt.fmt.pix.pixelformat = mRequestedFourcc;
 	fmt.fmt.pix.field = V4L2_FIELD_NONE;
 
-	QLOG_INFO() << "VideoDeviceFileBase:" << mPath << "requesting format" << Qt::hex
-	            << fmt.fmt.pix.pixelformat << Qt::dec << fmt.fmt.pix.width << 'x'
-	            << fmt.fmt.pix.height;
+	QLOG_INFO() << "VideoDeviceFileBase:" << mPath << "requesting format" << Qt::hex << fmt.fmt.pix.pixelformat
+		    << Qt::dec << fmt.fmt.pix.width << 'x' << fmt.fmt.pix.height;
 
 	if (ioctl(mFd, VIDIOC_TRY_FMT, &fmt) < 0) {
 		QLOG_WARN() << "VideoDeviceFileBase: TRY_FMT failed:" << strerror(errno);
@@ -194,9 +186,8 @@ bool VideoDeviceFileBase::setFormat()
 	mLineLen = fmt.fmt.pix.bytesperline;
 	mSizeImage = fmt.fmt.pix.sizeimage;
 
-	QLOG_INFO() << "VideoDeviceFileBase:" << mPath << "negotiated format" << Qt::hex
-	            << mActualFourcc << Qt::dec << mWidth << 'x' << mHeight
-	            << "bytesperline" << mLineLen << "sizeimage" << fmt.fmt.pix.sizeimage;
+	QLOG_INFO() << "VideoDeviceFileBase:" << mPath << "negotiated format" << Qt::hex << mActualFourcc << Qt::dec
+		    << mWidth << 'x' << mHeight << "bytesperline" << mLineLen << "sizeimage" << fmt.fmt.pix.sizeimage;
 	return true;
 }
 
@@ -230,7 +221,8 @@ void VideoDeviceFileBase::release(uint32_t bufferIdx)
 	}
 
 	if (ioctl(mFd, VIDIOC_QBUF, &buf) < 0) {
-		QLOG_ERROR() << "VideoDeviceFileBase: QBUF failed:" << strerror(errno);
+		QLOG_ERROR() << "VideoDeviceFileBase:" << mPath << "QBUF buffer idx" << bufferIdx
+			     << "failed:" << strerror(errno);
 	}
 
 	// The notifier stays enabled throughout streaming: with multiple buffers
@@ -281,9 +273,28 @@ void VideoDeviceFileBase::disableNotifier()
 		mNotifier->setEnabled(false);
 	} else {
 		const auto notifier = mNotifier.data();
-		QMetaObject::invokeMethod(notifier, [notifier]() {
-			notifier->setEnabled(false);
-		}, Qt::QueuedConnection);
+		QMetaObject::invokeMethod(notifier, [notifier]() { notifier->setEnabled(false); },
+			Qt::QueuedConnection);
+	}
+}
+
+void VideoDeviceFileBase::teardownNotifier()
+{
+	if (!mNotifier) {
+		return;
+	}
+	// The notifier is created and owned on the manager thread (where
+	// startStreaming() runs). Disabling OR destroying it from a foreign thread
+	// makes QSocketNotifier warn and the disable become a no-op, so both steps
+	// must happen on the notifier's own thread.
+	if (QThread::currentThread() == mNotifier->thread()) {
+		mNotifier->setEnabled(false);
+		mNotifier.reset();
+	} else {
+		QMetaObject::invokeMethod(mNotifier.data(), [this]() {
+			mNotifier->setEnabled(false);
+			mNotifier.reset();
+		}, Qt::BlockingQueuedConnection);
 	}
 }
 
@@ -311,7 +322,8 @@ bool VideoDeviceFileBase::allocateBuffers()
 		return false;
 	}
 
-	const uint32_t count = std::min<uint32_t>(req.count, mBufferCount);
+	const uint32_t count = mUseUserPtr ? static_cast<uint32_t>(mUserPtrBuffers.size())
+	                                   : std::min<uint32_t>(req.count, mBufferCount);
 	mMmapBufs.reserve(static_cast<int>(count));
 
 	if (mUseUserPtr) {
@@ -319,8 +331,8 @@ bool VideoDeviceFileBase::allocateBuffers()
 		// each caller-managed buffer. Reject buffers smaller than one frame,
 		// otherwise the DMA would overrun the caller's memory.
 		if (mUserPtrSize < mSizeImage) {
-			QLOG_ERROR() << "VideoDeviceFileBase: USERPTR buffer too small, need"
-			             << mSizeImage << "have" << mUserPtrSize;
+			QLOG_ERROR() << "VideoDeviceFileBase: USERPTR buffer too small, need" << mSizeImage << "have"
+				     << mUserPtrSize;
 			return false;
 		}
 
@@ -328,8 +340,8 @@ bool VideoDeviceFileBase::allocateBuffers()
 		// input buffer, so the VPIF DMA engine round-robins through them while
 		// the DSP processes the previous frames.
 		for (uint32_t i = 0; i < count; ++i) {
-			mMmapBufs.push_back({static_cast<uint8_t *>(mUserPtrBuffers[static_cast<int>(i)]),
-			                     mUserPtrSize});
+			auto *ptr = static_cast<uint8_t *>(mUserPtrBuffers[static_cast<int>(i)]);
+			mMmapBufs.push_back({ptr, mUserPtrSize});
 		}
 	} else {
 		for (uint32_t i = 0; i < count; ++i) {
@@ -344,8 +356,10 @@ bool VideoDeviceFileBase::allocateBuffers()
 				return false;
 			}
 
-			auto *map = mmap(nullptr, buf.length, PROT_READ | PROT_WRITE,
-			                 MAP_SHARED, mFd, buf.m.offset);
+			QLOG_DEBUG() << "VideoDeviceFileBase: QUERYBUF" << i << "length=" << buf.length
+				     << "offset=" << buf.m.offset;
+
+			auto *map = mmap(nullptr, buf.length, PROT_READ | PROT_WRITE, MAP_SHARED, mFd, buf.m.offset);
 			if (map == MAP_FAILED) {
 				QLOG_ERROR() << "VideoDeviceFileBase: mmap" << i << "failed:" << strerror(errno);
 				freeBuffers();
@@ -357,7 +371,7 @@ bool VideoDeviceFileBase::allocateBuffers()
 	}
 
 	QLOG_INFO() << "VideoDeviceFileBase:" << mMmapBufs.size() << "buffers allocated"
-	            << (mUseUserPtr ? "(USERPTR)" : "(MMAP)");
+		    << (mUseUserPtr ? "(USERPTR)" : "(MMAP)");
 	return true;
 }
 
@@ -419,8 +433,7 @@ bool VideoDeviceFileBase::startStreaming()
 	mStreaming = true;
 
 	mNotifier.reset(new QSocketNotifier(mFd, QSocketNotifier::Read, this));
-	connect(mNotifier.data(), &QSocketNotifier::activated,
-	        this, &VideoDeviceFileBase::onActivated);
+	connect(mNotifier.data(), &QSocketNotifier::activated, this, &VideoDeviceFileBase::onActivated);
 
 	return true;
 }
@@ -430,8 +443,7 @@ void VideoDeviceFileBase::stopStreaming()
 	if (!mStreaming || mFd < 0)
 		return;
 
-	disableNotifier();
-	mNotifier.reset();
+	teardownNotifier();
 
 	v4l2_buf_type type = V4L2_BUF_TYPE_VIDEO_CAPTURE;
 	if (ioctl(mFd, VIDIOC_STREAMOFF, &type) < 0) {

@@ -26,6 +26,7 @@
 #include "QsLog.h"
 #include "commonI2c.h"
 #include "trikFbOutput.h"
+#include <trikKernel/videoUtils.h>
 
 #include <QtCore/QScopedPointer>
 #include <unistd.h>
@@ -95,22 +96,22 @@ TrikHardwareAbstraction::TrikHardwareAbstraction()
 {
 }
 
-TrikHardwareAbstraction::~TrikHardwareAbstraction()
-= default;
+TrikHardwareAbstraction::~TrikHardwareAbstraction() = default;
 
 MspI2cInterface &TrikHardwareAbstraction::mspI2c()
 {
 	return *mI2c.data();
 }
 
-MspI2cInterface *TrikHardwareAbstraction::createMspI2c() {
+MspI2cInterface *TrikHardwareAbstraction::createMspI2c()
+{
 	return new TrikI2c();
 }
 
-MspI2cInterface *TrikHardwareAbstraction::createCommonI2c(uint8_t regSize) {
+MspI2cInterface *TrikHardwareAbstraction::createCommonI2c(uint8_t regSize)
+{
 	return new CommonI2c(regSize);
 }
-
 
 MspUsbInterface &TrikHardwareAbstraction::mspUsb()
 {
@@ -148,14 +149,13 @@ OutputDeviceFileInterface *TrikHardwareAbstraction::createOutputDeviceFile(const
 }
 
 VideoDeviceFileInterface *TrikHardwareAbstraction::createVideoDeviceFile( // NOLINT(google-default-arguments)
-		const QString &devicePath, uint32_t width, uint32_t height,
-		uint32_t fourcc, bool isWebcam) const
+	const QString &devicePath, uint32_t width, uint32_t height, uint32_t fourcc, bool isWebcam) const
 {
-	return new TrikVideoDevice(devicePath, width, height, fourcc, 3, isWebcam);
+	return new TrikVideoDevice(devicePath, width, height, fourcc, trikKernel::dspInputBuffersPerRegion, isWebcam);
 }
 
-bool TrikHardwareAbstraction::initVideoSensor(const QString &deviceFile, int i2cBus,
-                                              int i2cAddress, int gpioNumber) const
+bool TrikHardwareAbstraction::initVideoSensor(const QString &deviceFile, int i2cBus, int i2cAddress,
+	int gpioNumber) const
 {
 	Q_UNUSED(deviceFile);
 
@@ -165,17 +165,18 @@ bool TrikHardwareAbstraction::initVideoSensor(const QString &deviceFile, int i2c
 	// fresh open. Must complete before the device is opened, so it stays on the
 	// caller's thread.
 	const QString reinitFile = QStringLiteral("/sys/bus/i2c/devices/%1-%2/reinit")
-		.arg(i2cBus).arg(i2cAddress, 4, 16, QLatin1Char('0'));
+	                                   .arg(i2cBus)
+	                                   .arg(i2cAddress, 4, 16, QLatin1Char('0'));
 	{
 		QScopedPointer<OutputDeviceFileInterface> reinit(createOutputDeviceFile(reinitFile));
 		if (reinit->open()) {
 			reinit->write(QStringLiteral("1\n"));
-			QLOG_INFO() << "TrikHardwareAbstraction: reinitialized sensor on bus" << i2cBus
-			            << "address" << Qt::hex << i2cAddress;
+			QLOG_INFO() << "TrikHardwareAbstraction: reinitialized sensor on bus" << i2cBus << "address"
+				    << Qt::hex << i2cAddress;
 			return true;
 		}
 		QLOG_DEBUG() << "TrikHardwareAbstraction: no reinit node at" << reinitFile
-		             << "- falling back to GPIO+I2C register programming";
+			     << "- falling back to GPIO+I2C register programming";
 	}
 
 	// Fallback for kernels without the `reinit` node: pulse the reset GPIO, then
@@ -196,20 +197,19 @@ bool TrikHardwareAbstraction::initVideoSensor(const QString &deviceFile, int i2c
 
 	CommonI2c i2c(1); // ov7670 has 8-bit registers
 	if (!i2c.connect(QStringLiteral("/dev/i2c-%1").arg(i2cBus), i2cAddress)) {
-		QLOG_ERROR() << "TrikHardwareAbstraction: cannot open I2C bus" << i2cBus
-		             << "address" << i2cAddress;
+		QLOG_ERROR() << "TrikHardwareAbstraction: cannot open I2C bus" << i2cBus << "address" << i2cAddress;
 		return false;
 	}
 
 	for (const auto &reg : ov7670RegisterDefaults) {
 		if (i2c.writeRegister(reg.reg, reg.value) < 0) {
-			QLOG_WARN() << "TrikHardwareAbstraction: failed to write ov7670 register"
-			            << Qt::hex << reg.reg << "value" << reg.value;
+			QLOG_WARN() << "TrikHardwareAbstraction: failed to write ov7670 register" << Qt::hex << reg.reg
+				    << "value" << reg.value;
 		}
 	}
 	QLOG_DEBUG() << "TrikHardwareAbstraction: programmed"
-	             << sizeof(ov7670RegisterDefaults) / sizeof(ov7670RegisterDefaults[0])
-	             << "ov7670 registers on bus" << i2cBus;
+		     << sizeof(ov7670RegisterDefaults) / sizeof(ov7670RegisterDefaults[0]) << "ov7670 registers on bus"
+		     << i2cBus;
 
 	// fix_ov7670(): let the auto-exposure stabilize (0x13 0x87 is on), then
 	// lock it (0x13 0x85).
@@ -223,5 +223,3 @@ FbOutputInterface *TrikHardwareAbstraction::createFbOutput() const
 {
 	return new trik::TrikFbOutput();
 }
-
-
