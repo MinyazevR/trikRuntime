@@ -25,7 +25,7 @@ using namespace trikControl;
 const QByteArray JpegEncoderSensor::sFrameDelimiter = QByteArrayLiteral("c3f97bee765fd86b209951ead9f8a583");
 
 JpegEncoderSensor::JpegEncoderSensor(const QString &port, const trikKernel::Configurer &configurer,
-                                     const trikHal::HardwareAbstractionInterface &hardwareAbstraction)
+	const trikHal::HardwareAbstractionInterface &hardwareAbstraction)
 	: m("Jpeg Encoder on " + port, configurer, port, trikDsp::Algorithm::Jpeg)
 {
 	// Each camera port streams through its own FIFO (mjpg-streamer's
@@ -58,10 +58,13 @@ void JpegEncoderSensor::init(uint8_t jpegQuality, bool ifBlackAndWhite, bool sho
 		return;
 	}
 
-	if (!mFifoWriter->open(trikHal::OutputDeviceFileInterface::OpenMode::NonBlockingBinary)) {
-		QLOG_ERROR() << "JpegEncoderSensor: failed to open output fifo" << mFifoWriter->fileName();
-		m.state().fail();
-		return;
+	{
+		std::lock_guard<std::mutex> lock(mFifoLock);
+		if (!mFifoWriter->open(trikHal::OutputDeviceFileInterface::OpenMode::NonBlockingBinary)) {
+			QLOG_ERROR() << "JpegEncoderSensor: failed to open output fifo" << mFifoWriter->fileName();
+			m.state().fail();
+			return;
+		}
 	}
 
 	m.inArgs().jpegQuality = jpegQuality;
@@ -73,28 +76,39 @@ void JpegEncoderSensor::init(uint8_t jpegQuality, bool ifBlackAndWhite, bool sho
 void JpegEncoderSensor::stop(int flags)
 {
 	m.doStop();
-	mFifoWriter->close();
+	{
+		std::lock_guard<std::mutex> lock(mFifoLock);
+		mFifoWriter->close();
+	}
 	Q_EMIT stopRequested(flags);
 	Q_EMIT stopped();
 }
 
 void JpegEncoderSensor::onResult(const trikDsp::OutArgs &result)
 {
-	if (result.jpegData.isEmpty()) {
+	// Runs on the DSP thread (DirectConnection), right after processFrame():
+	// out.jpegData points into the DSP output buffer and is only valid until
+	// the next step, so it must be written out synchronously here.
+	if (!result.jpegData || result.jpegSize == 0) {
 		return;
 	}
 
-	writeFrame(result.jpegData);
+	std::lock_guard<std::mutex> lock(mFifoLock);
+	writeFrame(result.jpegData, result.jpegSize);
+#ifdef TRIK_DEBUG_FPS
+	mWriteFps.tick();
+#endif
 }
 
-void JpegEncoderSensor::writeFrame(const QByteArray &jpegData)
+void JpegEncoderSensor::writeFrame(const uint8_t *jpegData, uint32_t jpegSize)
 {
+	const QByteArray frame(reinterpret_cast<const char *>(jpegData), static_cast<int>(jpegSize));
+
 	// Non-blocking: drops the whole frame when the pipe is full (slow consumer),
 	// so a truncated frame (missing its delimiter) never corrupts the stream.
-	if (mFifoWriter->write(jpegData + sFrameDelimiter)) {
+	if (mFifoWriter->write(frame + sFrameDelimiter)) {
 		if (mDropping) {
-			QLOG_INFO() << "JpegEncoderSensor: pipe drained,"
-			            << mDroppedCount << "frame(s) were dropped";
+			QLOG_INFO() << "JpegEncoderSensor: pipe drained," << mDroppedCount << "frame(s) were dropped";
 			mDropping = false;
 			mDroppedCount = 0;
 		}

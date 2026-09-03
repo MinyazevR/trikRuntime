@@ -16,10 +16,14 @@
 
 #include <QtCore/QObject>
 #include <QtCore/QScopedPointer>
+#include <mutex>
 
 #include <trikControl/videoSensorStopFlags.h>
 
 #include "dspSensorBase.h"
+#ifdef TRIK_DEBUG_FPS
+#	include <trikKernel/fpsCounter.h>
+#endif
 
 namespace trikKernel {
 class Configurer;
@@ -38,10 +42,10 @@ namespace trikControl {
 /// encoded frames (with the mjpg-streamer frame delimiter) into a FIFO for
 /// input_fifo.so to pick up.
 ///
-/// Unlike the legacy virtual-sensor workers it owns no dedicated thread: the
-/// JPEG bytes are captured synchronously on the DspServer thread (they travel
-/// inside trikDsp::OutArgs::jpegData) and this sensor only performs a single
-/// non-blocking FIFO write from its onResult() slot.
+/// onResult() is invoked from the DSP thread (the pipeline delivers Jpeg
+/// results via a DirectConnection, so the encoded bytes in
+/// trikDsp::OutArgs::jpegData are still valid - no copy). init()/stop() run on
+/// the GUI thread; a small mutex serialises them against the FIFO write.
 class JpegEncoderSensor : public QObject
 {
 	Q_OBJECT
@@ -49,13 +53,14 @@ class JpegEncoderSensor : public QObject
 public:
 	/// Creates the encoder and resolves the per-port output FIFO from the config.
 	JpegEncoderSensor(const QString &port, const trikKernel::Configurer &configurer,
-	                  const trikHal::HardwareAbstractionInterface &hardwareAbstraction);
+		const trikHal::HardwareAbstractionInterface &hardwareAbstraction);
 	~JpegEncoderSensor() override;
 
 	/// Current device state.
 	DeviceInterface::Status status() const;
 
-	/// Receives an encoded frame from the DSP and streams it into the FIFO.
+	/// Receives an encoded frame from the DSP (DSP thread) and streams it into
+	/// the FIFO.
 	void onResult(const trikDsp::OutArgs &result);
 
 Q_SIGNALS:
@@ -72,7 +77,8 @@ public Q_SLOTS:
 
 private:
 	/// Writes one encoded frame plus the mjpg-streamer delimiter into the FIFO.
-	void writeFrame(const QByteArray &jpegData);
+	/// Called with mFifoLock held.
+	void writeFrame(const uint8_t *jpegData, uint32_t jpegSize);
 
 	DspSensorHelper m;
 
@@ -83,10 +89,18 @@ private:
 	/// Frame delimiter used by mjpg-streamer's input_fifo.so to split frames.
 	static const QByteArray sFrameDelimiter;
 
+	/// Serialises onResult() (DSP thread) against init()/stop() (GUI thread).
+	mutable std::mutex mFifoLock;
+
 	/// True while frames are being dropped because the pipe is full. Lets the
 	/// hot path log the transition instead of spamming one WARN per frame.
 	bool mDropping = false;
 	int mDroppedCount = 0;
+
+#ifdef TRIK_DEBUG_FPS
+	/// TEMP DEBUG: rate of JPEG frames written to the FIFO.
+	trikKernel::FpsCounter mWriteFps {QStringLiteral("JpegEncoderSensor fifo")};
+#endif
 };
 
 }

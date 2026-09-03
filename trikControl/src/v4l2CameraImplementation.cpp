@@ -15,8 +15,6 @@
 #include "v4l2CameraImplementation.h"
 #include "cameraManager.h"
 
-#include <QtCore/QEventLoop>
-#include <QtCore/QTimer>
 #include <QtCore/QVector>
 #include <QtGui/QImage>
 #include <QsLog.h>
@@ -45,7 +43,7 @@ QVector<uint8_t> yuyvToRgb(const uint8_t *shot, int height, int width)
 
 			auto resRgb = &result[(row * width + col) * 3];
 			const auto alpha = 180 * (cr - 128) / 128;
-			const auto beta  = 45 * (cb - 128) / 128;
+			const auto beta = 45 * (cb - 128) / 128;
 			resRgb[0] = clip255(y0 + alpha);
 			resRgb[1] = clip255(y0 - beta - alpha / 2);
 			resRgb[2] = clip255(y0 + 5 * beta);
@@ -63,7 +61,7 @@ QVector<uint8_t> yuv422pToRgb(const uint8_t *shot, int height, int width)
 	if (width <= 0 || height <= 0)
 		return result;
 
-	const auto Y  = shot;
+	const auto Y = shot;
 	const auto UV = shot + width * height;
 
 	for (auto row = 0; row < height; ++row) {
@@ -71,14 +69,14 @@ QVector<uint8_t> yuv422pToRgb(const uint8_t *shot, int height, int width)
 			auto startIndex = row * width + col;
 			int const y1 = Y[startIndex] - 16;
 			int const y2 = Y[startIndex + 1] - 16;
-			int const u  = UV[startIndex] - 128;
-			int const v  = UV[startIndex + 1] - 128;
+			int const u = UV[startIndex] - 128;
+			int const v = UV[startIndex + 1] - 128;
 			auto _298y1 = 298 * y1;
 			auto _298y2 = 298 * y2;
-			auto _409v  = 409 * v;
-			auto _100u  = -100 * u;
-			auto _516u  = 516 * u;
-			auto _208v  = -208 * v;
+			auto _409v = 409 * v;
+			auto _100u = -100 * u;
+			auto _516u = 516 * u;
+			auto _208v = -208 * v;
 			auto r1 = clip255((_298y1 + _516u + 128) >> 8);
 			auto g1 = clip255((_298y1 + _100u + _208v + 128) >> 8);
 			auto b1 = clip255((_298y1 + _409v + 128) >> 8);
@@ -87,8 +85,12 @@ QVector<uint8_t> yuv422pToRgb(const uint8_t *shot, int height, int width)
 			auto b2 = clip255((_298y2 + _409v + 128) >> 8);
 
 			auto rgb = &result[startIndex * 3];
-			rgb[0] = r1; rgb[1] = g1; rgb[2] = b1;
-			rgb[3] = r2; rgb[4] = g2; rgb[5] = b2;
+			rgb[0] = r1;
+			rgb[1] = g1;
+			rgb[2] = b1;
+			rgb[3] = r2;
+			rgb[4] = g2;
+			rgb[5] = b2;
 		}
 	}
 	return result;
@@ -96,7 +98,8 @@ QVector<uint8_t> yuv422pToRgb(const uint8_t *shot, int height, int width)
 
 }
 
-V4l2CameraImplementation::V4l2CameraImplementation(const QString &port, CameraManager &cameraManager) // NOLINT(modernize-pass-by-value)
+V4l2CameraImplementation::V4l2CameraImplementation(const QString &port,
+	const QSharedPointer<CameraManager> &cameraManager)
 	: mPort(port)
 	, mCameraManager(cameraManager)
 {
@@ -104,89 +107,41 @@ V4l2CameraImplementation::V4l2CameraImplementation(const QString &port, CameraMa
 
 QVector<uint8_t> V4l2CameraImplementation::getPhoto()
 {
-	// acquire() is asynchronous (the CameraManager lives on its own thread), so
-	// wait here for its completion signal. This method runs in a dedicated
-	// thread (CameraDevice::getPhoto), so a local event loop is fine.
-	QEventLoop acquireLoop;
-	bool acquired = false;
-	const QMetaObject::Connection acquireConn = QObject::connect(&mCameraManager,
-		&CameraManager::acquired, &acquireLoop,
-		[this, &acquired, &acquireLoop](const QString &port, bool ok) {
-			if (port == mPort) {
-				acquired = ok;
-				acquireLoop.quit();
-			}
-		});
-	mCameraManager.acquire(mPort);
-	acquireLoop.exec();
-	QObject::disconnect(acquireConn);
+	// This method runs on a dedicated worker thread (CameraDevice::getPhoto).
+	// Pull the newest frame with a watchdog timeout: acquire() is asynchronous,
+	// so frames only start flowing once the manager thread has opened the device.
+	mCameraManager->acquire(mPort);
 
-	if (!acquired)
-		return {};
-
-	// The device is not touched here - only the port's static format from the
-	// CameraManager is used to decode the frame.
-	const uint32_t fourcc = mCameraManager.fourcc(mPort);
-	const int width = static_cast<int>(mCameraManager.width(mPort));
-	const int height = static_cast<int>(mCameraManager.height(mPort));
-
-	// Wait for one frame and claim it zero-copy via retainFrame(), so the raw
-	// pixels are decoded straight from the capture buffer without a private
-	// copy. This method runs in a dedicated thread (CameraDevice::getPhoto),
-	// so a local event loop is fine.
-	QEventLoop frameLoop;
-	QTimer watchdog;
-	watchdog.setInterval(5000);
-	watchdog.setSingleShot(true);
-	QObject::connect(&watchdog, &QTimer::timeout, &frameLoop, &QEventLoop::quit);
-
-	uint32_t bufferIdx = 0;
-	const uint8_t *data = nullptr;
-	bool haveFrame = false;
-
-	const QMetaObject::Connection frameConn = QObject::connect(&mCameraManager,
-		&CameraManager::frameReady, &frameLoop,
-		[this, &bufferIdx, &data, &haveFrame, &frameLoop](const QString &port, uint32_t idx,
-		                                                  const uint8_t *frameData, size_t size) {
-			Q_UNUSED(size);
-			if (port != mPort)
-				return;
-			// Claim the buffer so it is not recycled while we decode it below.
-			mCameraManager.retainFrame(mPort, idx);
-			bufferIdx = idx;
-			data = frameData;
-			haveFrame = true;
-			frameLoop.quit();
-		});
-
-	watchdog.start();
-	frameLoop.exec();
-
-	watchdog.stop();
-	QObject::disconnect(frameConn);
-
-	if (!haveFrame) {
-		mCameraManager.release(mPort);
-		return {};
-	}
+	const uint32_t fourcc = mCameraManager->fourcc(mPort);
+	const int width = static_cast<int>(mCameraManager->width(mPort));
+	const int height = static_cast<int>(mCameraManager->height(mPort));
 
 	QVector<uint8_t> rgb;
-	switch (fourcc) {
-	case V4L2_PIX_FMT_NV16:
-		rgb = yuv422pToRgb(data, height, width);
-		break;
-	case V4L2_PIX_FMT_YUYV:
-		rgb = yuyvToRgb(data, height, width);
-		break;
-	default:
-		break;
+	{
+		const Frame frame = mCameraManager->getFrame(mPort, 0, 5000);
+		if (!frame.isValid() || !frame.data() || width <= 0 || height <= 0) {
+			QLOG_ERROR() << "V4l2CameraImplementation: no frame received within 5s on" << mPort;
+			mCameraManager->release(mPort);
+			return {};
+		}
+
+		switch (fourcc) {
+		case V4L2_PIX_FMT_NV16:
+			rgb = yuv422pToRgb(frame.data(), height, width);
+			break;
+		case V4L2_PIX_FMT_YUYV:
+			rgb = yuyvToRgb(frame.data(), height, width);
+			break;
+		default:
+			break;
+		}
+		// The frame handle is dropped here: its capture buffer is returned to
+		// the driver automatically once nobody references it anymore.
 	}
 
-	// Hand the frame buffer back to the driver, then release our hold on the
-	// camera. The release must happen after decoding, while the buffer is still
-	// valid.
-	mCameraManager.releaseFrame(mPort, bufferIdx);
-	mCameraManager.release(mPort);
+	// Our camera hold must not outlive the frame (the device is stopped/closed
+	// on the last release, which would invalidate the buffer).
+	mCameraManager->release(mPort);
 
 	if (rgb.isEmpty())
 		return {};

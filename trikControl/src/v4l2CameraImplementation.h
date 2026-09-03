@@ -14,23 +14,26 @@
 
 #pragma once
 
+#include <QtCore/QSharedPointer>
 #include "cameraImplementationInterface.h"
 #include <trikControl/trikControlDeclSpec.h>
 
-namespace trikControl { class CameraManager; }
+namespace trikControl {
+class CameraManager;
+}
 
 namespace trikControl {
 
 class V4l2CameraImplementation : public CameraImplementationInterface
 {
 public:
-	V4l2CameraImplementation(const QString &port, CameraManager &cameraManager);
+	V4l2CameraImplementation(const QString &port, const QSharedPointer<CameraManager> &cameraManager);
 
 	QVector<uint8_t> getPhoto() override;
 
 private:
 	QString mPort;
-	CameraManager &mCameraManager;
+	QSharedPointer<CameraManager> mCameraManager;
 };
 
 }
