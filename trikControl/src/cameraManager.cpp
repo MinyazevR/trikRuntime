@@ -14,145 +14,96 @@
 
 #include "cameraManager.h"
 
+#include <QtCore/QMetaObject>
+#include <QtCore/QThread>
 #include <QtCore/QVector>
 
 #include <trikHal/VideoDeviceFileInterface.h>
 #include <trikHal/hardwareAbstractionInterface.h>
-#ifdef Q_OS_LINUX
-#include <trikHal/physicalMemoryMapper.h>
-#endif
 #include <trikKernel/configurer.h>
 #include <trikKernel/videoUtils.h>
 #include <trikDsp/dspTypes.h>
 #include <QsLog.h>
+
+#include <algorithm>
+#include <chrono>
+#include <cstdio>
+#include <memory>
+#include <utility>
+
+#ifdef Q_OS_LINUX
+#	include <execinfo.h>
+#	include <unistd.h>
+#endif
 
 #include "configurerHelper.h"
 #include "deviceState.h"
 
 namespace trikControl {
 
-#ifdef Q_OS_LINUX
+void Frame::release() noexcept
+{
+	if (mToken) {
+		if (mToken->refs.fetch_sub(1, std::memory_order_acq_rel) == 1) {
+			auto *owner = mOwner.get();
+			if (owner && mToken->entryId >= 0) {
+				QMetaObject::invokeMethod(owner, [owner,
+					id = mToken->entryId, idx = mToken->bufferIdx]() {
+					owner->returnBufferToDriverById(id, idx);
+				}, Qt::QueuedConnection);
+			}
+		}
+		mToken = nullptr;
+	}
+	mOwner.reset();
+}
 
-namespace {
-
-/// Fixed physical address of the capture region (`in_buff`). The DSP linker
-/// places it right after `.resource_table` in DDR, so it is a build-time
-/// constant (see trikDsp/trik-media-sensors/dsp/bin/*/obj/server_dsp.xe674.map,
-/// `in_buff @ 0xc4000100`). Mapping it directly via /dev/mem lets the VPIF DMA
-/// engine capture into that memory without waiting for the DSP's INIT response.
-constexpr uintptr_t INPUT_PHYS = 0xc4000100;
-
-/// Capture region layout (mirrors trik/buffer.h).
-///
-/// One buffer holds one 320x240 YUV422 frame: 2 bytes per pixel, so
-/// 320 * 240 * 2 = 153600 bytes. Three buffers per region give triple
-/// buffering, so one region is 3 * 153600 = 460800 bytes (0x70800); the three
-/// regions together are 9 * 153600 = 1382400 bytes (0x151800), matching the
-/// `in_buff` symbol in the DSP map file.
-constexpr uint32_t INPUT_REGIONS = 3;
-constexpr uint32_t INPUT_BUFFERS_PER_REGION = 3;
-constexpr uint32_t INPUT_TOTAL = INPUT_REGIONS * INPUT_BUFFERS_PER_REGION;
-constexpr size_t INPUT_BUFFER_LEN = 320 * 240 * 2;
-
-} // namespace
-
-#endif // Q_OS_LINUX
-
-CameraManager::CameraManager(const trikKernel::Configurer &configurer,
-                             const trikHal::HardwareAbstractionInterface &hal,
-                             QObject *parent)
+CameraManager::CameraManager(const trikKernel::Configurer &configurer, const trikHal::HardwareAbstractionInterface &hal,
+	QObject *parent)
 	: QObject(parent)
 	, mHal(hal)
 {
-	// Single pass over the config: record the static state of every video
-	// sensor port. The Configurer is never touched after this loop - all
-	// later lookups go through mDevices.
-	for (const auto &port : configurer.ports()) {
+
+	// Single pass over the config: build the static per-port state. The
+	// Configurer is never touched after this loop - all later lookups go
+	// through mPortId + mEntries.
+	auto nextRegion = 0u;
+	for (auto &&port : configurer.ports()) {
 		if (configurer.deviceClass(port) != QStringLiteral("videoDevice")) {
 			continue;
 		}
 
-		Entry entry;
-		DeviceState state("videoDevice");
+		const auto region = nextRegion;
+		nextRegion = (nextRegion + 1) % trikKernel::dspInputRegions;
 
-		entry.w = static_cast<uint32_t>(
-			ConfigurerHelper::configureInt(configurer, state, port, "width"));
-		entry.h = static_cast<uint32_t>(
-			ConfigurerHelper::configureInt(configurer, state, port, "height"));
+		mPortId.insert(port, static_cast<int>(mEntries.size()));
+		mEntries.push_back(makeEntry(configurer, port, region));
 
-		QString defaultDevFile, fmtStr, defaultStreamerScript;
-		const auto devFile = configurer.attributeByPort(port, "device", &defaultDevFile);
-		const auto fmt = configurer.attributeByPort(port, "format", &fmtStr);
-		const auto streamerScript =
-			configurer.attributeByPort(port, "mjpgStreamerScript", &defaultStreamerScript);
-
-		// The ov7670 analog ports (named "video*") carry the I2C bus/address and
-		// reset GPIO used for sensor initialization. Only those ports have them:
-		// reading them from any other port (the USB webcam) would trip the
-		// Configurer's malformed-attribute check. For non-video ports they stay 0.
-		if (port.startsWith(QStringLiteral("video"))) {
-			const auto optInt = [&configurer, &port](const QString &name) {
-				try {
-					bool ok = false;
-					const int v = configurer.attributeByPort(port, name).toInt(&ok, 0);
-					return ok ? v : 0;
-				} catch (const trikKernel::MalformedConfigException &) {
-					return 0;
-				}
-			};
-			entry.i2cBus = optInt(QStringLiteral("i2cBus"));
-			entry.i2cAddress = optInt(QStringLiteral("i2cAddress"));
-			entry.gpioNumber = optInt(QStringLiteral("gpioNumber"));
-		}
-
-		entry.devFile = devFile;
-		entry.mjpgStreamerScript = streamerScript;
-		entry.ready = !state.isFailed() && !devFile.isEmpty() && !fmt.isEmpty();
-		if (entry.ready) {
-			entry.fmt = static_cast<uint32_t>(
-				trikKernel::toV4l2Fourcc(trikDsp::pixelFormatFromString(fmt)));
-		} else {
-			QLOG_WARN() << "CameraManager: port" << port << "has an invalid config, marked not ready";
-		}
-
-		QLOG_INFO() << "CameraManager: registered port" << port << "->" << entry.devFile
-			    << entry.w << 'x' << entry.h << "ready=" << entry.ready;
-
-		mDevices.emplace(port, std::move(entry));
+		const auto &entry = mEntries.back();
+		QLOG_INFO() << "CameraManager: registered port" << port << "->" << entry.devFile << entry.w << 'x'
+			    << entry.h << "ready=" << entry.ready << "region=" << region;
 	}
 
 #ifdef Q_OS_LINUX
-	// Assign each video port a capture region up front (one per port, so every
-	// camera always streams into its own DSP memory). The assignment is static:
-	// CameraManager and VideoSensorManager both read it via inputRegion().
-	auto nextRegion = 0u;
-	for (auto &kv : mDevices) {
-		mPortRegions[kv.first] = nextRegion;
-		nextRegion = (nextRegion + 1) % INPUT_REGIONS;
-	}
-
-	// Map the capture region up front (before sensors start, and before the
-	// DSP's INIT response): the manager learns the per-port capture ranges here
-	// so acquire() can set up USERPTR zero-copy streaming at any time.
+	// Map the capture region up front (before the DSP's INIT response): the
+	// manager hands the per-port virtual addresses to V4L2 as USERPTR targets.
 	if (mapInputRegion()) {
 		QLOG_INFO() << "CameraManager: capture region mapped, zero-copy streaming available";
 	} else {
 		QLOG_WARN() << "CameraManager: capture region unavailable, USERPTR disabled (MMAP fallback)";
 	}
-#endif // Q_OS_LINUX
+#endif
 
 	// Run the manager (and its V4L2 devices / QSocketNotifiers) on a dedicated
 	// thread, so the slow sensor initialization and device I/O never block the
-	// GUI thread. The static port state above was recorded before the move and
-	// is never mutated afterwards except through the locked device entries.
+	// GUI thread.
 	mThread.reset(new QThread);
 	mThread->setObjectName(QStringLiteral("CameraManager"));
 	moveToThread(mThread.data());
 	mThread->start();
 
 	// Kick off the (possibly slow) ov7670 initialization on the worker thread,
-	// so the Brick constructor never blocks. It runs before any acquire() can,
-	// because everything is serialized on the worker thread's event queue.
+	// so the Brick constructor never blocks.
 	runAsync([this]() { initSensors(); });
 }
 
@@ -160,9 +111,9 @@ CameraManager::~CameraManager()
 {
 	// Tear the devices down on their own thread (blocking), then stop it.
 	runInManagerThread([this]() {
-		QWriteLocker lock(&mLock);
-		tearDownLocked();
-		mDevices.clear();
+		for (std::size_t id = 0; id < mEntries.size(); ++id) {
+			tearDownPort(static_cast<int>(id));
+		}
 	});
 
 	mThread->quit();
@@ -170,396 +121,476 @@ CameraManager::~CameraManager()
 	// mInputMap munmaps itself (RAII).
 }
 
-void CameraManager::acquire(const QString &port)
+CameraManager::Entry CameraManager::makeEntry(const trikKernel::Configurer &configurer, const QString &port,
+	uint32_t region)
 {
-	runAsync([this, port]() {
-		bool ok = false;
-		{
-			QWriteLocker lock(&mLock);
-			auto it = mDevices.find(port);
-			if (it != mDevices.end() && it->second.ready) {
-				ok = openDeviceLocked(port, it->second);
-				// A client that grabs the camera wants frames: resume a parked
-				// camera (startStreaming), and clear any pending park request.
-				if (ok && it->second.dev && !it->second.streaming) {
-					if (it->second.dev->startStreaming()) {
-						it->second.streaming = true;
-					} else {
-						// Streaming failed to start: undo the acquisition so the
-						// client does not hold a non-streaming camera forever.
-						ok = false;
-						--it->second.refCount;
-					}
-				}
-				it->second.stopRequested = false;
-			} else {
-				QLOG_ERROR() << "CameraManager: port" << port << "is not available";
+	Entry entry;
+	DeviceState state("videoDevice");
+
+	entry.portName = port;
+	entry.w = static_cast<uint32_t>(ConfigurerHelper::configureInt(configurer, state, port, "width"));
+	entry.h = static_cast<uint32_t>(ConfigurerHelper::configureInt(configurer, state, port, "height"));
+
+	QString defaultDevFile, fmtStr, defaultStreamerScript;
+	const auto devFile = configurer.attributeByPort(port, "device", &defaultDevFile);
+	const auto fmt = configurer.attributeByPort(port, "format", &fmtStr);
+	const auto streamerScript = configurer.attributeByPort(port, "mjpgStreamerScript", &defaultStreamerScript);
+
+	// The ov7670 analog ports (named "video*") carry the I2C bus/address and
+	// reset GPIO used for sensor initialization. Only those ports have them.
+	if (port.startsWith(QStringLiteral("video"))) {
+		const auto optInt = [&configurer, &port](const QString &name) {
+			try {
+				bool ok = false;
+				const int v = configurer.attributeByPort(port, name).toInt(&ok, 0);
+				return ok ? v : 0;
+			} catch (const trikKernel::MalformedConfigException &) {
+				return 0;
 			}
-		}
-		emit acquired(port, ok);
-	});
-}
-
-bool CameraManager::openDeviceLocked(const QString &port, Entry &entry)
-{
-	// Create the device only on the first acquisition, taking the format from
-	// the port's static config. Later clients reuse it and just bump the
-	// refcount, so the physical device is never opened twice and the format
-	// of an already-open device stays intact.
-	if (!entry.dev) {
-		// The analog ov7670 cameras (ports named "video*") are initialized over
-		// I2C by the kernel driver's reinit node; the USB webcam is not.
-		const bool isVideoPort = port.startsWith(QStringLiteral("video"));
-
-		// Initialize the ov7670 sensor (reinit via kernel driver, or a
-		// full I2C register programming as a fallback) before opening the device.
-		// It is done only once per process lifetime: the sensor keeps its
-		// configuration across close/reopen, so a hot-plug re-open must not
-		// re-run the slow init (the 1s exposure-stabilization sleep in the
-		// fallback path) on an already-initialized sensor.
-		if (isVideoPort && !entry.sensorInitialized) {
-			entry.sensorInitialized = mHal.initVideoSensor(entry.devFile, entry.i2cBus,
-								entry.i2cAddress, entry.gpioNumber);
-		}
-
-		std::unique_ptr<trikHal::VideoDeviceFileInterface> dev(
-			mHal.createVideoDeviceFile(entry.devFile, entry.w, entry.h,
-			                           entry.fmt, !isVideoPort));
-
-#ifdef Q_OS_LINUX
-		// Zero-copy: capture straight into the port's capture region (USERPTR),
-		// which was assigned and mapped in the constructor. Falls back to MMAP
-		// when the region is unavailable (no /dev/mem).
-		if (mInputMap) {
-			const auto region = mPortRegions.value(port, 0);
-			const auto base = region * INPUT_BUFFERS_PER_REGION;
-			QVector<void *> buffers;
-			buffers.reserve(static_cast<int>(INPUT_BUFFERS_PER_REGION));
-			for (uint32_t i = 0; i < INPUT_BUFFERS_PER_REGION; ++i) {
-				buffers.append(mInputMap.data() + (base + i) * INPUT_BUFFER_LEN);
-			}
-			dev->setUserPtrBuffers(buffers, INPUT_BUFFER_LEN);
-			QLOG_INFO() << "CameraManager: port" << port << "capturing into region" << region;
-		}
-#endif // Q_OS_LINUX
-
-		if (!dev->open()) {
-			QLOG_ERROR() << "CameraManager: failed to open" << entry.devFile;
-			return false;
-		}
-
-		// Cache the actual negotiated format (may differ from the config) and
-		// the bytes-per-line for the DSP descriptor.
-		entry.format = trikKernel::fromV4l2Fourcc(dev->actualFourcc());
-		entry.lineLength = dev->bytesPerLine();
-
-		QLOG_DEBUG() << "CameraManager: port" << port << "opened, actualFourcc=0x"
-		             << Qt::hex << dev->actualFourcc() << "lineLength" << entry.lineLength;
-
-		// Relay frames from the device to all consumers of this port.
-		connect(dev.get(), &trikHal::VideoDeviceFileInterface::frameReady, this,
-		        [this, port](uint32_t bufferIdx, const uint8_t *data, size_t size) {
-			onDeviceFrame(port, bufferIdx, data, size);
-		});
-
-		entry.dev = std::move(dev);
+		};
+		entry.i2cBus = optInt(QStringLiteral("i2cBus"));
+		entry.i2cAddress = optInt(QStringLiteral("i2cAddress"));
+		entry.gpioNumber = optInt(QStringLiteral("gpioNumber"));
 	}
 
-	++entry.refCount;
-	return true;
-}
-
-void CameraManager::onDeviceFrame(const QString &port, uint32_t bufferIdx,
-                                  const uint8_t *data, size_t size)
-{
-	QWriteLocker lock(&mLock);
-	auto it = mDevices.find(port);
-	if (it == mDevices.end() || !it->second.dev) {
-		return;
+	entry.devFile = devFile;
+	entry.mjpgStreamerScript = streamerScript;
+	entry.inputRegion = region;
+	entry.tokens = std::make_unique<Frame::Token[]>(inputBuffersPerRegionValue);
+	entry.ready = !state.isFailed() && !devFile.isEmpty() && !fmt.isEmpty();
+	if (entry.ready) {
+		entry.fmt = static_cast<uint32_t>(trikKernel::toV4l2Fourcc(trikDsp::pixelFormatFromString(fmt)));
+	} else {
+		QLOG_WARN() << "CameraManager: port" << port << "has an invalid config, marked not ready";
 	}
 
-	auto &refCounts = it->second.frameRefCount;
-
-	// Auto-return every delivered-but-unclaimed frame of this port: nobody
-	// grabbed it (refcount 0), so let the driver reuse/overwrite the buffer.
-	for (auto refIt = refCounts.begin(); refIt != refCounts.end();) {
-		if (refIt.value() == 0) {
-			it->second.dev->release(refIt.key());
-			refIt = refCounts.erase(refIt);
-		} else {
-			++refIt;
-		}
-	}
-
-	// Deliver the new frame, initially unclaimed (refcount 0).
-	refCounts[bufferIdx] = 0;
-	emit frameReady(port, bufferIdx, data, size);
-}
-
-void CameraManager::stopStreaming(const QString &port)
-{
-	runAsync([this, port]() {
-		QWriteLocker lock(&mLock);
-		auto it = mDevices.find(port);
-		if (it == mDevices.end() || !it->second.dev) {
-			return;
-		}
-		// Remember the park request. If the camera is not needed by anyone else
-		// (the requester is its only client), park it right away; otherwise the
-		// park happens in release() when the last client lets go.
-		it->second.stopRequested = true;
-		if (it->second.refCount <= 1 && it->second.streaming) {
-			it->second.dev->stopStreaming();
-			it->second.streaming = false;
-			// STREAMOFF returns every buffer to the driver; forget our refcounts.
-			it->second.frameRefCount.clear();
-		}
-	});
-}
-
-void CameraManager::release(const QString &port)
-{
-	runAsync([this, port]() {
-		std::unique_ptr<trikHal::VideoDeviceFileInterface> dev;
-		{
-			QWriteLocker lock(&mLock);
-			auto it = mDevices.find(port);
-			if (it == mDevices.end() || !it->second.ready || it->second.refCount <= 0) {
-				return;
-			}
-
-			// Still used by other clients - nothing to tear down yet.
-			if (--it->second.refCount > 0) {
-				return;
-			}
-
-			// Last client gone. If a stop was requested, only park the camera
-			// (streamoff) and keep it open so a later acquire() starts it again.
-			// Otherwise tear the device down for good.
-			if (it->second.stopRequested) {
-				if (it->second.streaming) {
-					it->second.dev->stopStreaming();
-					it->second.streaming = false;
-				}
-				it->second.frameRefCount.clear();
-				return;
-			}
-
-			// Take ownership of the device out of the map, then release the
-			// lock before the slow teardown. The device is destroyed when `dev`
-			// goes out of scope.
-			dev = std::move(it->second.dev);
-			it->second.streaming = false;
-			it->second.frameRefCount.clear();
-		}
-
-		if (dev) {
-			dev->stopStreaming();
-			dev->close();
-		}
-	});
-}
-
-void CameraManager::stop()
-{
-	QLOG_INFO() << "CameraManager::stop: force-stopping all cameras";
-	runInManagerThread([this]() {
-		QWriteLocker lock(&mLock);
-		tearDownLocked();
-	});
-	QLOG_INFO() << "CameraManager::stop: done";
-}
-
-void CameraManager::stop(const QString &port)
-{
-	QLOG_INFO() << "CameraManager::stop: force-stopping camera on port" << port;
-	runInManagerThread([this, port]() {
-		QWriteLocker lock(&mLock);
-		auto it = mDevices.find(port);
-		if (it != mDevices.end())
-			tearDownPortLocked(port, it->second);
-	});
-	QLOG_INFO() << "CameraManager::stop: port" << port << "done";
-}
-
-void CameraManager::tearDownPortLocked(const QString &port, Entry &entry)
-{
-	Q_UNUSED(port);
-	if (entry.dev) {
-		entry.dev->disconnect();
-		entry.dev->stopStreaming();
-		entry.dev->close();
-		entry.dev.reset();
-	}
-	entry.refCount = 0;
-	entry.stopRequested = false;
-	entry.streaming = false;
-	entry.frameRefCount.clear();
-}
-
-void CameraManager::tearDownLocked()
-{
-	for (auto &kv : mDevices) {
-		tearDownPortLocked(kv.first, kv.second);
-	}
-}
-
-void CameraManager::initSensors()
-{
-	// Runs in the worker thread (posted from the constructor). Only ov7670
-	// ports carry an I2C bus (the USB webcam has none), so they are the
-	// only ones that need sensor initialization. initVideoSensor() returns
-	// false when no sensor is physically wired: such a port stays
-	// uninitialized and is retried lazily on acquire(), which also covers a
-	// later hot-plug.
-	QWriteLocker lock(&mLock);
-	for (auto &kv : mDevices) {
-		auto &entry = kv.second;
-		if (!entry.ready || entry.i2cBus <= 0 || entry.sensorInitialized) {
-			continue;
-		}
-		entry.sensorInitialized = mHal.initVideoSensor(entry.devFile, entry.i2cBus,
-		                                               entry.i2cAddress, entry.gpioNumber);
-	}
-}
-
-void CameraManager::retainFrame(const QString &port, uint32_t bufferIdx)
-{
-	runAsync([this, port, bufferIdx]() {
-		QWriteLocker lock(&mLock);
-		auto it = mDevices.find(port);
-		if (it == mDevices.end() || !it->second.dev) {
-			return;
-		}
-
-		auto &refCounts = it->second.frameRefCount;
-		const auto refIt = refCounts.find(bufferIdx);
-		// Only a currently-delivered frame (one that has an entry, initially 0)
-		// can be claimed. If the entry is gone the frame was already
-		// auto-returned to the driver (a newer frame superseded it before we
-		// got here) - claiming it now would later produce a double QBUF.
-		if (refIt != refCounts.end()) {
-			++refIt.value();
-		}
-	});
-}
-
-void CameraManager::releaseFrame(const QString &port, uint32_t bufferIdx)
-{
-	runAsync([this, port, bufferIdx]() {
-		QWriteLocker lock(&mLock);
-		auto it = mDevices.find(port);
-		if (it == mDevices.end() || !it->second.dev) {
-			return;
-		}
-
-		auto &refCounts = it->second.frameRefCount;
-		const auto refIt = refCounts.find(bufferIdx);
-		// The buffer was never claimed, was already recycled, or was never
-		// retained at all (refcount 0) - nothing to hand back. The manager
-		// auto-returns unclaimed frames when the next one arrives. This also
-		// guards against a stray double release.
-		if (refIt == refCounts.end() || refIt.value() == 0) {
-			return;
-		}
-
-		if (--refIt.value() > 0) {
-			return;
-		}
-
-		refCounts.erase(refIt);
-		it->second.dev->release(bufferIdx);
-	});
+	return entry;
 }
 
 #ifdef Q_OS_LINUX
 bool CameraManager::mapInputRegion()
 {
-	const auto regionLen = INPUT_TOTAL * INPUT_BUFFER_LEN;
-	mInputMap = trikHal::mapPhysicalMemory(INPUT_PHYS, regionLen);
+	const auto regionLen = trikKernel::dspInputBufferTotal * trikKernel::dspInputFrameSize;
+	mInputMap = trikHal::mapPhysicalMemory(trikKernel::dspInputPhysAddress, regionLen);
 	if (!mInputMap) {
-		QLOG_WARN() << "CameraManager: failed to map capture region at 0x" << Qt::hex << INPUT_PHYS;
+		QLOG_WARN() << "CameraManager: failed to map capture region at 0x" << Qt::hex
+			    << trikKernel::dspInputPhysAddress;
 		return false;
 	}
 
-	QLOG_INFO() << "CameraManager: mapped capture region at"
-	            << static_cast<void *>(mInputMap.data()) << "size" << regionLen;
+	QLOG_INFO() << "CameraManager: mapped capture region at" << static_cast<void *>(mInputMap.data()) << "size"
+		    << regionLen;
 	return true;
 }
 #endif // Q_OS_LINUX
 
-uint32_t CameraManager::inputBuffersPerRegion() const
+bool CameraManager::openDeviceLocked(int id, Entry &entry)
 {
+	if (entry.dev) {
+		return true;
+	}
+
+	// The analog ov7670 cameras (ports named "video*") are initialized over
+	// I2C; the USB webcam is not. Done only once per process lifetime.
+	const bool isVideoPort = entry.portName.startsWith(QStringLiteral("video"));
+	if (isVideoPort && !entry.sensorInitialized) {
+		entry.sensorInitialized =
+			mHal.initVideoSensor(entry.devFile, entry.i2cBus, entry.i2cAddress, entry.gpioNumber);
+	}
+
+	std::unique_ptr<trikHal::VideoDeviceFileInterface> dev(
+		mHal.createVideoDeviceFile(entry.devFile, entry.w, entry.h, entry.fmt, !isVideoPort));
+
+	// Zero-copy: capture straight into the port's DSP input region (USERPTR).
 #ifdef Q_OS_LINUX
-	return INPUT_BUFFERS_PER_REGION;
-#else
-	return 0;
+	if (mInputMap) {
+		const auto base = entry.inputRegion * trikKernel::dspInputBuffersPerRegion;
+		QVector<void *> buffers;
+		buffers.reserve(static_cast<int>(trikKernel::dspInputBuffersPerRegion));
+		for (uint32_t i = 0; i < trikKernel::dspInputBuffersPerRegion; ++i) {
+			buffers.append(mInputMap.data() + (base + i) * trikKernel::dspInputFrameSize);
+		}
+		dev->setUserPtrBuffers(buffers, trikKernel::dspInputFrameSize);
+		QLOG_INFO() << "CameraManager: port" << entry.portName << "capturing into region" << entry.inputRegion;
+	}
 #endif
+
+	if (!dev->open()) {
+		QLOG_ERROR() << "CameraManager: failed to open" << entry.devFile;
+		return false;
+	}
+
+	// Cache the actual negotiated format and bytes-per-line for the DSP.
+	entry.negotiatedFourcc = dev->actualFourcc();
+	entry.lineLength = dev->bytesPerLine();
+
+	QLOG_DEBUG() << "CameraManager: port" << entry.portName << "opened, actualFourcc=0x" << Qt::hex
+		     << dev->actualFourcc() << Qt::dec << "lineLength" << entry.lineLength;
+
+	// Relay frames from the device to the pull slot (both live on the manager
+	// thread, so this connection is direct).
+	connect(dev.get(), &trikHal::VideoDeviceFileInterface::frameReady, this,
+		[this, id](uint32_t bufferIdx, const uint8_t *data, size_t size) {
+		onDeviceFrame(id, bufferIdx, data, size);
+	});
+
+	entry.dev = std::move(dev);
+	return true;
 }
 
-size_t CameraManager::inputBufferLen() const
+void CameraManager::onDeviceFrame(int id, uint32_t bufferIdx, const uint8_t *data, size_t size)
 {
-#ifdef Q_OS_LINUX
-	return INPUT_BUFFER_LEN;
-#else
-	return 0;
+#ifdef TRIK_DEBUG_FPS
+	mCaptureFps.tick();
 #endif
+	auto &e = mEntries[id];
+	if (!e.streaming || !e.dev) {
+		return;
+	}
+
+	const uint32_t seq = ++e.captureSeq;
+	auto &t = e.tokens[bufferIdx];
+	t.captured = true;
+	t.entryId = id;
+	t.bufferIdx = bufferIdx;
+	t.seq = seq;
+	t.data = data;
+	t.size = size;
+	t.refs.store(1, std::memory_order_relaxed);
+
+	Frame::Token *old = nullptr;
+	{
+		std::lock_guard<std::mutex> lock(mFrameLock);
+		old = e.latest;
+		e.latest = &t;
+		mFrameCond.notify_all();
+	}
+	if (old && old->refs.fetch_sub(1, std::memory_order_acq_rel) == 1) {
+		returnBufferToDriver(e, old->bufferIdx);
+		old->captured = false;
+	}
+}
+
+void CameraManager::returnBufferToDriver(Entry &entry, uint32_t bufferIdx)
+{
+	if (entry.dev) {
+		entry.dev->release(bufferIdx);
+	}
+}
+
+void CameraManager::returnBufferToDriverById(int id, uint32_t bufferIdx)
+{
+	if (id < 0 || static_cast<std::size_t>(id) >= mEntries.size()) {
+		return;
+	}
+	auto &e = mEntries[id];
+	if (e.dev) {
+		e.dev->release(bufferIdx);
+	}
+}
+
+void CameraManager::dropLatest(Entry &entry)
+{
+	std::lock_guard<std::mutex> lock(mFrameLock);
+	if (entry.latest) {
+		entry.latest->refs.fetch_sub(1, std::memory_order_acq_rel);
+		entry.latest = nullptr;
+	}
+	// STREAMOFF already returned every buffer to the driver; forget the
+	// per-buffer "captured" marks, otherwise the first frame after a restart
+	// would double-queue a buffer that is already in the driver's queue.
+	for (uint32_t i = 0; i < inputBuffersPerRegionValue; ++i) {
+		entry.tokens[i].captured = false;
+	}
+}
+
+Frame CameraManager::getFrame(const QString &port, uint32_t afterSeq, int timeoutMs, const std::atomic<bool> *abort)
+{
+	return getFrame(mPortId.value(port, -1), afterSeq, timeoutMs, abort);
+}
+
+Frame CameraManager::getFrame(int portId, uint32_t afterSeq, int timeoutMs, const std::atomic<bool> *abort)
+{
+	if (portId < 0 || static_cast<std::size_t>(portId) >= mEntries.size()) {
+		return {};
+	}
+	auto &e = mEntries[portId];
+
+	const auto deadline = std::chrono::steady_clock::now() + std::chrono::milliseconds(std::max(timeoutMs, 0));
+
+	std::unique_lock<std::mutex> lock(mFrameLock);
+	for (;;) {
+		if (abort && abort->load(std::memory_order_acquire)) {
+			return {};
+		}
+		if (e.latest && e.latest->seq > afterSeq) {
+			// Relaxed: the token fields are already ordered by mFrameLock (the
+			// manager writes them before its locked `e.latest` assignment, we
+			// read `e.latest` under the same lock); the add only claims the
+			// frame. The release side (Frame::release) still uses acq_rel so the
+			// buffer reads happen before the refcount drop.
+			e.latest->refs.fetch_add(1, std::memory_order_relaxed); // the client's claim
+			return {sharedFromThis(), e.latest};
+		}
+		if (timeoutMs == 0) {
+			return {};
+		}
+		if (timeoutMs < 0) {
+			mFrameCond.wait_for(lock, std::chrono::seconds(1), [&] {
+				return (abort && abort->load(std::memory_order_acquire))
+				       || (e.latest && e.latest->seq > afterSeq);
+			});
+			continue;
+		}
+		const auto remaining = std::chrono::duration_cast<std::chrono::milliseconds>(
+			deadline - std::chrono::steady_clock::now());
+		if (remaining.count() <= 0) {
+			return {};
+		}
+		mFrameCond.wait_for(lock, remaining);
+	}
+}
+
+void CameraManager::abortFrameWaits(std::atomic<bool> *flag)
+{
+	// Store the abort flag and notify under mFrameLock. A waiter blocked in
+	// getFrame() holds this lock only while checking its predicate and releases
+	// it atomically when it blocks, so the notify below can never fire between
+	// a predicate check and the actual sleep - no lost wakeup, no polling slice.
+	std::lock_guard<std::mutex> lock(mFrameLock);
+	if (flag) {
+		flag->store(true, std::memory_order_release);
+	}
+	mFrameCond.notify_all();
+}
+
+void CameraManager::acquire(const QString &port)
+{
+	acquire(mPortId.value(port, -1));
+}
+
+void CameraManager::acquire(int portId)
+{
+	runAsync([this, portId]() {
+		if (portId < 0 || static_cast<std::size_t>(portId) >= mEntries.size()) {
+			QLOG_ERROR() << "CameraManager: unknown port id" << portId;
+			return;
+		}
+		auto &e = mEntries[portId];
+		if (!e.ready) {
+			QLOG_ERROR() << "CameraManager: port" << e.portName << "has an invalid config";
+			return;
+		}
+		if (!e.dev && !openDeviceLocked(portId, e)) {
+			QLOG_ERROR() << "CameraManager: failed to open" << e.devFile;
+			return;
+		}
+		if (!e.streaming && !e.dev->startStreaming()) {
+			QLOG_ERROR() << "CameraManager: failed to start streaming on" << e.devFile;
+			return;
+		}
+		e.streaming = true;
+		++e.refCount;
+		QLOG_INFO() << "CameraManager: acquired" << e.portName << "refs=" << e.refCount;
+	});
+}
+
+void CameraManager::release(const QString &port)
+{
+	release(mPortId.value(port, -1));
+}
+
+void CameraManager::release(int portId)
+{
+	runAsync([this, portId]() {
+		if (portId < 0 || static_cast<std::size_t>(portId) >= mEntries.size() || !mEntries[portId].ready) {
+			return;
+		}
+		auto &e = mEntries[portId];
+		if (e.refCount <= 0) {
+			return;
+		}
+		if (--e.refCount > 0) {
+			return;
+		}
+
+		// Last client gone: stop the stream (STREAMOFF returns every buffer).
+		if (e.streaming) {
+			e.dev->stopStreaming();
+			e.streaming = false;
+			dropLatest(e);
+		}
+
+		// A latched stop parks the camera (kept open for a quick re-acquire);
+		// otherwise the device is torn down for good.
+		if (!e.stopLatched) {
+			e.dev->close();
+			e.dev.reset();
+			QLOG_INFO() << "CameraManager: released" << e.portName << "(closed)";
+		} else {
+			QLOG_INFO() << "CameraManager: released" << e.portName << "(parked)";
+		}
+	});
+}
+
+void CameraManager::stopStreaming(const QString &port)
+{
+	runAsync([this, port]() {
+		const int id = mPortId.value(port, -1);
+		if (id < 0 || !mEntries[id].dev) {
+			return;
+		}
+		auto &e = mEntries[id];
+		// Latch the park request. If the requester is the only client (or no
+		// one else is holding) park right away; otherwise it happens when the
+		// last client releases. The latch survives later acquire()/release()
+		// cycles, so the camera parks again after the next client lets go.
+		e.stopLatched = true;
+		if (e.refCount <= 1 && e.streaming) {
+			e.dev->stopStreaming();
+			e.streaming = false;
+			dropLatest(e);
+		}
+		QLOG_INFO() << "CameraManager: stopStreaming latched on" << port;
+	});
+}
+
+void CameraManager::close(const QString &port)
+{
+	QLOG_INFO() << "CameraManager: close on port" << port;
+	runInManagerThread([this, port]() {
+		const int id = mPortId.value(port, -1);
+		if (id >= 0) {
+			tearDownPort(id);
+		}
+	});
+}
+
+void CameraManager::close()
+{
+	QLOG_INFO() << "CameraManager: close all cameras";
+	runInManagerThread([this]() {
+		for (std::size_t id = 0; id < mEntries.size(); ++id) {
+			tearDownPort(static_cast<int>(id));
+		}
+	});
+}
+
+void CameraManager::tearDownPort(int id)
+{
+	auto &e = mEntries[id];
+	dropLatest(e);
+	if (e.dev) {
+		e.dev->disconnect();
+		e.dev->stopStreaming();
+		e.dev->close();
+		e.dev.reset();
+	}
+	e.streaming = false;
+	e.refCount = 0;
+	e.stopLatched = false;
+}
+
+void CameraManager::initSensors()
+{
+	// Runs in the worker thread (posted from the constructor). Only ov7670
+	// ports carry an I2C bus; initVideoSensor() returns false when no sensor is
+	// physically wired, so such a port is retried lazily on acquire().
+	for (auto &e : mEntries) {
+		if (!e.ready || e.i2cBus <= 0 || e.sensorInitialized) {
+			continue;
+		}
+		e.sensorInitialized = mHal.initVideoSensor(e.devFile, e.i2cBus, e.i2cAddress, e.gpioNumber);
+	}
+}
+
+uint32_t CameraManager::inputBuffersPerRegion() const
+{
+	return inputBuffersPerRegionValue;
+}
+
+int CameraManager::portId(const QString &port) const
+{
+	return mPortId.value(port, -1);
+}
+
+QString CameraManager::portName(int portId) const
+{
+	if (portId < 0 || static_cast<std::size_t>(portId) >= mEntries.size()) {
+		return {};
+	}
+	return mEntries[portId].portName;
 }
 
 uint32_t CameraManager::inputRegion(const QString &port) const
 {
-	QReadLocker lock(&mLock);
-	const auto it = mPortRegions.find(port);
-	return it != mPortRegions.end() ? it.value() : 0;
+	const int id = mPortId.value(port, -1);
+	return id >= 0 ? mEntries[id].inputRegion : 0;
 }
 
 uint32_t CameraManager::width(const QString &port) const
 {
-	QReadLocker lock(&mLock);
-	auto it = mDevices.find(port);
-	return (it != mDevices.end() && it->second.ready) ? it->second.w : 0;
+	const int id = mPortId.value(port, -1);
+	return (id >= 0 && mEntries[id].ready) ? mEntries[id].w : 0;
 }
 
 uint32_t CameraManager::height(const QString &port) const
 {
-	QReadLocker lock(&mLock);
-	auto it = mDevices.find(port);
-	return (it != mDevices.end() && it->second.ready) ? it->second.h : 0;
+	const int id = mPortId.value(port, -1);
+	return (id >= 0 && mEntries[id].ready) ? mEntries[id].h : 0;
 }
 
 uint32_t CameraManager::fourcc(const QString &port) const
 {
-	QReadLocker lock(&mLock);
-	auto it = mDevices.find(port);
-	return (it != mDevices.end() && it->second.ready) ? it->second.fmt : 0;
+	const int id = mPortId.value(port, -1);
+	return (id >= 0 && mEntries[id].ready) ? mEntries[id].fmt : 0;
 }
 
 trikKernel::PixelFormat CameraManager::format(const QString &port) const
 {
-	QReadLocker lock(&mLock);
-	auto it = mDevices.find(port);
-	return (it != mDevices.end() && it->second.ready) ? it->second.format : trikKernel::PixelFormat::Unknown;
+	const int id = mPortId.value(port, -1);
+	return (id >= 0 && mEntries[id].ready) ? trikKernel::fromV4l2Fourcc(mEntries[id].negotiatedFourcc)
+	                                       : trikKernel::PixelFormat::Unknown;
 }
 
 uint32_t CameraManager::lineLength(const QString &port) const
 {
-	QReadLocker lock(&mLock);
-	auto it = mDevices.find(port);
-	return (it != mDevices.end() && it->second.ready) ? it->second.lineLength : 0;
+	const int id = mPortId.value(port, -1);
+	return (id >= 0 && mEntries[id].ready) ? mEntries[id].lineLength : 0;
 }
 
 QString CameraManager::deviceFile(const QString &port) const
 {
-	QReadLocker lock(&mLock);
-	auto it = mDevices.find(port);
-	return (it != mDevices.end() && it->second.ready) ? it->second.devFile : QString();
+	const int id = mPortId.value(port, -1);
+	return (id >= 0 && mEntries[id].ready) ? mEntries[id].devFile : QString();
 }
 
 QString CameraManager::streamerScript(const QString &port) const
 {
-	QReadLocker lock(&mLock);
-	auto it = mDevices.find(port);
-	return it != mDevices.end() ? it->second.mjpgStreamerScript : QString();
+	const int id = mPortId.value(port, -1);
+	return id >= 0 ? mEntries[id].mjpgStreamerScript : QString();
+}
+
+CameraManager::PortInfo CameraManager::info(const QString &port) const
+{
+	return info(mPortId.value(port, -1));
+}
+
+CameraManager::PortInfo CameraManager::info(int portId) const
+{
+	PortInfo result;
+	if (portId < 0 || static_cast<std::size_t>(portId) >= mEntries.size() || !mEntries[portId].ready) {
+		return result;
+	}
+	const auto &e = mEntries[portId];
+	result.width = e.w;
+	result.height = e.h;
+	result.fourcc = e.fmt;
+	result.format = trikKernel::fromV4l2Fourcc(e.negotiatedFourcc);
+	result.lineLength = e.lineLength;
+	result.inputRegion = e.inputRegion;
+	result.inputBuffersPerRegion = inputBuffersPerRegionValue;
+	return result;
 }
 
 } // namespace trikControl
