@@ -26,7 +26,6 @@
 #include <cstring>
 
 namespace {
-
 const int _registerDspMetaTypes = []() {
 	qRegisterMetaType<trikDsp::Algorithm>("trikDsp::Algorithm");
 	qRegisterMetaType<trikDsp::InArgs>("trikDsp::InArgs");
@@ -34,6 +33,9 @@ const int _registerDspMetaTypes = []() {
 	qRegisterMetaType<uint32_t>("uint32_t");
 	return 0;
 }();
+
+/// The DSP video output is a fixed 240x240 RGB565 framebuffer (see BUFFER_SIZE_FOR_FB).
+constexpr int DSP_FB_DIM = 240;
 
 } // namespace
 
@@ -61,75 +63,48 @@ DspServer::~DspServer()
 	}
 }
 
-void DspServer::activate(const DspChannel &channel)
+bool DspServer::processFrame(const DspChannel &channel, OutArgs &out, uint32_t bufferIdx)
 {
-	QMetaObject::invokeMethod(this, [this, channel]() {
-		const bool wasVideo = d->channel().videoOut && d->mFbOutput && d->mFbOutput->isOpen();
-		d->setChannel(channel);
-		if (channel.videoOut && d->mFbOutput) {
-			if (!wasVideo) {
-				QLOG_INFO() << "DspServer: opening video display via HAL fb output";
-				d->mFbOutput->open();
-			}
-			// else: same fb, different algorithm - no reopen needed
-		} else if (wasVideo) {
-			QLOG_INFO() << "DspServer: closing video display via HAL fb output";
-			d->mFbOutput->close();
-		}
-	}, Qt::QueuedConnection);
-}
-
-void DspServer::deactivate()
-{
-	QMetaObject::invokeMethod(this, [this]() {
-		d->clearChannel();
-		if (d->mFbOutput && d->mFbOutput->isOpen()) {
-			QLOG_INFO() << "DspServer: deactivating video display via HAL fb output";
-			d->mFbOutput->close();
-		}
-	}, Qt::QueuedConnection);
-}
-
-void DspServer::processFrameData(const QString &sourceId, uint32_t bufferIdx)
-{
-	OutArgs out{};
-	const auto algo = d->channelAlgo();
-
-	// The DSP is single-channel: frames from a non-active source are dropped.
-	// They are NOT returned early, because the caller must still be notified so
-	// it can release the V4L2 buffer back to the driver - otherwise the capture
-	// stream stalls (notifier stays disabled until QBUF).
-	if (sourceId == d->channelSourceId()) {
-		VideoFrame videoFrame;
-		const auto needVideo = d->channel().videoOut;
-		const auto &channel = d->channel();
-		// bufferIdx is the V4L2 buffer index (0..buffersPerRegion-1); map it to
-		// the flat DSP input buffer index of the channel's region.
-		const auto flatIdx = channel.inputBufferBase + bufferIdx;
-		const auto ok = d->processFrame(channel, out, flatIdx,
-		                                needVideo ? &videoFrame : nullptr);
-
-		// autoDetect is one-shot: consume it on the DSP side so the detection
-		// runs on exactly one frame (like the old runtime, which cleared the
-		// command flag right after reading it). Tag the result so the consumer
-		// can tell this frame apart from the others without relying on its own
-		// local flag (which races with frames already in flight).
-		if (channel.inArgs.autoDetect) {
-			out.autoDetect = true;
-			d->consumeAutoDetect();
-		}
-
-		if (ok && needVideo && videoFrame.data && d->mFbOutput && d->mFbOutput->isOpen()) {
-			d->mFbOutput->writeFrame(static_cast<const uint8_t *>(videoFrame.data));
-		}
-	} else {
-		QLOG_DEBUG() << "DspServer: dropping frame from inactive source" << sourceId
-		             << "(active=" << d->channelSourceId() << ")";
+	const auto dspAlgo = toDspAlgo(channel.algorithm);
+	// Re-register when the algorithm, the pixel format or the line length
+	// changes. The DSP's setup() selects the format converter and fixes the
+	// stride from these, so a stale registration would decode the new channel's
+	// frames with the previous session's/port's settings.
+	if (dspAlgo != d->currentAlgo() || channel.format != d->currentFormat()
+		|| channel.lineLength != d->currentLineLength()) {
+		QLOG_INFO() << "DspServer: (re)registering algorithm" << dspAlgo << "format"
+			    << static_cast<int>(channel.format) << "lineLength" << channel.lineLength;
+		const AlgoDescriptor desc = {channel.format, channel.lineLength};
+		d->registerAlgorithm(channel.algorithm, desc);
+		d->setCurrentAlgo(dspAlgo, channel.format, channel.lineLength);
 	}
 
-	// bufferIdx here is the V4L2 buffer index, which the caller needs to hand
-	// the buffer back to the driver.
-	emit resultReady(sourceId, algo, out, bufferIdx);
+	const bool ok = d->step(channel.inArgs, out, channel.inputBufferBase + bufferIdx);
+
+	if (ok && dspAlgo == TRIK_CV_ALGORITHM_JPEG_ENCODER) {
+		// Point at the shared output buffer: the bytes stay valid until the
+		// next step() overwrites them, so a JPEG consumer must run synchronously
+		// on the DSP thread right after this call (the pipeline delivers Jpeg
+		// results via a DirectConnection) - no copy.
+		out.jpegData = d->outStart();
+	}
+
+	if (ok && channel.videoOut && d->mFbOutput && d->mFbOutput->isOpen()) {
+		d->mFbOutput->writeFrame(d->outStart());
+	}
+
+	return ok;
+}
+
+void DspServer::setVideoOutput(bool enabled)
+{
+	if (enabled && d->mFbOutput && !d->mFbOutput->isOpen()) {
+		QLOG_INFO() << "DspServer: opening video display via HAL fb output";
+		d->mFbOutput->open();
+	} else if (!enabled && d->mFbOutput && d->mFbOutput->isOpen()) {
+		QLOG_INFO() << "DspServer: closing video display via HAL fb output";
+		d->mFbOutput->close();
+	}
 }
 
 void DspServer::init()
@@ -157,10 +132,9 @@ void DspServer::init()
 
 	using ExitStatus = QProcess::ExitStatus;
 	connect(&mLadProcess, QOverload<int, ExitStatus>::of(&QProcess::finished), &loop,
-	        [&](int exitCode, ExitStatus status) {
+		[&](int exitCode, ExitStatus status) {
 		if (exitCode != 0 || status != ExitStatus::NormalExit) {
-			QLOG_ERROR() << "DspServer: LAD daemon exited with code"
-			             << exitCode << "status" << status;
+			QLOG_ERROR() << "DspServer: LAD daemon exited with code" << exitCode << "status" << status;
 		} else {
 			QLOG_INFO() << "DspServer: LAD daemon started (parent exited)";
 			ladOk = true;

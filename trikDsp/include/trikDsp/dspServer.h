@@ -22,7 +22,9 @@
 #include "dspTypes.h"
 #include "trikDspDeclSpec.h"
 
-namespace trikHal { class FbOutputInterface; }
+namespace trikHal {
+class FbOutputInterface;
+}
 
 namespace trikDsp {
 
@@ -37,33 +39,26 @@ namespace trikDsp {
 /// during the wait.  When init() returns the object has either emitted
 /// successfullyInited() (ready for use) or errorOccurred() (permanent failure).
 ///
-/// After successful init, the caller should call moveToThread() if a dedicated
-/// worker thread is desired.  The object is designed **without thread
-/// ownership** - the caller creates and manages the QThread.
+/// After init() the object is used exclusively from a single worker thread
+/// (the caller's frame-processing loop): every public method below is a plain
+/// synchronous call, there are no signals in the frame path and no queued
+/// handoffs.
 ///
 /// Destructor terminates the LAD daemon (terminate() -> kill() fallback).
 /// Impl::~Impl() tears down IPC (destroyMessageQueue -> Ipc_stop -> munmap).
 ///
-/// ## Single-channel design
+/// ## Frame processing
 ///
-/// DspServer processes frames from one active channel at a time.
-/// When a new channel is activated the old one is silently replaced.
-/// Frames from non-active sources are dropped.
+/// processFrame() runs one blocking STEP on the DSP for @p bufferIdx (the flat
+/// DSP input buffer index) using @p channel's algorithm and parameters. On
+/// success it fills @p out: for Jpeg, out.jpegData points at the encoded bytes
+/// in the shared output buffer (valid only until the next processFrame() call),
+/// so the JPEG consumer must consume them synchronously on the DSP thread right
+/// after the call. When channel.videoOut is set the 240x240 video frame is
+/// written to the attached framebuffer output inside processFrame().
 ///
-/// ## Video display
-///
-/// Video output goes through HAL FbOutputInterface (no Qt signals in hot path):
-/// activate() opens the fb when the channel has videoOut=true, deactivate()
-/// closes it.
-///
-/// ## Concurrency
-///
-/// - init(): runs in caller's thread, blocking.
-/// - activate() / deactivate(): QueuedConnection - non-blocking.
-/// - processFrameData(): MUST be called from DspServer's thread via
-///   QMetaObject::invokeMethod with Qt::QueuedConnection.
-/// - mLadProcess: value member.  Started in init() (caller's thread), stays in
-///   that thread regardless of moveToThread().  terminate() is thread-safe.
+/// The algorithm is (re)registered automatically whenever the algorithm, pixel
+/// format or line length of the channel changes.
 class TRIKDSP_EXPORT DspServer : public QObject
 {
 	Q_OBJECT
@@ -92,52 +87,32 @@ public:
 	///          this call.
 	void init();
 
-	/// Activate a DSP channel.  Non-blocking (QueuedConnection).
+	/// Process the frame captured into V4L2 buffer @p bufferIdx with the given
+	/// @p channel. Blocking: waits for the DSP's STEP response. The DSP reads
+	/// the frame from in_buff[channel.inputBufferBase + bufferIdx].
 	///
-	/// Replaces the current active channel.  Opens the framebuffer when the
-	/// new channel has videoOut=true (closes it first if a previous channel
-	/// had it open with a different algorithm).
+	/// Re-registers the algorithm on the DSP when @p channel's algorithm, pixel
+	/// format or line length differ from the previous call. On success fills
+	/// @p out and, for Jpeg, points out.jpegData at the encoded bytes in the
+	/// shared output buffer. When @p channel.videoOut is set, writes the
+	/// framebuffer output.
 	///
-	/// Thread-safe - can be called from any thread.
-	void activate(const DspChannel &channel);
+	/// MUST be called from a single worker thread (the frame-processing loop).
+	///
+	/// @return true if the frame was processed successfully.
+	bool processFrame(const DspChannel &channel, OutArgs &out, uint32_t bufferIdx);
 
-	/// Deactivate the current channel.  Non-blocking (QueuedConnection).
-	///
-	/// Clears the active channel and closes the framebuffer if it was open.
-	/// Idempotent.
-	///
-	/// Thread-safe - can be called from any thread.
-	void deactivate();
-
-	/// Process the frame captured into the DSP input buffer @p bufferIdx.
-	/// The DSP reads the frame directly from that buffer (no host-side copy).
-	/// MUST be called from the DspServer thread (use invokeMethod).
-	///
-	/// Drops frames from non-active sources (but still emits resultReady so the
-	/// caller can release the V4L2 buffer).
-	/// On success, emits resultReady() and writes video to FbOutput if attached.
-	Q_INVOKABLE void processFrameData(const QString &sourceId, uint32_t bufferIdx);
+	/// Enable/disable the video framebuffer output. Opens the fb on enable
+	/// (idempotent), closes it on disable. Must be called before the first
+	/// processFrame() with a videoOut channel; may be called any time from the
+	/// worker thread.
+	void setVideoOutput(bool enabled);
 
 	/// Attach a HAL framebuffer output for direct video display.
-	/// Must be called before activate with videoOut=true.
-	/// DspServer takes ownership.
+	/// Must be called before init(). DspServer takes ownership.
 	void setFbOutput(trikHal::FbOutputInterface *fb);
 
 Q_SIGNALS:
-	/// @name DSP processing signals
-	/// @{
-
-	/// Emitted from the worker thread after each successfully processed frame.
-	/// OutArgs is passed by const reference to avoid copying the JPEG payload.
-	/// @p bufferIdx identifies the capture buffer whose frame was processed;
-	/// the caller must return that buffer to the driver when it sees this signal.
-	void resultReady(const QString &sourceId,
-			 trikDsp::Algorithm algorithm,
-			 const trikDsp::OutArgs &result,
-			 uint32_t bufferIdx);
-
-	/// @}
-
 	/// @name Lifecycle signals
 	/// @{
 

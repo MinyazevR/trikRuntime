@@ -50,26 +50,18 @@ void DspServer::init()
 	Q_EMIT successfullyInited();
 }
 
-void DspServer::activate(const DspChannel &channel)
+bool DspServer::processFrame(const DspChannel &channel, OutArgs &out, uint32_t bufferIdx)
 {
-	QLOG_INFO() << "DspServer: activate (stub)" << channel.sourceId;
-	QMetaObject::invokeMethod(this, [this, channel]() {
-		d->setChannel(channel);
-	}, Qt::QueuedConnection);
-}
-
-void DspServer::deactivate()
-{
-	QLOG_INFO() << "DspServer: deactivate (stub)";
-	QMetaObject::invokeMethod(this, [this]() {
-		d->clearChannel();
-	}, Qt::QueuedConnection);
-}
-
-void DspServer::processFrameData(const QString &sourceId, uint32_t bufferIdx)
-{
-	Q_UNUSED(sourceId)
+	Q_UNUSED(channel)
+	Q_UNUSED(out)
 	Q_UNUSED(bufferIdx)
+	return true;
+}
+
+void DspServer::setVideoOutput(bool enabled)
+{
+	Q_UNUSED(enabled)
+	QLOG_INFO() << "DspServer: setVideoOutput (stub)";
 }
 
 void DspServer::setFbOutput(trikHal::FbOutputInterface *fb)

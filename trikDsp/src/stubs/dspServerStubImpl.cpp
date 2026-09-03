@@ -64,16 +64,6 @@ bool DspServer::Impl::step(const InArgs &in, OutArgs &out, uint32_t bufferIdx)
 	return false;
 }
 
-bool DspServer::Impl::processFrame(const DspChannel &channel,
-                                    OutArgs &out, uint32_t bufferIdx, VideoFrame *videoFrame)
-{
-	Q_UNUSED(channel)
-	Q_UNUSED(out)
-	Q_UNUSED(bufferIdx)
-	Q_UNUSED(videoFrame)
-	return false;
-}
-
 ::trik_msg *DspServer::Impl::sendAndWaitForResponse(::trik_msg *msg)
 {
 	Q_UNUSED(msg)

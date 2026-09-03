@@ -18,7 +18,6 @@
 #include <trikHal/fbOutputInterface.h>
 #include <trikHal/physicalMemoryMapper.h>
 
-#include <algorithm>
 #include <array>
 
 #include <ti/ipc/Std.h>
@@ -38,29 +37,32 @@ namespace {
 
 constexpr int MSG_QUEUE_RETRIES = 10;
 
-/// The DSP video output is a fixed 240x240 RGB565 framebuffer (see BUFFER_SIZE_FOR_FB).
-constexpr int DSP_FB_DIM = 240;
-
 enum trik_cmd algoToDspCmd(enum trik_cv_algorithm algo)
 {
 	switch (algo) {
-	case TRIK_CV_ALGORITHM_MOTION_SENSOR:   return TRIK_CMD_MOTION_SENSOR;
-	case TRIK_CV_ALGORITHM_EDGE_LINE_SENSOR: return TRIK_CMD_EDGE_LINE_SENSOR;
-	case TRIK_CV_ALGORITHM_LINE_SENSOR:     return TRIK_CMD_LINE_SENSOR;
-	case TRIK_CV_ALGORITHM_OBJECT_SENSOR:   return TRIK_CMD_OBJECT_SENSOR;
-	case TRIK_CV_ALGORITHM_MXN_SENSOR:      return TRIK_CMD_MXN_SENSOR;
-	case TRIK_CV_ALGORITHM_JPEG_ENCODER:    return TRIK_CMD_JPEG_ENCODER;
-	default:                                 return TRIK_CMD_NOP;
+	case TRIK_CV_ALGORITHM_MOTION_SENSOR:
+		return TRIK_CMD_MOTION_SENSOR;
+	case TRIK_CV_ALGORITHM_EDGE_LINE_SENSOR:
+		return TRIK_CMD_EDGE_LINE_SENSOR;
+	case TRIK_CV_ALGORITHM_LINE_SENSOR:
+		return TRIK_CMD_LINE_SENSOR;
+	case TRIK_CV_ALGORITHM_OBJECT_SENSOR:
+		return TRIK_CMD_OBJECT_SENSOR;
+	case TRIK_CV_ALGORITHM_MXN_SENSOR:
+		return TRIK_CMD_MXN_SENSOR;
+	case TRIK_CV_ALGORITHM_JPEG_ENCODER:
+		return TRIK_CMD_JPEG_ENCODER;
+	default:
+		return TRIK_CMD_NOP;
 	}
 }
 
-::trik_msg *allocRequest(MessageQ_Handle hostQue, UInt16 heapId,
-                         UInt32 msgSize, enum trik_cmd cmd)
+::trik_msg *allocRequest(MessageQ_Handle hostQue, UInt16 heapId, UInt32 msgSize, enum trik_cmd cmd)
 {
 	auto *msg = reinterpret_cast<::trik_msg *>(MessageQ_alloc(heapId, msgSize));
 	if (!msg) {
-		QLOG_ERROR() << "DspServer: MessageQ_alloc failed (heap" << heapId
-		             << "size" << msgSize << "cmd" << cmd << ")";
+		QLOG_ERROR() << "DspServer: MessageQ_alloc failed (heap" << heapId << "size" << msgSize << "cmd" << cmd
+			     << ")";
 		return nullptr;
 	}
 	msg->cmd = cmd;
@@ -90,8 +92,7 @@ bool DspServer::Impl::startIpc()
 	}
 
 	QLOG_INFO() << "DspServer: Ipc_start ok, MultiProc: self=" << MultiProc_self()
-	            << "name(0)=" << MultiProc_getName(0)
-	            << "name(1)=" << MultiProc_getName(1);
+		    << "name(0)=" << MultiProc_getName(0) << "name(1)=" << MultiProc_getName(1);
 
 	return true;
 }
@@ -104,8 +105,7 @@ bool DspServer::Impl::startIpc()
 	}
 
 	::trik_msg *res = nullptr;
-	MessageQ_get(mHostQue, reinterpret_cast<MessageQ_Msg *>(&res),
-	             MessageQ_FOREVER);
+	MessageQ_get(mHostQue, reinterpret_cast<MessageQ_Msg *>(&res), MessageQ_FOREVER);
 	return res;
 }
 
@@ -124,7 +124,7 @@ bool DspServer::Impl::setupMessageQueue()
 		QLOG_ERROR() << "DspServer: MessageQ_create failed";
 		return false;
 	}
-	std::array<char, 32> name{};
+	std::array<char, 32> name {};
 	snprintf(name.data(), name.size(), TRIK_SLAVE_MSG_QUE_NAME, "DSP");
 	QLOG_INFO() << "DspServer: opening remote queue" << name.data();
 
@@ -138,8 +138,7 @@ bool DspServer::Impl::setupMessageQueue()
 	}
 
 	if (status == MessageQ_E_NOTFOUND) {
-		QLOG_ERROR() << "DspServer: MessageQ_open timed out after"
-		             << MSG_QUEUE_RETRIES << "retries";
+		QLOG_ERROR() << "DspServer: MessageQ_open timed out after" << MSG_QUEUE_RETRIES << "retries";
 		return false;
 	}
 
@@ -181,16 +180,15 @@ bool DspServer::Impl::mapSharedBuffers()
 	}
 
 	auto *initRes = reinterpret_cast<struct trik_res_init_msg *>(res);
-	mOutMap = trikHal::mapPhysicalMemory(
-		reinterpret_cast<uintptr_t>(initRes->dsp_out_buffer), BUFFER_SIZE);
+	mOutMap = trikHal::mapPhysicalMemory(reinterpret_cast<uintptr_t>(initRes->dsp_out_buffer), BUFFER_SIZE);
 
 	// The DSP input region is no longer mapped here: CameraManager maps it
 	// itself up front (fixed physical address) so the camera can capture into
 	// DSP memory independently of this INIT exchange. Only the output buffer is
 	// still obtained from the INIT response.
 	QLOG_DEBUG() << "DspServer: INIT response dsp_in_phys=" << initRes->dsp_in_buffer
-	             << "dsp_out_phys=" << initRes->dsp_out_buffer
-	             << "out_virt=" << static_cast<void*>(mOutMap.data());
+		     << "dsp_out_phys=" << initRes->dsp_out_buffer
+		     << "out_virt=" << static_cast<void *>(mOutMap.data());
 
 	if (mOutMap) {
 		QLOG_INFO() << "DspServer: mapped DSP output buffer at" << mOutMap.data();
@@ -225,7 +223,7 @@ void DspServer::Impl::registerAlgorithm(Algorithm algo, const AlgoDescriptor &de
 	}
 
 	auto *req = reinterpret_cast<struct trik_req_cv_algorithm_msg *>(
-	    allocRequest(mHostQue, TRIK_MSG_HEAP_ID, TRIK_MSG_SIZE, cmd));
+		allocRequest(mHostQue, TRIK_MSG_HEAP_ID, TRIK_MSG_SIZE, cmd));
 	if (!req) {
 		QLOG_ERROR() << "DspServer: failed to allocate algo msg";
 		return;
@@ -246,7 +244,7 @@ void DspServer::Impl::registerAlgorithm(Algorithm algo, const AlgoDescriptor &de
 bool DspServer::Impl::step(const InArgs &in, OutArgs &out, uint32_t bufferIdx)
 {
 	auto *req = reinterpret_cast<struct trik_res_step_msg *>(
-	    allocRequest(mHostQue, TRIK_MSG_HEAP_ID, TRIK_MSG_SIZE, TRIK_CMD_STEP));
+		allocRequest(mHostQue, TRIK_MSG_HEAP_ID, TRIK_MSG_SIZE, TRIK_CMD_STEP));
 	if (!req) {
 		QLOG_ERROR() << "DspServer: failed to allocate STEP msg";
 		return false;
@@ -266,46 +264,4 @@ bool DspServer::Impl::step(const InArgs &in, OutArgs &out, uint32_t bufferIdx)
 	return true;
 }
 
-bool DspServer::Impl::processFrame(const DspChannel &channel,
-                                    OutArgs &out, uint32_t bufferIdx, VideoFrame *videoFrame)
-{
-	const auto dspAlgo = toDspAlgo(channel.algorithm);
-	// Re-register when the algorithm, the pixel format or the line length
-	// changes. The DSP's setup() selects the format converter and fixes the
-	// stride from these, so a stale registration would decode the new channel's
-	// frames with the previous session's/port's settings.
-	if (dspAlgo != mCurrentAlgo || channel.format != mCurrentFormat
-	    || channel.lineLength != mCurrentLineLength) {
-		QLOG_INFO() << "DspServer: (re)registering algorithm" << dspAlgo
-		            << "format" << static_cast<int>(channel.format)
-		            << "lineLength" << channel.lineLength;
-		const AlgoDescriptor desc = {channel.format, channel.lineLength};
-		registerAlgorithm(channel.algorithm, desc);
-		mCurrentAlgo = dspAlgo;
-		mCurrentFormat = channel.format;
-		mCurrentLineLength = channel.lineLength;
-	}
-
-	const bool ok = step(channel.inArgs, out, bufferIdx);
-
-	if (ok && dspAlgo == TRIK_CV_ALGORITHM_JPEG_ENCODER) {
-		// Capture the encoded JPEG synchronously on the DSP thread, before the
-		// next frame overwrites the shared output buffer. The copy travels with
-		// resultReady() so a consumer in another thread never reads a stale
-		// zero-copy view.
-		out.jpegData = QByteArray(static_cast<const char *>(mDspOut.start),
-		                          static_cast<int>(out.jpegSize));
-	}
-
-	if (channel.videoOut) {
-		videoFrame->data = static_cast<const uint8_t *>(mDspOut.start);
-		videoFrame->size = BUFFER_SIZE_FOR_FB;
-		videoFrame->width = DSP_FB_DIM;
-		videoFrame->height = DSP_FB_DIM;
-	}
-
-	return ok;
-}
-
 } // namespace trikDsp
-

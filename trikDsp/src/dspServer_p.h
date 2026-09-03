@@ -17,7 +17,7 @@
 #include <QtCore/QScopedPointer>
 
 #ifdef Q_OS_LINUX
-#include <trikHal/physicalMemoryMapper.h>
+#	include <trikHal/physicalMemoryMapper.h>
 #endif
 #include <trik/buffer.h>
 #include <trik/sensors/cv_algorithm.h>
@@ -28,7 +28,24 @@
 struct MessageQ_Object;
 struct trik_msg;
 
-namespace trikHal { class FbOutputInterface; }
+namespace trikHal {
+class FbOutputInterface;
+}
+
+// The ARM side (trikKernel geometry) and the DSP firmware (trik/buffer.h) must
+// agree on the capture layout: the ARM maps `in_buff` and feeds its addresses
+// to V4L2 USERPTR, the DSP reads the same region by flat index. Catch any drift
+// here, at compile time, in the one place that sees both headers.
+static_assert(trikKernel::dspInputWidth == IMG_WIDTH, "dspInputWidth drifted from the DSP firmware (IMG_WIDTH)");
+static_assert(trikKernel::dspInputHeight == IMG_HEIGHT, "dspInputHeight drifted from the DSP firmware (IMG_HEIGHT)");
+static_assert(trikKernel::dspInputFrameSize == BUFFER_SIZE,
+	"dspInputFrameSize drifted from the DSP firmware (BUFFER_SIZE)");
+static_assert(trikKernel::dspInputRegions == TRIK_INPUT_REGIONS,
+	"dspInputRegions drifted from the DSP firmware (TRIK_INPUT_REGIONS)");
+static_assert(trikKernel::dspInputBuffersPerRegion == TRIK_INPUT_BUFFERS,
+	"dspInputBuffersPerRegion drifted from the DSP firmware (TRIK_INPUT_BUFFERS)");
+static_assert(trikKernel::dspInputBufferTotal == TRIK_INPUT_TOTAL,
+	"dspInputBufferTotal drifted from the DSP firmware (TRIK_INPUT_TOTAL)");
 
 namespace trikDsp {
 
@@ -57,14 +74,9 @@ namespace trikDsp {
 ///
 /// ## Concurrency contract
 ///
-/// Impl has NO thread safety mechanisms of its own.
-/// DspServer serialises access through the worker-thread event loop:
-///   - addSource / removeSource -> BlockingQueuedConnection
-///   - activate / deactivate     -> QueuedConnection
-///   - onFrameReady              -> runs in worker thread
-///
-/// processFrame() and step() are called ONLY from onFrameReady,
-/// so all Impl methods run in the worker thread.
+/// Impl has NO thread safety mechanisms of its own. DspServer::processFrame()
+/// is a blocking call that MUST be invoked from a single worker thread (the
+/// caller's frame-processing loop). No queued handoffs happen inside Impl.
 ///
 /// ## MessageQ protocol
 ///
@@ -133,63 +145,45 @@ public:
 	/// @return true on success.
 	bool step(const InArgs &in, OutArgs &out, uint32_t bufferIdx);
 
-	/// Full frame processing pipeline:
-	///   step() -> optionally fill videoFrame from mDspOut
-	///
-	/// @param channel    active channel (algorithm + inArgs + videoOut flag).
-	/// @param out        filled with DSP results.
-	/// @param bufferIdx  index of the DSP input buffer holding the frame.
-	/// @param videoFrame if non-null and channel.videoOut == true,
-	///                   filled with pointer into mDspOut (zero-copy).
-	///                   The caller deep-copies for cross-thread signal emission.
-	/// @return true if the frame was processed successfully.
-	bool processFrame(const DspChannel &channel,
-	                  OutArgs &out, uint32_t bufferIdx,
-	                  VideoFrame *videoFrame = nullptr);
-
-	/// @name Active channel accessors (single-channel DSP)
+	/// @name Algorithm cache (avoids re-registration in the hot path)
 	/// @{
-
-	/// Set the active channel (replaces any previous one).
-	void setChannel(const DspChannel &c) { mActive = c; }
-	/// Clear the active channel (deactivate).
-	///
-	/// Also forgets the last registered algorithm, so the next activation
-	/// re-registers the DSP algorithm with the channel's current pixel format
-	/// and line length. The DSP keeps its per-algorithm setup state across
-	/// sessions, so relying on a stale registration could feed a new channel's
-	/// frames through the previous session's format converter.
-	void clearChannel() {
-		mActive = {};
 #ifndef TRIK_DSP_STUB
-		mCurrentAlgo = TRIK_CV_ALGORITHM_NONE;
-		mCurrentFormat = PixelFormat::Unknown;
-		mCurrentLineLength = 0;
-#endif
+	enum trik_cv_algorithm currentAlgo() const
+	{
+		return mCurrentAlgo;
 	}
-
-	/// Return a reference to the current channel.
-	/// Safe to call when no channel is active (returns default-constructed).
-	const DspChannel &channel() const { return mActive; }
-	/// Return the algorithm of the active channel.
-	Algorithm channelAlgo() const { return mActive.algorithm; }
-	/// Return the sourceId of the active channel, or empty string if inactive.
-	QString channelSourceId() const { return mActive.sourceId; }
-
-	/// Clear the auto-detect flag on the active channel. This makes the flag a
-	/// one-shot: the DSP detects on exactly the frame that carried
-	/// auto_detect_hsv=true, and the host learns the detected range via
-	/// resultReady() and feeds it back through a fresh activate().
-	void consumeAutoDetect() { mActive.inArgs.autoDetect = false; }
-
+	PixelFormat currentFormat() const
+	{
+		return mCurrentFormat;
+	}
+	uint32_t currentLineLength() const
+	{
+		return mCurrentLineLength;
+	}
+	void setCurrentAlgo(enum trik_cv_algorithm algo, PixelFormat format, uint32_t lineLength)
+	{
+		mCurrentAlgo = algo;
+		mCurrentFormat = format;
+		mCurrentLineLength = lineLength;
+	}
+#endif
 	/// @}
 
-	/// 	TI remoteproc ID of the DSP core (0 for OMAP-L138).
-	uint16_t rprocId = 0;
+#ifndef TRIK_DSP_STUB
+	/// Start of the DSP shared output buffer holding the last processed frame
+	/// (a JPEG stream for the JPEG encoder, the 240x240 video frame otherwise).
+	const uint8_t *outStart() const
+	{
+		return static_cast<const uint8_t *>(mDspOut.start);
+	}
+#endif
 
 	/// HAL framebuffer output (optional, set via setFbOutput). Owned here: it is
 	/// created by the HAL (createFbOutput) with no parent and destroyed in ~Impl.
 	QScopedPointer<trikHal::FbOutputInterface> mFbOutput;
+
+	/// 	TI remoteproc ID of the DSP core (0 for OMAP-L138).
+	uint16_t rprocId = 0;
 
 private:
 	/// Send a MessageQ request and block until the DSP responds.
@@ -199,10 +193,6 @@ private:
 
 	/// Free a MessageQ-allocated message.
 	static void freeMessage(::trik_msg *msg);
-
-	/// Currently active DSP channel.
-	/// videoOut=false / source=nullptr when inactive.
-	DspChannel mActive;
 
 #ifndef TRIK_DSP_STUB
 	/// Last registered algorithm.  Used to avoid re-registration in processFrame.

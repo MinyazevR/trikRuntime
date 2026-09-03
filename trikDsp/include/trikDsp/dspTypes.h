@@ -14,7 +14,6 @@
 
 #pragma once
 
-#include <QtCore/QByteArray>
 #include <QtCore/QString>
 #include <QMetaType>
 #include <cstdint>
@@ -23,15 +22,7 @@
 namespace trikDsp {
 
 /// DSP CV algorithm identifiers.  Mirrors the C674x firmware capabilities.
-enum class Algorithm {
-	None = -1,
-	Motion,
-	EdgeLine,
-	Line,
-	Object,
-	Mxn,
-	Jpeg
-};
+enum class Algorithm { None = -1, Motion, EdgeLine, Line, Object, Mxn, Jpeg };
 
 using trikKernel::PixelFormat;
 using trikKernel::pixelFormatFromString;
@@ -60,22 +51,29 @@ struct DetectParams {
 /// Arguments sent to the DSP with each frame.
 struct InArgs {
 	DetectParams params;
-	bool autoDetect = false;    ///< set by detect(), cleared on first result
-	uint8_t m = 0;              ///< MxN grid columns (MxnSensor only)
-	uint8_t n = 0;              ///< MxN grid rows    (MxnSensor only)
-	uint8_t jpegQuality = 40;   ///< JPEG quality 1..100 (Jpeg only)
+	bool autoDetect = false; ///< set by detect(), cleared on first result
+	uint8_t m = 0; ///< MxN grid columns (MxnSensor only)
+	uint8_t n = 0; ///< MxN grid rows    (MxnSensor only)
+	uint8_t jpegQuality = 40; ///< JPEG quality 1..100 (Jpeg only)
 	bool ifBlackAndWhite = false; ///< grayscale JPEG (Jpeg only)
 };
 
 /// Result returned by the DSP for one processed frame.
+///
+/// For Jpeg, @p jpegData is a raw pointer into the DSP output buffer that is
+/// only valid until the next processFrame() call overwrites it, so the JPEG
+/// consumer must run synchronously on the DSP thread right after processFrame()
+/// (the pipeline delivers Jpeg results via a DirectConnection). Line/Object/Mxn
+/// results ignore jpegData entirely.
 struct OutArgs {
-	Location location;          ///< target position (Line / Object)
-	DetectParams detected;      ///< auto-detected HSV (non-zero when autoDetect was set)
-	uint32_t colors[9] = {};    ///< MxN colour grid (MxnSensor only)
-	bool autoDetect = false;    ///< true if this result was produced for a frame that
-	                            ///< carried auto_detect_hsv=true (detect() one-shot)
-	uint32_t jpegSize = 0;      ///< encoded JPEG size in bytes (Jpeg only)
-	QByteArray jpegData;        ///< encoded JPEG frame (Jpeg only)
+	Location location; ///< target position (Line / Object)
+	DetectParams detected; ///< auto-detected HSV (non-zero when autoDetect was set)
+	uint32_t colors[9] = {}; ///< MxN colour grid (MxnSensor only)
+	bool autoDetect = false; ///< true if this result was produced for a frame that
+	///< carried auto_detect_hsv=true (detect() one-shot)
+	uint32_t jpegSize = 0; ///< encoded JPEG size in bytes (Jpeg only)
+	const uint8_t *jpegData = nullptr; ///< encoded JPEG bytes (Jpeg only), valid until the
+	///< next step() overwrites the shared output buffer
 };
 
 } // namespace trikDsp
