@@ -98,7 +98,7 @@ QVector<uint8_t> yuv422pToRgb(const uint8_t *shot, int height, int width)
 
 }
 
-V4l2CameraImplementation::V4l2CameraImplementation(const QString &port,
+V4l2CameraImplementation::V4l2CameraImplementation(const QString &port,  // NOLINT(modernize-pass-by-value)
 	const QSharedPointer<CameraManager> &cameraManager)
 	: mPort(port)
 	, mCameraManager(cameraManager)

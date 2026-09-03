@@ -102,8 +102,8 @@ public Q_SLOTS:
 
 	void stop() override;
 
-	void startVideoTranslation(const QString &port,
-		const QVariant &params = QVariant()) override; // NOLINT(google-default-arguments)
+	// NOLINTNEXTLINE(google-default-arguments)
+	void startVideoTranslation(const QString &port, const QVariant &params = QVariant()) override;
 
 	void stopVideoTranslation(const QString &port) override;
 
