@@ -28,6 +28,9 @@ LineSensor::LineSensor(const QString &port, const trikKernel::Configurer &config
 	mToleranceFactor = ConfigurerHelper::configureChildReal(
 	                       configurer, m.state(), port, "lineSensor", "toleranceFactor");
 
+	QString lineIsEdgeDefault = "false";
+	mIsEdge = configurer.attributeByPort(port, "lineIsEdge", &lineIsEdgeDefault) == "true";
+
 	if (!m.state().isFailed()) {
 		m.state().ready();
 	}
@@ -76,6 +79,11 @@ QVector<int> LineSensor::getDetectParameters() const
 {
 	QReadLocker locker(&mDetectParametersLock);
 	return mDetectParameters;
+}
+
+bool LineSensor::isEdge() const
+{
+	return mIsEdge;
 }
 
 void LineSensor::onResult(const trikDsp::OutArgs &result)

@@ -145,13 +145,14 @@ void VideoSensorManager::createSensor(const QString &port, const QString &device
 			return;
 		}
 		auto *s = new LineSensor(port, mConfigurer);
+		const auto algorithm = s->isEdge() ? trikDsp::Algorithm::EdgeLine : trikDsp::Algorithm::Line;
 		connect(s, &LineSensor::activateRequested, this,
-			[this, port](const trikDsp::InArgs &args, bool videoOut, bool canOpen) {
-			activateForPort(port, trikDsp::Algorithm::Line, args, videoOut, canOpen);
+			[this, port, algorithm](const trikDsp::InArgs &args, bool videoOut, bool canOpen) {
+			activateForPort(port, algorithm, args, videoOut, canOpen);
 		}, Qt::QueuedConnection);
 		connect(s, &LineSensor::stopRequested, this,
 			[this, port](int flags) { handleStopRequested(port, flags); }, Qt::QueuedConnection);
-		subscribeToResults(s, portId, trikDsp::Algorithm::Line);
+		subscribeToResults(s, portId, algorithm);
 		mLineSensors.insert(portId, s);
 	} else if (deviceClass == QStringLiteral("objectSensor")) {
 		if (mObjectSensors.contains(portId)) {

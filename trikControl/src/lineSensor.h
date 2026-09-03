@@ -43,6 +43,10 @@ public:
 	/// Returns {hue, sat, val, hueTol, satTol, valTol} of the last detect().
 	Q_INVOKABLE QVector<int> getDetectParameters() const override;
 
+	/// Returns true when the port is configured as an edge line sensor
+	/// (port property "lineIsEdge"), which drives the EdgeLine DSP algorithm.
+	bool isEdge() const;
+
 	/// Consumes a DSP result: updates the reading and, for a detect() frame,
 	/// applies the tolerance factor and re-activates the DSP with the new range.
 	void onResult(const trikDsp::OutArgs &result);
@@ -61,6 +65,7 @@ public Q_SLOTS:
 private:
 	DspSensorHelper m;
 	qreal mToleranceFactor = 1.0;
+	bool mIsEdge = false;
 
 	QVector<int> mReading{0, 0, 0};
 	QVector<int> mDetectParameters{0, 0, 0, 0, 0, 0};
