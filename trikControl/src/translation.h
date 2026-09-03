@@ -28,10 +28,11 @@ struct Translation {
 	bool detached = false;
 	bool isUsb = false;
 
-	/// RAII owner of the mjpg_streamer process. QProcess has no QObject
-	/// parent because start/stop may be called from the script thread while
-	/// Brick lives on the GUI thread; this wrapper owns it and stops it
-	/// (terminate + waitForFinished) on destruction.
+	/// RAII owner of the mjpg_streamer process. QProcess is thread-affine (its
+	/// socket notifiers are bound to the creating thread), and start() may run on
+	/// the script thread while Brick::stop() runs on the GUI thread. Every QProcess
+	/// operation is therefore marshalled to the app's main thread, so create and
+	/// terminate always happen on the same thread.
 	class StreamerProcess
 	{
 	public:
@@ -48,7 +49,7 @@ struct Translation {
 		QScopedPointer<QProcess> mProcess;
 	};
 
-	QSharedPointer<StreamerProcess> streamerProcess;  ///< Owns the mjpg_streamer process.
+	QSharedPointer<StreamerProcess> streamerProcess; ///< Owns the mjpg_streamer process.
 };
 
 } // namespace trikControl
