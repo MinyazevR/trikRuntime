@@ -15,6 +15,7 @@
 #pragma once
 
 #include <QtCore/QScopedPointer>
+#include <QtCore/QSharedPointer>
 #include <QtCore/QVector>
 #include <QMutex>
 
@@ -25,17 +26,20 @@
 class QObject;
 class QThread;
 
-namespace trikKernel { class Configurer; }
-namespace trikControl { class CameraManager; }
+namespace trikKernel {
+class Configurer;
+}
+namespace trikControl {
+class CameraManager;
+}
 
 namespace trikControl {
 
 class CameraDevice : public CameraDeviceInterface
 {
 public:
-	CameraDevice(const QString &port, const QString & mediaPath,
-	             const trikKernel::Configurer &configurer,
-	             CameraManager &cameraManager);
+	CameraDevice(const QString &port, const QString &mediaPath, const trikKernel::Configurer &configurer,
+		const QSharedPointer<CameraManager> &cameraManager);
 
 	QVector<uint8_t> getPhoto() override;
 	Status status() const override;

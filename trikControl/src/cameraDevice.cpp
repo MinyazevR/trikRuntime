@@ -27,14 +27,13 @@
 
 namespace trikControl {
 
-CameraDevice::CameraDevice(const QString & port, const QString & mediaPath,
-                           const trikKernel::Configurer &configurer,
-                           CameraManager &cameraManager)
+CameraDevice::CameraDevice(const QString &port, const QString &mediaPath, const trikKernel::Configurer &configurer,
+	const QSharedPointer<CameraManager> &cameraManager)
 {
 	QString type = configurer.childAttributeByPort(port, "camera", "type");
 	// The device file is owned by the CameraManager, keyed by port - no need
 	// to read it from the config again.
-	const QString src = cameraManager.deviceFile(port);
+	const QString src = cameraManager->deviceFile(port);
 
 	if (type == "qtmultimedia") {
 		decltype(mCameraImpl)(new QtCameraImplementation(src)).swap(mCameraImpl);
@@ -50,9 +49,8 @@ CameraDevice::CameraDevice(const QString & port, const QString & mediaPath,
 	if (mCameraImpl) {
 		mCameraImpl->setTempDir(mediaPath);
 	} else {
-		QLOG_ERROR() << "Failed to initialize camera device for " << src
-		             << ", falling back to imitation";
-		decltype(mCameraImpl)(new ImitationCameraImplementation(QStringList({"*.jpg","*.png"}), mediaPath))
+		QLOG_ERROR() << "Failed to initialize camera device for " << src << ", falling back to imitation";
+		decltype(mCameraImpl)(new ImitationCameraImplementation(QStringList({"*.jpg", "*.png"}), mediaPath))
 			.swap(mCameraImpl);
 		mCameraImpl->setTempDir(mediaPath);
 	}
@@ -78,7 +76,8 @@ CameraDevice::~CameraDevice()
 	mCameraThread.reset();
 }
 
-QVector<uint8_t> CameraDevice::getPhoto() {
+QVector<uint8_t> CameraDevice::getPhoto()
+{
 	if (!mCameraImpl) {
 		return {};
 	}
@@ -98,6 +97,9 @@ QVector<uint8_t> CameraDevice::getPhoto() {
 	return photo;
 }
 
-CameraDevice::Status CameraDevice::status() const { return CameraDevice::Status::ready; }
+CameraDevice::Status CameraDevice::status() const
+{
+	return CameraDevice::Status::ready;
+}
 
 }

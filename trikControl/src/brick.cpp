@@ -15,9 +15,9 @@
 #include "brick.h"
 
 #if QT_VERSION < QT_VERSION_CHECK(5, 0, 0)
-	#include <QtGui/QApplication>
+#	include <QtGui/QApplication>
 #else
-	#include <QtGui/QGuiApplication>
+#	include <QtGui/QGuiApplication>
 #endif
 
 #include <QtCore/QFileInfo>
@@ -65,13 +65,12 @@
 
 #include <QsLog.h>
 
-
 using namespace trikControl;
 using namespace trikKernel;
 using namespace trikHal;
 
-Brick::Brick(trikHal::HardwareAbstractionInterface &hardwareAbstraction
-		, const QString &systemConfig, const QString &modelConfig, const QString &mediaPath)
+Brick::Brick(trikHal::HardwareAbstractionInterface &hardwareAbstraction, const QString &systemConfig,
+	const QString &modelConfig, const QString &mediaPath)
 	: Brick(createDifferentOwnerPointer(hardwareAbstraction), systemConfig, modelConfig, mediaPath)
 {
 }
@@ -81,10 +80,8 @@ Brick::Brick(const QString &systemConfig, const QString &modelConfig, const QStr
 {
 }
 
-Brick::Brick(const trikKernel::DifferentOwnerPointer<trikHal::HardwareAbstractionInterface> &hardwareAbstraction
-		, const QString &systemConfig
-		, const QString &modelConfig
-		, const QString &mediaPath)
+Brick::Brick(const trikKernel::DifferentOwnerPointer<trikHal::HardwareAbstractionInterface> &hardwareAbstraction,
+	const QString &systemConfig, const QString &modelConfig, const QString &mediaPath)
 	: mHardwareAbstraction(hardwareAbstraction)
 	, mTonePlayer(new TonePlayer())
 	, mMediaPath(mediaPath)
@@ -129,26 +126,24 @@ Brick::Brick(const trikKernel::DifferentOwnerPointer<trikHal::HardwareAbstractio
 	mCameraManager.reset(new CameraManager(mConfigurer, *mHardwareAbstraction));
 
 	if (mConfigurer.isEnabled("dspServer")) {
-		mVideoSensorManager.reset(
-			new VideoSensorManager(mConfigurer, *mHardwareAbstraction, mCameraManager.data()));
+		mVideoSensorManager.reset(new VideoSensorManager(mConfigurer, *mHardwareAbstraction, mCameraManager));
 
 		// Repaint the display whenever a video sensor stops (deinit or not), so
 		// its last frame is cleared before the next sensor initializes.
-		connect(mVideoSensorManager.data(), &VideoSensorManager::sensorStopped,
-		        this, &Brick::stopped);
+		connect(mVideoSensorManager.data(), &VideoSensorManager::sensorStopped, this, &Brick::stopped);
 	}
 
 	// Accelerometer must be created before gyroscope - gyro depends on it for calibration.
 	// Cannot rely on createDevice loop: XML may list gyroscope first.
 	if (mConfigurer.ports().contains("boardAccelPort")
-			&& mConfigurer.deviceClass("boardAccelPort") == "iioDevice") {
-		mAccelerometer.reset(new VectorSensor("accelerometer", mConfigurer, *mHardwareAbstraction, "boardAccelPort"));
+		&& mConfigurer.deviceClass("boardAccelPort") == "iioDevice") {
+		mAccelerometer.reset(
+			new VectorSensor("accelerometer", mConfigurer, *mHardwareAbstraction, "boardAccelPort"));
 	}
 
-	if (mConfigurer.ports().contains("boardGyroPort")
-			&& mConfigurer.deviceClass("boardGyroPort") == "iioDevice") {
-		mGyroscope.reset(new GyroSensor("gyroscope", mConfigurer, *mHardwareAbstraction, mAccelerometer.data()
-									, "boardGyroPort"));
+	if (mConfigurer.ports().contains("boardGyroPort") && mConfigurer.deviceClass("boardGyroPort") == "iioDevice") {
+		mGyroscope.reset(new GyroSensor("gyroscope", mConfigurer, *mHardwareAbstraction, mAccelerometer.data(),
+			"boardGyroPort"));
 	}
 
 	mPlayWavFileCommand = mConfigurer.attributeByDevice("playWavFile", "command");
@@ -232,12 +227,11 @@ void Brick::configure(const QString &portName, const QString &deviceName)
 	// shut down on such a port - the camera itself is reused, so at most the
 	// high-level object (a sensor or a camera) has to be (re)created.
 	const auto isVideoSensor = VideoSensorManager::isVideoSensor(deviceName);
-	const auto isVideoPort = portName.startsWith(QStringLiteral("video"))
-				 || portName.startsWith(QStringLiteral("usb-camera"));
+	const auto isVideoPort =
+		portName.startsWith(QStringLiteral("video")) || portName.startsWith(QStringLiteral("usb-camera"));
 
-	if (isVideoPort && (isVideoSensor
-			    || deviceName == QStringLiteral("photo")
-			    || deviceName == QStringLiteral("camera"))) {
+	if (isVideoPort
+		&& (isVideoSensor || deviceName == QStringLiteral("photo") || deviceName == QStringLiteral("camera"))) {
 		// A video sensor just asks VideoSensorManager to (re)create the sensor.
 		if (isVideoSensor && mVideoSensorManager) {
 			mVideoSensorManager->create(portName, deviceName);
@@ -283,7 +277,7 @@ void Brick::startVideoTranslation(const QString &port, const QVariant &params) /
 
 	if (!isUsb && !port.startsWith(QStringLiteral("video"))) {
 		QLOG_ERROR() << "Brick::startVideoTranslation: unsupported port" << port
-		             << "(supported ports: video* or usb-camera)";
+			     << "(supported ports: video* or usb-camera)";
 		return;
 	}
 
@@ -320,7 +314,7 @@ void Brick::startVideoTranslation(const QString &port, const QVariant &params) /
 		// USB webcam: mjpg-streamer opens the device directly over UVC, so the
 		// device must be released (no DSP encoder involved).
 		if (mCameraManager) {
-			mCameraManager->stop(port);
+			mCameraManager->close(port);
 		}
 	} else {
 		// ov7670 camera port: schedule the DSP JPEG encoder. Its result is
@@ -357,8 +351,8 @@ void Brick::startVideoTranslation(const QString &port, const QVariant &params) /
 	// Brick lives on the GUI thread.
 	auto streamer = QSharedPointer<Translation::StreamerProcess>::create();
 
-	QLOG_INFO() << "Brick::startVideoTranslation: launching mjpg-streamer port=" << port
-	            << "isUsb=" << isUsb << "detached=" << detached << "script=" << script;
+	QLOG_INFO() << "Brick::startVideoTranslation: launching mjpg-streamer port=" << port << "isUsb=" << isUsb
+		    << "detached=" << detached << "script=" << script;
 
 	if (!streamer->start(script, port, device)) {
 		QLOG_ERROR() << "Failed to start mjpg-streamer for port" << port;
@@ -372,7 +366,7 @@ void Brick::stopVideoTranslation(const QString &port)
 {
 	if (!port.startsWith(QStringLiteral("usb-camera")) && !port.startsWith(QStringLiteral("video"))) {
 		QLOG_ERROR() << "Brick::stopVideoTranslation: unsupported port" << port
-		             << "(supported ports: video* or usb-camera)";
+			     << "(supported ports: video* or usb-camera)";
 		return;
 	}
 
@@ -390,8 +384,8 @@ void Brick::stopVideoTranslationInternal(const QString &port, bool keepCamera)
 	const auto &translation = it.value();
 
 	QLOG_INFO() << "Brick::stopVideoTranslation: stopping mjpg-streamer port=" << port
-	            << "isUsb=" << translation.isUsb << "detached=" << translation.detached
-	            << "script=" << translation.streamerScript;
+		    << "isUsb=" << translation.isUsb << "detached=" << translation.detached
+		    << "script=" << translation.streamerScript;
 
 	// Symmetric to the legacy codegen
 	// (mjpg-streamer stop && mjpg-encoder stop): stop the streamer process
@@ -454,7 +448,6 @@ void Brick::playSound(const QString &soundFileName)
 	}
 }
 
-
 void Brick::playTone(int hzFreq, int msDuration)
 {
 	QLOG_INFO() << "Playing tone (" << hzFreq << "," << msDuration << ")";
@@ -465,13 +458,13 @@ void Brick::playTone(int hzFreq, int msDuration)
 
 	// mHardwareAbstraction->systemSound()->playTone(hzFreq, msDuration);
 	// mTonePlayer->play(hzFreq, msDuration);
-	QMetaObject::invokeMethod(mTonePlayer.data(), [this, hzFreq, msDuration](){
-		mTonePlayer->play(hzFreq, msDuration);});
+	QMetaObject::invokeMethod(mTonePlayer.data(),
+		[this, hzFreq, msDuration]() { mTonePlayer->play(hzFreq, msDuration); });
 }
 
 void Brick::say(const QString &text)
 {
-	QStringList args{"-c", "exec /etc/trik/say  \"" + text + "\""};
+	QStringList args {"-c", "exec /etc/trik/say  \"" + text + "\""};
 	mHardwareAbstraction->systemConsole().startProcess("sh", args);
 }
 
@@ -518,15 +511,15 @@ void Brick::stop()
 
 	if (mVideoSensorManager) {
 		QLOG_INFO() << "Brick::stop: stopping video sensor manager";
-		mVideoSensorManager->stop();   // skips detached ports
-		mVideoSensorManager->clear();  // skips detached sensors
+		mVideoSensorManager->stop(); // skips detached ports
+		mVideoSensorManager->clear(); // skips detached sensors
 	}
 
 	// Force-release any leaked camera, unless a detached translation must keep
 	// its device open.
 	if (mCameraManager && detachedPorts.isEmpty()) {
-		QLOG_INFO() << "Brick::stop: stopping camera manager";
-		mCameraManager->stop();
+		QLOG_INFO() << "Brick::stop: closing camera manager";
+		mCameraManager->close();
 	}
 
 	// All video sensors (and the cameras backing them) are now stopped and the
@@ -651,31 +644,31 @@ GyroSensorInterface *Brick::gyroscope()
 
 LineSensorInterface *Brick::lineSensor(const QString &port)
 {
-	return mVideoSensorManager ? mVideoSensorManager->lineSensor(port): nullptr;
+	return mVideoSensorManager ? mVideoSensorManager->lineSensor(port) : nullptr;
 }
 
 ColorSensorInterface *Brick::colorSensor(const QString &port)
 {
-	return mVideoSensorManager ? mVideoSensorManager->colorSensor(port): nullptr;
+	return mVideoSensorManager ? mVideoSensorManager->colorSensor(port) : nullptr;
 }
 
 ObjectSensorInterface *Brick::objectSensor(const QString &port)
 {
-	return mVideoSensorManager ? mVideoSensorManager->objectSensor(port): nullptr;
+	return mVideoSensorManager ? mVideoSensorManager->objectSensor(port) : nullptr;
 }
 
-I2cDeviceInterface* Brick::createI2cDevice(int bus, int address,
-					   const std::function<trikHal::MspI2cInterface *()> &factory) {
+I2cDeviceInterface *Brick::createI2cDevice(int bus, int address,
+	const std::function<trikHal::MspI2cInterface *()> &factory)
+{
 	uint8_t _bus = bus & 0xFF;
 	uint8_t _address = address & 0xFF;
 	uint16_t mhash = (_bus << 8) | _address;
 	if (mI2cDevices.contains(mhash)) {
 		return mI2cDevices[mhash];
 	} else {
-		auto i2cDeviceUnique = std::make_unique<I2cDevice>(mConfigurer,
-						factory(), _bus, _address);
+		auto i2cDeviceUnique = std::make_unique<I2cDevice>(mConfigurer, factory(), _bus, _address);
 
-		if (i2cDeviceUnique->status() ==  DeviceInterface::Status::permanentFailure) {
+		if (i2cDeviceUnique->status() == DeviceInterface::Status::permanentFailure) {
 			QLOG_ERROR() << "Could not open device on bus" << bus << "and address " << address;
 			return nullptr;
 		}
@@ -693,14 +686,12 @@ I2cDeviceInterface *Brick::i2c(int bus, int address, int regSize)
 	}
 
 	return createI2cDevice(bus, address,
-			       [this, regSize](){
-					return mHardwareAbstraction->createCommonI2c(regSize);});
+		[this, regSize]() { return mHardwareAbstraction->createCommonI2c(regSize); });
 }
 
 I2cDeviceInterface *Brick::smBusI2c(int bus, int address)
 {
-	return createI2cDevice(bus, address,
-			       [this](){ return mHardwareAbstraction->createMspI2c();});
+	return createI2cDevice(bus, address, [this]() { return mHardwareAbstraction->createMspI2c(); });
 }
 
 QVector<uint8_t> Brick::getStillImage(const QString &port)
@@ -713,20 +704,19 @@ QVector<uint8_t> Brick::getStillImage(const QString &port)
 	// self-contained, so the device can be reused for subsequent photos.
 	auto *camera = mCameras.value(port, nullptr);
 	if (!camera) {
-		camera = new CameraDevice(port, mMediaPath, mConfigurer, *mCameraManager);
+		camera = new CameraDevice(port, mMediaPath, mConfigurer, mCameraManager);
 		mCameras.insert(port, camera);
 	}
 
 	return camera->getPhoto();
 }
 
-
 SoundSensorInterface *Brick::soundSensor(const QString &port)
 {
 	return mSoundSensors.contains(port) ? mSoundSensors[port] : nullptr;
 }
 
-KeysInterface* Brick::keys()
+KeysInterface *Brick::keys()
 {
 	return mKeys.data();
 }
@@ -769,7 +759,7 @@ IrCameraInterface *Brick::irCamera()
 EventDeviceInterface *Brick::eventDevice(const QString &deviceFile)
 {
 	if (!mEventDevices.contains(deviceFile)) {
-		EventDeviceInterface * const eventDevice = new EventDevice(deviceFile, *mHardwareAbstraction);
+		EventDeviceInterface *const eventDevice = new EventDevice(deviceFile, *mHardwareAbstraction);
 		if (eventDevice->status() != EventDeviceInterface::Status::permanentFailure) {
 			mEventDevices.insert(deviceFile, eventDevice);
 		}
@@ -837,7 +827,8 @@ void Brick::createDevice(const QString &port)
 		} else if (deviceClass == "digitalSensor") {
 			mDigitalSensors.insert(port, new DigitalSensor(port, mConfigurer, *mHardwareAbstraction));
 		} else if (deviceClass == "rangeSensor") {
-			mRangeSensors.insert(port, new RangeSensor(port, mConfigurer, *mModuleLoader, *mHardwareAbstraction));
+			mRangeSensors.insert(port,
+				new RangeSensor(port, mConfigurer, *mModuleLoader, *mHardwareAbstraction));
 
 			/// @todo Range sensor shall be turned on only when needed.
 			mRangeSensors[port]->init();
@@ -852,9 +843,7 @@ void Brick::createDevice(const QString &port)
 		} else if (deviceClass == "lidar") {
 			mLidars.insert(port, new Lidar(port, mConfigurer, *mHardwareAbstraction));
 		} else if (deviceClass == "irCamera") {
-			QScopedPointer<IrCameraInterface> tmp (
-				new IrCamera(port, mConfigurer, *mHardwareAbstraction)
-				);
+			QScopedPointer<IrCameraInterface> tmp(new IrCamera(port, mConfigurer, *mHardwareAbstraction));
 			mIrCamera.swap(tmp);
 		}
 	} catch (MalformedConfigException &e) {
