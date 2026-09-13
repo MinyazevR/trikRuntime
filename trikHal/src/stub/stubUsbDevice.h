@@ -1,4 +1,4 @@
-/* Copyright 2015 Yurii Litvinov and CyberTech Labs Ltd.
+/* Copyright 2025 CyberTech Labs Ltd.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -14,22 +14,31 @@
 
 #pragma once
 
-#include "mspUsbInterface.h"
+#include "usbDeviceInterface.h"
 
 namespace trikHal {
-namespace trik {
+namespace stub {
 
-/// Real implementation of USB bus communicator.
-class TrikMspUsb : public MspUsbInterface
+/// Stub USB device for desktop builds and tests. Logs operations.
+class StubUsbDevice : public UsbDeviceInterface
 {
 public:
-	TrikMspUsb() = default;
-	~TrikMspUsb() override;
+	StubUsbDevice(std::uint16_t vendorId, std::uint16_t productId
+			, std::uint8_t outEndpoint, std::uint8_t inEndpoint);
 
-	int send(const QByteArray &data) override;
-	int read(const QByteArray &data) override;
 	bool connect() override;
 	void disconnect() override;
+	bool isConnected() const override;
+	bool send(const QByteArray &data) override;
+	void setDataCallback(DataCallback callback, void *userData) override;
+	QByteArray read(int timeoutMs) override;
+
+private:
+	std::uint16_t mVendorId;
+	std::uint16_t mProductId;
+	std::uint8_t mOutEndpoint;
+	std::uint8_t mInEndpoint;
+	bool mConnected = false;
 };
 
 }

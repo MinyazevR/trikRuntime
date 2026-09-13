@@ -14,8 +14,8 @@
 
 #include "stubHardwareAbstraction.h"
 
-#include "stubMspI2c.h"
-#include "stubMspUsb.h"
+#include "stubNrfI2c.h"
+#include "stubUsbDevice.h"
 #include "stubSystemConsole.h"
 #include "stubEventFile.h"
 #include "stubInputDeviceFile.h"
@@ -29,8 +29,7 @@ using namespace trikHal;
 using namespace trikHal::stub;
 
 StubHardwareAbstraction::StubHardwareAbstraction()
-	: mMspI2cBus(new StubMspI2C())
-	, mMspUsbBus(new StubMspUsb())
+	: mI2cBus(new StubNrfI2c())
 	, mSystemConsole(new StubSystemConsole())
 {
 }
@@ -39,23 +38,24 @@ StubHardwareAbstraction::~StubHardwareAbstraction()
 {
 }
 
-MspI2cInterface &StubHardwareAbstraction::mspI2c()
+NrfI2cInterface &StubHardwareAbstraction::nrfI2c()
 {
-	return *mMspI2cBus.data();
+	return *mI2cBus.data();
 }
 
-MspI2cInterface *StubHardwareAbstraction::createMspI2c() {
-	return new StubMspI2C();
+NrfI2cInterface *StubHardwareAbstraction::createNrfI2c() {
+	return new StubNrfI2c();
 }
 
-MspI2cInterface *StubHardwareAbstraction::createCommonI2c(uint8_t regSize) {
+NrfI2cInterface *StubHardwareAbstraction::createCommonI2c(uint8_t regSize) {
 	Q_UNUSED(regSize)
 	return new StubCommonI2c();
 }
 
-MspUsbInterface &StubHardwareAbstraction::mspUsb()
+UsbDeviceInterface *StubHardwareAbstraction::createUsbDevice(std::uint16_t vendorId, std::uint16_t productId
+		, std::uint8_t outEndpoint, std::uint8_t inEndpoint)
 {
-	return *mMspUsbBus.data();
+	return new StubUsbDevice(vendorId, productId, outEndpoint, inEndpoint);
 }
 
 SystemConsoleInterface &StubHardwareAbstraction::systemConsole()

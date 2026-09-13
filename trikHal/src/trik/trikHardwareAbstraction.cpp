@@ -15,7 +15,7 @@
 #include "trikHardwareAbstraction.h"
 
 #include "trikI2c.h"
-#include "trikMspUsb.h"
+#include "trikUsbDevice.h"
 #include "trikSystemConsole.h"
 #include "trikEventFile.h"
 #include "trikInputDeviceFile.h"
@@ -31,7 +31,6 @@ using namespace trikHal::trik;
 
 TrikHardwareAbstraction::TrikHardwareAbstraction()
 	: mI2c(new TrikI2c())
-	, mUsb(new TrikMspUsb())
 	, mSystemConsole(new TrikSystemConsole())
 {
 }
@@ -40,23 +39,23 @@ TrikHardwareAbstraction::~TrikHardwareAbstraction()
 {
 }
 
-MspI2cInterface &TrikHardwareAbstraction::mspI2c()
+NrfI2cInterface &TrikHardwareAbstraction::nrfI2c()
 {
 	return *mI2c.data();
 }
 
-MspI2cInterface *TrikHardwareAbstraction::createMspI2c() {
+NrfI2cInterface *TrikHardwareAbstraction::createNrfI2c() {
 	return new TrikI2c();
 }
 
-MspI2cInterface *TrikHardwareAbstraction::createCommonI2c(uint8_t regSize) {
+NrfI2cInterface *TrikHardwareAbstraction::createCommonI2c(uint8_t regSize) {
 	return new CommonI2c(regSize);
 }
 
-
-MspUsbInterface &TrikHardwareAbstraction::mspUsb()
+UsbDeviceInterface *TrikHardwareAbstraction::createUsbDevice(std::uint16_t vendorId, std::uint16_t productId
+		, std::uint8_t outEndpoint, std::uint8_t inEndpoint)
 {
-	return *mUsb.data();
+	return new TrikUsbDevice(vendorId, productId, outEndpoint, inEndpoint);
 }
 
 SystemConsoleInterface &TrikHardwareAbstraction::systemConsole()

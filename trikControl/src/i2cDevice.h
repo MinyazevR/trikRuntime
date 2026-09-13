@@ -14,13 +14,14 @@
 
 #pragma once
 
-#include "mspI2cCommunicator.h"
+#include "i2cDeviceInterface.h"
+#include "nrfI2cCommunicator.h"
 
 namespace trikHal {
 
-/// The current implementation of SMBus MspI2c is suitable for interacting
+/// The current implementation of SMBus NrfI2c is suitable for interacting
 /// with many devices, so it was decided to extend this interface from trikHal.
-class MspI2cInterface;
+class NrfI2cInterface;
 }
 
 namespace trikControl{
@@ -37,7 +38,7 @@ public:
 	/// @param bus - bus for i2c communication
 	/// @param address - address for device on bus
 	/// Takes ownership of i2c
-	I2cDevice(const trikKernel::Configurer &configurer, trikHal::MspI2cInterface *i2c, int bus, int address);
+	I2cDevice(const trikKernel::Configurer &configurer, trikHal::NrfI2cInterface *i2c, int bus, int address);
 
 	/// For implicit forward declaration
 	~I2cDevice();
@@ -56,8 +57,8 @@ public Q_SLOTS:
 
 private:
 	DeviceState mState;
-	QScopedPointer<trikHal::MspI2cInterface> mInterface;
-	QScopedPointer<I2cCommunicatorInterface> mCommunicator;
+	QScopedPointer<trikHal::NrfI2cInterface> mInterface;
+	QScopedPointer<NrfI2cCommunicator> mCommunicator;
 };
 
 }

@@ -1,4 +1,4 @@
-/* Copyright 2013 - 2015 Yurii Litvinov and CyberTech Labs Ltd.
+/* Copyright 2025 CyberTech Labs Ltd.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -14,42 +14,39 @@
 
 #pragma once
 
-#include <QtCore/QString>
 #include <QtCore/QMutex>
+#include <QtCore/QString>
 
-#include "i2cCommunicatorInterface.h"
+#include "deviceState.h"
+#include "peripheryCommunicatorInterface.h"
 
 namespace trikKernel {
 class Configurer;
 }
 
 namespace trikHal {
-class MspI2cInterface;
+class NrfI2cInterface;
 }
 
 namespace trikControl {
 
-/// Provides direct interaction with I2C device.
-class MspI2cCommunicator : public I2cCommunicatorInterface
+/// Communicator with the nRF52833 periphery module over I2C.
+/// Implements PeripheryCommunicatorInterface for environments without USB.
+class NrfI2cCommunicator : public PeripheryCommunicatorInterface
 {
 public:
-	/// Constructor.
-	/// @param configurer - contains preparsed XML configuration.
-	MspI2cCommunicator(const trikKernel::Configurer &configurer, trikHal::MspI2cInterface &i2c);
+	NrfI2cCommunicator(const trikKernel::Configurer &configurer, trikHal::NrfI2cInterface &i2c);
 
-	MspI2cCommunicator(const trikKernel::Configurer &configurer, trikHal::MspI2cInterface &i2c
-				, uint8_t bus, uint8_t deviceId);
+	NrfI2cCommunicator(const trikKernel::Configurer &configurer, trikHal::NrfI2cInterface &i2c
+			, uint8_t bus, uint8_t deviceId);
 
-	~MspI2cCommunicator() override;
+	~NrfI2cCommunicator() override;
 
-	/// Send data to current device, if it is connected.
 	int send(const QByteArray &data) override;
-
-	/// Reads data by given I2C command number and returns the result.
 	int read(const QByteArray &data) override;
 
-	/// Reads data by given I2C command number and returns the result.
-	QVector<uint8_t> readX(const QByteArray &data) override;
+	/// Reads raw bytes via I2C (used by I2cDevice).
+	QVector<uint8_t> readX(const QByteArray &data);
 
 	Status status() const override;
 
@@ -57,7 +54,7 @@ private:
 	void disconnect();
 
 	QMutex mLock;
-	trikHal::MspI2cInterface &mI2c;
+	trikHal::NrfI2cInterface &mI2c;
 	DeviceState mState;
 };
 

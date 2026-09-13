@@ -80,10 +80,10 @@ HEADERS += \
 	$$PWD/src/lineSensor.h \
 	$$PWD/src/lineSensorWorker.h \
 	$$PWD/src/moduleLoader.h \
-	$$PWD/src/mspCommunicatorInterface.h \
-	$$PWD/src/mspBusAutoDetector.h \
-	$$PWD/src/mspI2cCommunicator.h \
-	$$PWD/src/mspUsbCommunicator.h \
+	$$PWD/src/nrfBusAutoDetector.h \
+	$$PWD/src/nrfI2cCommunicator.h \
+	$$PWD/src/nrfUsbCommunicator.h \
+	$$PWD/src/nrfUsbProtocol.h \
 	$$PWD/src/objectSensor.h \
 	$$PWD/src/objectSensorWorker.h \
 	$$PWD/src/powerMotor.h \
@@ -113,8 +113,7 @@ HEADERS += \
 	$$PWD/src/lidar.h \
 	$$PWD/src/lidarWorker.h \
 	$$PWD/src/irCamera.h \
-	$$PWD/src/irCameraWorker.h \
-	$$PWD/src/i2cCommunicatorInterface.h
+	$$PWD/src/irCameraWorker.h
 
 SOURCES += \
 	$$PWD/src/abstractVirtualSensorWorker.cpp \
@@ -143,9 +142,9 @@ SOURCES += \
 	$$PWD/src/lineSensor.cpp \
 	$$PWD/src/lineSensorWorker.cpp \
 	$$PWD/src/moduleLoader.cpp \
-	$$PWD/src/mspBusAutoDetector.cpp \
-	$$PWD/src/mspI2cCommunicator.cpp \
-	$$PWD/src/mspUsbCommunicator.cpp \
+	$$PWD/src/nrfBusAutoDetector.cpp \
+	$$PWD/src/nrfI2cCommunicator.cpp \
+	$$PWD/src/nrfUsbCommunicator.cpp \
 	$$PWD/src/objectSensor.cpp \
 	$$PWD/src/objectSensorWorker.cpp \
 	$$PWD/src/powerMotor.cpp \

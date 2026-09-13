@@ -12,18 +12,17 @@
  * See the License for the specific language governing permissions and
  * limitations under the License. */
 
-#include <trikHal/mspI2cInterface.h>
+#include <trikHal/nrfI2cInterface.h>
 #include "i2cDevice.h"
-#include "i2cCommunicatorInterface.h"
 #include "QsLog.h"
 
 using namespace trikControl;
 
 I2cDevice::I2cDevice(const trikKernel::Configurer &configurer,
-		     trikHal::MspI2cInterface *i2c, int bus, int address)
+		     trikHal::NrfI2cInterface *i2c, int bus, int address)
 	: mState("I2cDevice")
 	, mInterface(i2c)
-	, mCommunicator(new MspI2cCommunicator(configurer, *i2c, bus, address))
+	, mCommunicator(new NrfI2cCommunicator(configurer, *i2c, bus, address))
 {
 	mState.ready();
 }

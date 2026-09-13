@@ -172,7 +172,7 @@ bool TrikI2c::connect(const QString &devicePath, int deviceId)
 	return true;
 }
 
-int TrikI2c::transfer(const QVector<MspI2cInterface::Message> &vector)
+int TrikI2c::transfer(const QVector<NrfI2cInterface::Message> &vector)
 {
 	Q_UNUSED(vector)
 	return -1;

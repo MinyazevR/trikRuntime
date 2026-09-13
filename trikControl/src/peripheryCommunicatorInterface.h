@@ -14,45 +14,22 @@
 
 #pragma once
 
-#include <QtCore/QString>
-#include <QtCore/QMutex>
+#include <QtCore/QByteArray>
 
-#include "mspCommunicatorInterface.h"
-
-namespace trikKernel {
-class Configurer;
-}
-
-namespace trikHal {
-class MspUsbInterface;
-}
+#include "deviceInterface.h"
+#include "deviceState.h"
 
 namespace trikControl {
 
-/// Provides direct interaction with I2C device.
-class MspUsbCommunicator : public MspCommunicatorInterface
+/// Abstract interface for communication with periphery module (nRF52833 or legacy MSP via I2C).
+class PeripheryCommunicatorInterface : public DeviceInterface
 {
 public:
-	/// Constructor.
-	/// @param usb - USB bus communicator.
-	MspUsbCommunicator(trikHal::MspUsbInterface &usb);
-
-	~MspUsbCommunicator() override;
-
 	/// Send data to current device, if it is connected.
-	int send(const QByteArray &data) override;
+	virtual int send(const QByteArray &data) = 0;
 
 	/// Reads data by given I2C command number and returns the result.
-	int read(const QByteArray &data) override;
-
-	Status status() const override;
-
-private:
-	void disconnect();
-
-	QMutex mLock;
-	trikHal::MspUsbInterface &mUsb;
-	DeviceState mState;
+	virtual int read(const QByteArray &data) = 0;
 };
 
 }

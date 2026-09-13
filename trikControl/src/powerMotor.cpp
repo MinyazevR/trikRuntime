@@ -18,7 +18,7 @@
 #include <trikKernel/exceptions/malformedConfigException.h>
 #include <trikKernel/exceptions/internalErrorException.h>
 #include <QTimer>
-#include "mspI2cCommunicator.h"
+#include "peripheryCommunicatorInterface.h"
 #include "configurerHelper.h"
 
 using namespace trikControl;
@@ -27,7 +27,7 @@ static const int maxControlValue = 100;
 static const int minControlValue = -100;
 
 PowerMotor::PowerMotor(const QString &port, const trikKernel::Configurer &configurer
-		, MspCommunicatorInterface &communicator)
+		, PeripheryCommunicatorInterface &communicator)
 	: mCommunicator(communicator)
 	, mInvert(configurer.attributeByPort(port, "invert") == "false")
 	, mCurrentPower(0)

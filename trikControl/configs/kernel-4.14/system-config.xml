@@ -245,4 +245,9 @@ equal to its class name.
         <!-- I2C bus for communication i2c devises. Parameter is path to device file. -->
 	<i2cBus1 path="/dev/i2c-1" />
 	<i2cBus2 path="/dev/i2c-2" />
+
+        <!-- nRF52833 periphery module over USB bulk. Telemetry streams every port at
+             telemetryPeriodUs and is served from a lock-free cache by the runtime. -->
+        <nrfUsb vendorId="0x2FE9" productId="0x0100" outEndpoint="0x01" inEndpoint="0x81"
+                telemetryPeriodUs="1000" />
 </config>

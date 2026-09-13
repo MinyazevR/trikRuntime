@@ -1,0 +1,38 @@
+<config>
+	<initScript>
+	</initScript>
+
+	<!-- Analog sensor ports. -->
+	<A1>
+		<sharpGP2Sensor />
+	</A1>
+	<A2>
+		<sharpGP2Sensor />
+	</A2>
+	<A3>
+		<touchSensor />
+	</A3>
+	<A4>
+		<touchSensor />
+	</A4>
+	<A5>
+		<lightSensor />
+	</A5>
+	<A6>
+		<lightSensor />
+	</A6>
+
+	<!-- Encoder ports. -->
+	<E1>
+		<encoder95 />
+	</E1>
+	<E2>
+		<encoder95 />
+	</E2>
+	<E3>
+		<encoder95 />
+	</E3>
+	<E4>
+		<encoder95 />
+	</E4>
+</config>

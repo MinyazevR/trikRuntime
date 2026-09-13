@@ -1,0 +1,31 @@
+<config version="model-2026" >
+	<deviceClasses>
+		<analogSensor rawValue1="0" rawValue2="4095" normalizedValue1="0" normalizedValue2="100" type="Analog" minValue="0" maxValue="100" filter="" />
+		<encoder invert="false" />
+	</deviceClasses>
+
+	<devicePorts>
+		<analogSensor port="A1" />
+		<analogSensor port="A2" />
+		<analogSensor port="A3" />
+		<analogSensor port="A4" />
+		<analogSensor port="A5" />
+		<analogSensor port="A6" />
+		<encoder port="E1" />
+		<encoder port="E2" invert="true" />
+		<encoder port="E3" />
+		<encoder port="E4" invert="true" />
+	</devicePorts>
+
+	<deviceTypes>
+		<sharpGP2Sensor class="analogSensor" type="SharpGP2"  values="(25;322)(35;235)(15;511)" />
+		<touchSensor class="analogSensor" rawValue1="100" rawValue2="4095" normalizedValue1="1" normalizedValue2="0"
+				minValue="0" maxValue="1" />
+		<lightSensor class="analogSensor" rawValue1="30" rawValue2="4095" normalizedValue1="0" normalizedValue2="100"
+				minValue="0" maxValue="100" />
+		<encoder95 class="encoder" ticks="157" degrees="100" />
+	</deviceTypes>
+
+	<nrfUsb vendorId="0x2FE9" productId="0x0100" outEndpoint="0x01" inEndpoint="0x81"
+		telemetryPeriodUs="1000" />
+</config>

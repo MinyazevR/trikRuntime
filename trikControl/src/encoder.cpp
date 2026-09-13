@@ -17,12 +17,12 @@
 #include <trikKernel/configurer.h>
 #include <QsLog.h>
 
-#include "mspI2cCommunicator.h"
+#include "peripheryCommunicatorInterface.h"
 #include "configurerHelper.h"
 
 using namespace trikControl;
 
-Encoder::Encoder(const QString &port, const trikKernel::Configurer &configurer, MspCommunicatorInterface &communicator)
+Encoder::Encoder(const QString &port, const trikKernel::Configurer &configurer, PeripheryCommunicatorInterface &communicator)
 	: mCommunicator(communicator)
 	, mInvert(configurer.attributeByPort(port, "invert") == "false")
 	, mState("Encoder on" + port)

@@ -28,10 +28,11 @@ public:
 	StubHardwareAbstraction();
 	~StubHardwareAbstraction() override;
 
-	MspI2cInterface &mspI2c() override;
-	MspI2cInterface *createMspI2c() override;
-	MspI2cInterface *createCommonI2c(uint8_t regSize) override;
-	MspUsbInterface &mspUsb() override;
+	NrfI2cInterface &nrfI2c() override;
+	NrfI2cInterface *createNrfI2c() override;
+	NrfI2cInterface *createCommonI2c(uint8_t regSize) override;
+	UsbDeviceInterface *createUsbDevice(std::uint16_t vendorId, std::uint16_t productId
+			, std::uint8_t outEndpoint, std::uint8_t inEndpoint) override;
 	SystemConsoleInterface &systemConsole() override;
 
 	EventFileInterface *createEventFile(const QString &fileName) const override;
@@ -42,8 +43,7 @@ public:
 	QVector<uint8_t> captureV4l2StillImage(const QString &port, const QDir &pathToPic) const override;
 
 private:
-	QScopedPointer<MspI2cInterface> mMspI2cBus;
-	QScopedPointer<MspUsbInterface> mMspUsbBus;
+	QScopedPointer<NrfI2cInterface> mI2cBus;
 	QScopedPointer<SystemConsoleInterface> mSystemConsole;
 };
 

@@ -15,13 +15,13 @@
 #pragma once
 
 #include <QtCore/QByteArray>
-#include <trikHal/mspI2cInterface.h>
+#include <trikHal/nrfI2cInterface.h>
 
 namespace trikHal {
 namespace trik {
 
 /// Implementing an I2c device using linux I2c and I2c_RDRW
-class CommonI2c: public trikHal::MspI2cInterface
+class CommonI2c: public trikHal::NrfI2cInterface
 {
 public:
 	/// Constructor
@@ -45,7 +45,7 @@ public:
 	void disconnect() override;
 
 	/// Perform I2c transfer operation.
-	int transfer(const QVector<MspI2cInterface::Message> &vector) override;
+	int transfer(const QVector<NrfI2cInterface::Message> &vector) override;
 
 private:
 	uint8_t mRegSize;

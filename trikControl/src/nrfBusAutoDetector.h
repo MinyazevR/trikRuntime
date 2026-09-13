@@ -1,4 +1,4 @@
-/* Copyright 2015 CyberTech Labs Ltd.
+/* Copyright 2025 CyberTech Labs Ltd.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -14,7 +14,7 @@
 
 #pragma once
 
-#include "mspCommunicatorInterface.h"
+#include "peripheryCommunicatorInterface.h"
 
 namespace trikHal {
 class HardwareAbstractionInterface;
@@ -26,14 +26,13 @@ class Configurer;
 
 namespace trikControl {
 
-/// Service to automatically select USB or I2C MSP communicator. It tries to use USB when possible.
-class MspBusAutoDetector
+/// Factory that creates NrfUsbCommunicator from the nrfUsb config node.
+/// Returns nullptr if the node is not present.
+class NrfBusAutoDetector
 {
 public:
-	/// Factory method that tries to determine which interface is to be used for MSP communication and creates
-	/// corresponding communicator instance. Transfers ownership to a caller.
-	/// @param configurer - contains preparsed XML configuration.
-	static MspCommunicatorInterface *createCommunicator(const trikKernel::Configurer &configurer
+	static PeripheryCommunicatorInterface *createCommunicator(
+			const trikKernel::Configurer &configurer
 			, trikHal::HardwareAbstractionInterface &hardwareAbstraction);
 };
 

@@ -20,7 +20,7 @@
 
 namespace trikControl {
 
-class MspCommunicatorInterface;
+class PeripheryCommunicatorInterface;
 
 /// Implements battery voltage sensor for real hardware.
 class /* TRIKCONTROL_EXPORT for ScriptRunner/PythonQt */ TRIKCONTROL_EXPORT Battery : public BatteryInterface
@@ -30,7 +30,7 @@ class /* TRIKCONTROL_EXPORT for ScriptRunner/PythonQt */ TRIKCONTROL_EXPORT Batt
 public:
 	/// Constructor.
 	/// @param communicator - I2C communicator to use to query battery status.
-	Battery(MspCommunicatorInterface &communicator);
+	Battery(PeripheryCommunicatorInterface &communicator);
 
 	Status status() const override;
 
@@ -40,7 +40,7 @@ public Q_SLOTS:
 	float readRawDataVoltage() override;
 
 private:
-	MspCommunicatorInterface &mCommunicator;
+	PeripheryCommunicatorInterface &mCommunicator;
 };
 
 }

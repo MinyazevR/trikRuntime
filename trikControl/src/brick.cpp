@@ -25,6 +25,9 @@
 #include <QtMultimedia/QCameraImageCapture>
 #include <QtMultimedia/QCameraInfo>
 
+#include <memory>
+#include <utility>
+
 #include <trikHal/hardwareAbstractionInterface.h>
 #include <trikHal/hardwareAbstractionFactory.h>
 #include <trikKernel/exceptions/malformedConfigException.h>
@@ -54,12 +57,13 @@
 #include "cameraDeviceInterface.h"
 #include "cameraDevice.h"
 #include "i2cDevice.h"
-#include "mspI2cCommunicator.h"
 #include "lidar.h"
 #include "irCamera.h"
 
-#include "mspBusAutoDetector.h"
 #include "moduleLoader.h"
+#include "nrfBusAutoDetector.h"
+#include "nrfI2cCommunicator.h"
+#include "nrfUsbCommunicator.h"
 
 #include <QsLog.h>
 
@@ -101,19 +105,33 @@ Brick::Brick(const trikKernel::DifferentOwnerPointer<trikHal::HardwareAbstractio
 		}
 	}
 
-	mMspCommunicator.reset(MspBusAutoDetector::createCommunicator(mConfigurer, *mHardwareAbstraction));
+	mPeripheryCommunicator.reset(NrfBusAutoDetector::createCommunicator(mConfigurer, *mHardwareAbstraction));
 	mModuleLoader.reset(new ModuleLoader(mHardwareAbstraction->systemConsole()));
+
+	mIsRestrictedBoard = (mConfigurer.version() == "model-2026");
 
 	for (const QString &port : mConfigurer.ports()) {
 		QLOG_INFO() << "Creating device on port" << port;
 		createDevice(port);
 	}
 
-	mBattery.reset(new Battery(*mMspCommunicator));
+	try {
+		mBattery.reset(new Battery(*mPeripheryCommunicator));
+	} catch (std::exception &) {
+		QLOG_INFO() << "Battery not available, skipping";
+	}
 
-	mKeys.reset(new Keys(mConfigurer, *mHardwareAbstraction));
+	try {
+		mKeys.reset(new Keys(mConfigurer, *mHardwareAbstraction));
+	} catch (MalformedConfigException &) {
+		QLOG_INFO() << "Keys not configured, skipping";
+	}
 
-	mLed.reset(new Led(mConfigurer, *mHardwareAbstraction));
+	try {
+		mLed.reset(new Led(mConfigurer, *mHardwareAbstraction));
+	} catch (MalformedConfigException &) {
+		QLOG_INFO() << "LED not configured, skipping";
+	}
 
 	if (mConfigurer.isEnabled("gamepad")) {
 		mGamepad.reset(new Gamepad(mConfigurer, *mHardwareAbstraction));
@@ -132,8 +150,17 @@ Brick::Brick(const trikKernel::DifferentOwnerPointer<trikHal::HardwareAbstractio
 									, "boardGyroPort"));
 	}
 
-	mPlayWavFileCommand = mConfigurer.attributeByDevice("playWavFile", "command");
-	mPlayMp3FileCommand = mConfigurer.attributeByDevice("playMp3File", "command");
+	try {
+		mPlayWavFileCommand = mConfigurer.attributeByDevice("playWavFile", "command");
+	} catch (MalformedConfigException &) {
+		QLOG_INFO() << "playWavFile not configured, skipping";
+	}
+
+	try {
+		mPlayMp3FileCommand = mConfigurer.attributeByDevice("playMp3File", "command");
+	} catch (MalformedConfigException &) {
+		QLOG_INFO() << "playMp3File not configured, skipping";
+	}
 }
 
 Brick::~Brick()
@@ -155,7 +182,7 @@ Brick::~Brick()
 	qDeleteAll(mLidars);
 
 	// Clean up devices before killing hardware abstraction since their finalization may depend on it.
-	mMspCommunicator.reset();
+	mPeripheryCommunicator.reset();
 	mModuleLoader.reset();
 
 	mAccelerometer.reset();
@@ -422,7 +449,7 @@ ObjectSensorInterface *Brick::objectSensor(const QString &port)
 }
 
 I2cDeviceInterface* Brick::createI2cDevice(int bus, int address,
-					   const std::function<trikHal::MspI2cInterface *()> &factory) {
+					   const std::function<trikHal::NrfI2cInterface *()> &factory) {
 	uint8_t _bus = bus & 0xFF;
 	uint8_t _address = address & 0xFF;
 	uint16_t mhash = (_bus << 8) | _address;
@@ -457,7 +484,7 @@ I2cDeviceInterface *Brick::i2c(int bus, int address, int regSize)
 I2cDeviceInterface *Brick::smBusI2c(int bus, int address)
 {
 	return createI2cDevice(bus, address,
-			       [this](){ return mHardwareAbstraction->createMspI2c();});
+			       [this](){ return mHardwareAbstraction->createNrfI2c();});
 }
 
 QVector<uint8_t> Brick::getStillImage()
@@ -586,14 +613,20 @@ void Brick::createDevice(const QString &port)
 {
 	try {
 		const QString &deviceClass = mConfigurer.deviceClass(port);
+
+		if (mIsRestrictedBoard && deviceClass != "analogSensor" && deviceClass != "encoder") {
+			QLOG_INFO() << "Device class" << deviceClass << "not supported on this board, skipping";
+			return;
+		}
+
 		if (deviceClass == "servoMotor") {
 			mServoMotors.insert(port, new ServoMotor(port, mConfigurer, *mHardwareAbstraction));
 		} else if (deviceClass == "pwmCapture") {
 			mPwmCaptures.insert(port, new PwmCapture(port, mConfigurer, *mHardwareAbstraction));
 		} else if (deviceClass == "powerMotor") {
-			mPowerMotors.insert(port, new PowerMotor(port, mConfigurer, *mMspCommunicator));
+			mPowerMotors.insert(port, new PowerMotor(port, mConfigurer, *mPeripheryCommunicator));
 		} else if (deviceClass == "analogSensor") {
-			mAnalogSensors.insert(port, new AnalogSensor(port, mConfigurer, *mMspCommunicator));
+			mAnalogSensors.insert(port, new AnalogSensor(port, mConfigurer, *mPeripheryCommunicator));
 		} else if (deviceClass == "digitalSensor") {
 			mDigitalSensors.insert(port, new DigitalSensor(port, mConfigurer, *mHardwareAbstraction));
 		} else if (deviceClass == "rangeSensor") {
@@ -602,7 +635,7 @@ void Brick::createDevice(const QString &port)
 			/// @todo Range sensor shall be turned on only when needed.
 			mRangeSensors[port]->init();
 		} else if (deviceClass == "encoder") {
-			mEncoders.insert(port, new Encoder(port, mConfigurer, *mMspCommunicator));
+			mEncoders.insert(port, new Encoder(port, mConfigurer, *mPeripheryCommunicator));
 		} else if (deviceClass == "lineSensor") {
 			mLineSensors.insert(port, new LineSensor(port, mConfigurer, *mHardwareAbstraction));
 

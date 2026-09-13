@@ -146,7 +146,7 @@ int CommonI2c::write(__u8* writeData, __u16 length)
 	return ioctl(mDeviceFileDescriptor, I2C_RDWR, &i2c_messageset);
 }
 
-int CommonI2c::transfer(const QVector<MspI2cInterface::Message> &vector) {
+int CommonI2c::transfer(const QVector<NrfI2cInterface::Message> &vector) {
 	if (vector.size() > I2C_RDRW_IOCTL_MAX_MSGS) {
 		return -1;
 	}

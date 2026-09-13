@@ -23,8 +23,8 @@ PUBLIC_HEADERS += \
 	$$PWD/include/trikHal/fifoInterface.h \
 	$$PWD/include/trikHal/eventFileInterface.h \
 	$$PWD/include/trikHal/inputDeviceFileInterface.h \
-	$$PWD/include/trikHal/mspI2cInterface.h \
-	$$PWD/include/trikHal/mspUsbInterface.h \
+	$$PWD/include/trikHal/nrfI2cInterface.h \
+	$$PWD/include/trikHal/usbDeviceInterface.h \
 	$$PWD/include/trikHal/outputDeviceFileInterface.h \
 	$$PWD/include/trikHal/systemConsoleInterface.h \
 	$$PWD/include/trikHal/IIOFileInterface.h \
@@ -34,22 +34,20 @@ PUBLIC_HEADERS += \
 		$$PWD/src/trik/trikHardwareAbstraction.h \
 		$$PWD/src/trik/trikI2c.h \
 		$$PWD/src/trik/commonI2c.h \
-		$$PWD/src/trik/trikMspUsb.h \
+		$$PWD/src/trik/trikUsbDevice.h \
 		$$PWD/src/trik/trikSystemConsole.h \
 		$$PWD/src/trik/trikEventFile.h \
 		$$PWD/src/trik/trikInputDeviceFile.h \
 		$$PWD/src/trik/trikOutputDeviceFile.h \
 		$$PWD/src/trik/trikFifo.h \
-		$$PWD/src/trik/usbMsp/usbMSP430Interface.h \
-		$$PWD/src/trik/usbMsp/usbMSP430Defines.h \
 		$$PWD/src/trik/trikV4l2VideoDevice.h \
 		$$PWD/src/trik/trikIIOFile.h \
 }
 
 HEADERS += \
 	$$PWD/src/stub/stubHardwareAbstraction.h \
-	$$PWD/src/stub/stubMspI2c.h \
-	$$PWD/src/stub/stubMspUsb.h \
+	$$PWD/src/stub/stubNrfI2c.h \
+	$$PWD/src/stub/stubUsbDevice.h \
 	$$PWD/src/stub/stubSystemConsole.h \
 	$$PWD/src/stub/stubEventFile.h \
 	$$PWD/src/stub/stubInputDeviceFile.h \
@@ -63,21 +61,20 @@ HEADERS += \
 		$$PWD/src/trik/trikHardwareAbstraction.cpp \
 		$$PWD/src/trik/trikI2c.cpp \
 		$$PWD/src/trik/commonI2c.cpp \
-		$$PWD/src/trik/trikMspUsb.cpp \
+		$$PWD/src/trik/trikUsbDevice.cpp \
 		$$PWD/src/trik/trikSystemConsole.cpp \
 		$$PWD/src/trik/trikEventFile.cpp \
 		$$PWD/src/trik/trikInputDeviceFile.cpp \
 		$$PWD/src/trik/trikOutputDeviceFile.cpp \
 		$$PWD/src/trik/trikFifo.cpp \
-		$$PWD/src/trik/usbMsp/usbMSP430Interface.cpp \
 		$$PWD/src/trik/trikV4l2VideoDevice.cpp \
 		$$PWD/src/trik/trikIIOFile.cpp \
 }
 
 SOURCES += \
 	$$PWD/src/stub/stubHardwareAbstraction.cpp \
-	$$PWD/src/stub/stubMspI2c.cpp \
-	$$PWD/src/stub/stubMspUsb.cpp \
+	$$PWD/src/stub/stubNrfI2c.cpp \
+	$$PWD/src/stub/stubUsbDevice.cpp \
 	$$PWD/src/stub/stubSystemConsole.cpp \
 	$$PWD/src/stub/stubEventFile.cpp \
 	$$PWD/src/stub/stubInputDeviceFile.cpp \
@@ -93,6 +90,9 @@ SOURCES += \
 }
 
 DEFINES += TRIKHAL_LIBRARY
+
+CONFIG += link_pkgconfig
+PKGCONFIG += libusb-1.0
 
 links(trikRuntimeQsLog trikKernel)
 implementationIncludes(trikKernel)

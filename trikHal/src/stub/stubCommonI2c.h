@@ -14,20 +14,20 @@
 
 #pragma once
 
-#include "mspI2cInterface.h"
+#include "nrfI2cInterface.h"
 
 namespace trikHal {
 namespace stub {
 
 /// Stub implementation of I2C bus communicator.
-class StubCommonI2c : public MspI2cInterface
+class StubCommonI2c : public NrfI2cInterface
 {
 public:
 	int send(const QByteArray &data) override;
 	int read(const QByteArray &data) override;
 	QVector<uint8_t> readX(const QByteArray &data) override;
 	bool connect(const QString &devicePath, int deviceId) override;
-	int transfer(const QVector<MspI2cInterface::Message> &vector) override;
+	int transfer(const QVector<NrfI2cInterface::Message> &vector) override;
 	void disconnect() override;
 };
 

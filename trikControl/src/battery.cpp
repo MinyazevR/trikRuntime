@@ -14,11 +14,11 @@
 
 #include "battery.h"
 
-#include "mspI2cCommunicator.h"
+#include "peripheryCommunicatorInterface.h"
 
 using namespace trikControl;
 
-Battery::Battery(MspCommunicatorInterface &communicator)
+Battery::Battery(PeripheryCommunicatorInterface &communicator)
 	: mCommunicator(communicator)
 {
 }

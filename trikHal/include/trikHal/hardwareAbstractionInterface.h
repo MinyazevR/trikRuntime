@@ -20,8 +20,8 @@
 #include "eventFileInterface.h"
 #include "fifoInterface.h"
 #include "IIOFileInterface.h"
-#include "mspI2cInterface.h"
-#include "mspUsbInterface.h"
+#include "nrfI2cInterface.h"
+#include "usbDeviceInterface.h"
 #include "systemConsoleInterface.h"
 
 #include <trikHal/trikHalDeclSpec.h>
@@ -38,17 +38,19 @@ public:
 
 	virtual ~HardwareAbstractionInterface() = default;
 
-	/// Returns MSP I2C bus implementation.
-	virtual MspI2cInterface &mspI2c() = 0;
+	/// Returns nRF I2C bus implementation.
+	virtual NrfI2cInterface &nrfI2c() = 0;
 
-	/// Create MSP I2C bus implementation.
-	virtual MspI2cInterface *createMspI2c() = 0;
+	/// Create nRF I2C bus implementation.
+	virtual NrfI2cInterface *createNrfI2c() = 0;
 
 	/// Create Common I2C bus implementation.
-	virtual MspI2cInterface *createCommonI2c(uint8_t regSize) = 0;
+	virtual NrfI2cInterface *createCommonI2c(uint8_t regSize) = 0;
 
-	/// Returns MSP USB bus implementation.
-	virtual MspUsbInterface &mspUsb() = 0;
+	/// Creates a USB bulk transport for a vendor-specific device. Passes
+	/// ownership to the caller.
+	virtual UsbDeviceInterface *createUsbDevice(std::uint16_t vendorId, std::uint16_t productId
+			, std::uint8_t outEndpoint, std::uint8_t inEndpoint) = 0;
 
 	/// Returns system console wrapper, able to execute system command and launch processes.
 	virtual SystemConsoleInterface &systemConsole() = 0;

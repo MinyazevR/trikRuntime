@@ -17,13 +17,13 @@
 #include <trikKernel/configurer.h>
 #include <QsLog.h>
 
-#include "mspCommunicatorInterface.h"
+#include "peripheryCommunicatorInterface.h"
 #include "configurerHelper.h"
 
 using namespace trikControl;
 
 AnalogSensor::AnalogSensor(const QString &port, const trikKernel::Configurer &configurer
-		, MspCommunicatorInterface &communicator)
+		, PeripheryCommunicatorInterface &communicator)
 	: mCommunicator(communicator)
 	, mState("Analog Sensor on" + port)
 {
