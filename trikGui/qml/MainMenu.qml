@@ -136,8 +136,8 @@ Rectangle {
             anchors.margins: 10
             Image {
                 source: iconsPath + "warningDel.png"
-                Layout.preferredWidth: _mainMenuView.width < 400 ? _mainMenuView.width / 7 : _mainMenuView.width / 25
-                Layout.preferredHeight: _mainMenuView.width < 400 ? _mainMenuView.width / 7 : _mainMenuView.width / 25
+                Layout.preferredWidth: _mainMenuView.width < 600 ? _mainMenuView.width / 7 : _mainMenuView.width / 25
+                Layout.preferredHeight: _mainMenuView.width < 600 ? _mainMenuView.width / 7 : _mainMenuView.width / 25
                 Layout.leftMargin: 5
                 Layout.rightMargin: 5
             }
@@ -184,7 +184,7 @@ Rectangle {
     ColumnLayout {
         anchors.fill: parent
         anchors.leftMargin: 5
-        anchors.rightMargin: 5
+        anchors.rightMargin: 65
         anchors.topMargin: 7
         Text {
             text: qsTr("Name: ") + (network !== null ? network.hostName : "")
@@ -214,7 +214,9 @@ Rectangle {
                 id: _gridView
                 anchors.fill: parent
                 anchors.topMargin: 15
+                anchors.rightMargin: 60
                 cellWidth: parent.width / 2
+                cellHeight: 160
                 model: _menuItems
                 property real maxTextLen: 12
                 Component.onCompleted: {
@@ -281,8 +283,8 @@ Rectangle {
                                 id: _iconMenu
                                 source: iconsPath + model.iconPath
                                 anchors.centerIn: parent
-                                width: _mainMenuView.width < 400 ? _mainMenuView.width / 5 : _mainMenuView.width / 23
-                                height: _mainMenuView.width < 400 ? _mainMenuView.width / 5 : _mainMenuView.width / 23
+                                width: _mainMenuView.width < 600 ? _mainMenuView.width / 5 : _mainMenuView.width / 23
+                                height: _mainMenuView.width < 600 ? _mainMenuView.width / 5 : _mainMenuView.width / 23
                             }
                         }
                     }

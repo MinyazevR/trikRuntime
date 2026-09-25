@@ -1,12 +1,12 @@
 import QtQuick 2.15
 
 QtObject {
-    property int microscopic: 6 // info just to have it there, f.e. icon links
-    property int tiny: 8       // hints, minor notes (was ~10px)
-    property int small: 9      // status bar, captions (was ~12px)
-    property int body: 11      // dialog text, info labels (was ~14px)
-    property int medium: 12    // general body text (was ~16px)
-    property int large: 14     // section headers (was ~19px)
-    property int title: 19     // main menu icon labels (was ~25px)
-    property int separator: 23 // IP separator dot (was ~30px)
+    property int microscopic: 12 // info just to have it there, f.e. icon links
+    property int tiny: 16       // hints, minor notes
+    property int small: 18      // status bar, captions
+    property int body: 22       // dialog text, info labels
+    property int medium: 24     // general body text
+    property int large: 28      // section headers
+    property int title: 38      // main menu icon labels
+    property int separator: 46  // IP separator dot
 }
