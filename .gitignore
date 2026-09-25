@@ -47,3 +47,11 @@ tests/**/target_wrapper.sh
 tests/**/rcc_wrapper.sh
 tests/**/moc_wrapper.sh
 tests/**/uic_wrapper.sh
+core
+snapshot.raw
+lol.txt
+deploy2.sh
+build1.sh
+readAll.qs
+INIT_SEQUENCE_REQUEST.md
+TOUCH_MIGRATION_PLAN.md
